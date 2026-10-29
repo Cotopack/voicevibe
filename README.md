@@ -79,3 +79,23 @@ The project is configured for Firebase project `voicevibe-1b8c0`. Before deployi
 - If using GitHub Pages, upload `public/index.html`, `public/app.js`, `public/styles.css`, and `public/tailwind-config.js` to the repository's published folder (for a project site this is normally the repository root if configured that way).
 - For local testing, add `localhost` to Authentication → Settings → Authorized domains and serve over localhost (not by opening the HTML file directly).
 - Keep root source files and `public/` copies in sync. Firebase Storage must be enabled for gallery avatar uploads.
+
+
+## VoiceVibe polish update
+This build includes friend presence documents in `/presence/{uid}`. Publish the updated
+`firestore.rules` before testing online indicators. Presence is refreshed every 30 seconds
+and marked offline when the page is hidden or closed; abrupt browser/network loss can take
+up to about 90 seconds to age out. The chat conversation panel stays hidden until a friend
+is selected. Snake movement is slower and a challenge result is sent once per started
+challenge, not after every casual practice game.
+
+
+## Google sign-in and using the same account on iPhone
+- Google sign-in has been restored. Enable **Google** in Firebase Console → Authentication → Sign-in method.
+- Add `cotopack.github.io` to Authentication → Settings → Authorized domains.
+- On iPhone, open the exact same GitHub Pages URL in Safari and sign in with the same Google account used in Telegram's browser. Telegram and Safari keep separate browser sessions; friends appear only when both sessions authenticate as the same Firebase UID.
+- If the user originally created a separate account using email/phone, sign in with that original method first. Do not create a second account and expect friend lists to merge automatically. Account linking/migration must be done explicitly.
+- For iOS Safari redirect restrictions, if Google popup/redirect does not complete, configure Firebase Auth with a custom auth domain on the same site domain or use Firebase's recommended auth-domain proxy setup.
+
+## Snake update
+- Snake now uses animation-frame timing, touch swipe, gradually increasing speed, a clearer board and a one-result-per-challenge guard.

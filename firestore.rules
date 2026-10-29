@@ -82,6 +82,22 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid;
     }
 
+
+    // Lightweight online presence. A member can update only their own status;
+    // friends can read it to see whether the person is currently online.
+    match /presence/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(userId))
+      );
+      allow create, update: if isMe(userId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.online is bool
+        && request.resource.data.lastSeen is int
+        && request.resource.data.keys().hasOnly(['uid','online','lastSeen']);
+      allow delete: if isMe(userId);
+    }
+
     // One conversation per sorted UID pair. Only its participants can read/write.
     match /conversations/{chatId} {
       function isFriendConversation(data) {

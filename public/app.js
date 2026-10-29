@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, RecaptchaVerifier, signInWithPhoneNumber, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             collection, 
@@ -25,6 +25,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        // Keep the same account signed in across normal browser restarts.
+        await setPersistence(auth, browserLocalPersistence).catch(err => console.warn('Auth persistence:', err));
+        getRedirectResult(auth).catch(err => { if (err?.code) console.warn('Google redirect result:', err); });
 
         // --- State Management ---
         const state = {
@@ -50,7 +53,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentFriendUid: null,
             messageUnsub: null,
             socialUnsubs: [],
+            presenceUnsubs: [],
+            presenceCache: new Map(),
+            presenceHeartbeat: null,
             friendProfiles: new Map(),
+            challengeSending: false,
             snakeTimer: null,
             snakeState: null,
             snakeChallengeId: null
@@ -138,6 +145,24 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         }
 
+        document.getElementById('btnGoogleLogin')?.addEventListener('click', async () => {
+            const btn = document.getElementById('btnGoogleLogin');
+            if (btn) { btn.disabled = true; btn.textContent = 'Подключаем Google…'; }
+            try {
+                const provider = new GoogleAuthProvider();
+                provider.setCustomParameters({ prompt: 'select_account' });
+                await signInWithPopup(auth, provider);
+            } catch (err) {
+                console.error('Google sign-in failed:', err);
+                if (['auth/popup-blocked','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(err?.code)) {
+                    try { await signInWithRedirect(auth, new GoogleAuthProvider()); }
+                    catch (redirectErr) { showAuthMessage(authErrorMessage(redirectErr)); }
+                } else showAuthMessage(authErrorMessage(err));
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-brands fa-google mr-2"></i>Продолжить с Google'; }
+            }
+        });
+
         document.getElementById('btnEmailLogin')?.addEventListener('click', async () => {
             const email = document.getElementById('emailInput').value.trim();
             const password = document.getElementById('emailPassword').value;
@@ -181,7 +206,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         function authErrorMessage(err) {
             const messages = {
-                'auth/unauthorized-domain': 'Домен сайта не добавлен в Firebase Authentication → Settings → Authorized domains.',
+                'auth/unauthorized-domain': 'Добавь cotopack.github.io в Firebase Authentication → Settings → Authorized domains.',
+                'auth/account-exists-with-different-credential': 'Эта почта уже привязана к другому способу входа. Войди прежним способом.',
+                'auth/network-request-failed': 'Нет соединения или браузер блокирует запрос. Проверь интернет и попробуй снова.',
                 'auth/operation-not-allowed': 'Этот способ входа не включён в Firebase Console → Authentication → Sign-in method.',
                 'auth/popup-closed-by-user': 'Окно входа закрыто. Попробуй ещё раз.',
                 'auth/invalid-phone-number': 'Проверь номер телефона и международный код.',
@@ -740,23 +767,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function stopSocialListeners() {
             state.socialUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
             state.socialUnsubs = [];
+            state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
+            state.presenceUnsubs = [];
+            if (state.presenceHeartbeat) { clearInterval(state.presenceHeartbeat); state.presenceHeartbeat = null; }
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
         }
         function startSocialListeners() {
             stopSocialListeners();
             if (!state.user) return;
             const uid = state.user.uid;
+            const presenceRef = doc(db, 'presence', uid);
+            const publishPresence = () => setDoc(presenceRef, { uid, online: !document.hidden, lastSeen: Date.now() }, { merge:true }).catch(err => console.warn('Presence update:', err));
+            publishPresence();
+            state.presenceHeartbeat = setInterval(publishPresence, 30000);
+            document.addEventListener('visibilitychange', publishPresence);
+            window.addEventListener('pagehide', () => setDoc(presenceRef, { uid, online:false, lastSeen:Date.now() }, { merge:true }).catch(()=>{}), { once:true });
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friendRequests'), snap => {
                 friendRequestsCache = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => r.status === 'pending');
                 renderFriendRequests();
             }, err => console.warn('Friend request listener:', err)));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
-                friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+                friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data(), uid:d.data().uid || d.id }));
                 renderFriends(); renderChatFriends();
+                state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
+                state.presenceUnsubs = [];
                 for (const friend of friendsCache) {
-                    if (!friend.displayName && friend.uid) {
-                        try { const ps = await getDoc(doc(db,'users',friend.uid)); if (ps.exists()) { friend.displayName=ps.data().displayName; friend.photoURL=ps.data().photoURL; } } catch (_) {}
-                    }
+                    try {
+                        const ps = await getDoc(doc(db,'users',friend.uid));
+                        if (ps.exists()) Object.assign(friend, ps.data());
+                    } catch (err) { console.warn('Friend profile:', err); }
+                    const unsub = onSnapshot(doc(db,'presence',friend.uid), presenceSnap => {
+                        state.presenceCache.set(friend.uid, presenceSnap.exists() ? presenceSnap.data() : { online:false });
+                        renderFriends(); renderChatFriends();
+                        if (activeFriend === friend.uid) updateConversationPresence(friend.uid);
+                    }, () => {});
+                    state.presenceUnsubs.push(unsub);
                 }
                 renderFriends(); renderChatFriends();
             }, err => console.warn('Friends listener:', err)));
@@ -769,16 +814,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             host.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => acceptFriend(b.dataset.accept)));
             host.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => rejectFriend(b.dataset.reject)));
         }
+        function friendOnline(uid) {
+            const p = state.presenceCache.get(uid);
+            return !!(p && p.online && Date.now() - Number(p.lastSeen || 0) < 90000);
+        }
+        function presenceLabel(uid) {
+            return friendOnline(uid) ? '<span class="inline-flex items-center gap-1 text-xs text-emerald-400"><i class="h-2 w-2 rounded-full bg-emerald-400"></i>В сети</span>' : '<span class="text-xs text-slate-500">Не в сети</span>';
+        }
+        function updateConversationPresence(uid) {
+            const f = friendsCache.find(x => x.uid === uid) || {};
+            const header = document.getElementById('conversationHeader');
+            if (header) header.innerHTML = `<div class="flex items-center gap-3">${avatarMarkup(f,'h-9 w-9')}<div class="min-w-0"><div class="font-semibold text-slate-100">${escapeHTML(f.displayName || 'Друг')}</div>${presenceLabel(uid)}</div></div>`;
+        }
         function renderFriends() {
             const host = document.getElementById('friendsList');
             if (!friendsCache.length) { host.innerHTML = '<p class="text-sm text-slate-500">Пока нет друзей. Добавить можно во время разговора в рулетке.</p>'; return; }
-            host.innerHTML = friendsCache.map(f => `<div class="flex items-center gap-3 rounded-2xl bg-slate-950/70 p-3">${avatarMarkup(f,'h-10 w-10')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')}</p><p class="text-xs text-slate-500">@${escapeHTML(f.username || 'user')}</p></div><button data-chatfriend="${escapeHTML(f.uid || f.id)}" class="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`).join('');
+            host.innerHTML = friendsCache.map(f => {
+                const uid=f.uid || f.id;
+                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')}</p><p class="text-xs text-slate-500">@${escapeHTML(f.username || 'user')}</p>${presenceLabel(uid)}</div><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
+            }).join('');
             host.querySelectorAll('[data-chatfriend]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.chatfriend)));
         }
         function renderChatFriends() {
             const host = document.getElementById('chatFriendsList');
-            if (!friendsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">Добавь друга, чтобы начать переписку.</p>'; return; }
-            host.innerHTML = friendsCache.map(f => `<button data-openchat="${escapeHTML(f.uid || f.id)}" class="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-slate-800 ${activeFriend === (f.uid || f.id) ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-9 w-9')}<span class="min-w-0 flex-1 truncate text-sm">${escapeHTML(f.displayName || 'Друг')}</span></button>`).join('');
+            if (!friendsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">У тебя пока нет друзей.</p>'; return; }
+            host.innerHTML = friendsCache.map(f => {
+                const uid=f.uid || f.id;
+                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')}</span>${presenceLabel(uid)}</span><span class="text-xs text-slate-500">›</span></button>`;
+            }).join('');
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
         }
         async function sendFriendRequest(targetUid) {
@@ -814,7 +877,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const pair = [state.user.uid, friendUid].sort();
             activeConversationId = pair.join('_');
             const friend = friendsCache.find(f => (f.uid || f.id) === friendUid) || {};
-            document.getElementById('conversationHeader').textContent = friend.displayName || 'Чат с другом';
+            document.getElementById('conversationPane')?.classList.remove('conversation-empty');
+            updateConversationPresence(friendUid);
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendMessageBtn').disabled = false;
             document.getElementById('snakeChallengeBtn').disabled = false;
@@ -843,13 +907,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             e.preventDefault();
             const text = document.getElementById('messageInput').value.trim();
             if (!text || !state.user || !activeConversationId || !activeFriend) return;
+            const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
             const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now() };
             try {
                 const conversationRef = doc(db,'conversations',activeConversationId);
                 await setDoc(conversationRef, { participants:[state.user.uid,activeFriend].sort(), updatedAt:Date.now(), lastMessage:text.slice(0,100) }, {merge:true});
                 await addDoc(collection(db,'conversations',activeConversationId,'messages'), payload);
                 document.getElementById('messageInput').value='';
-            } catch (err) { console.error('Message send failed',err); alert('Сообщение не отправлено. Проверь Firestore Rules.'); }
+            } catch (err) { console.error('Message send failed',err); alert('Сообщение не отправлено. Проверь Firestore Rules.'); } finally { sendBtn.disabled = false; }
         });
         document.getElementById('snakeChallengeBtn')?.addEventListener('click', () => {
             if (!activeConversationId || !activeFriend || !state.user) return;
@@ -858,58 +923,93 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('gamesClose')?.addEventListener('click', () => document.getElementById('gamesModal').classList.add('hidden'));
         document.getElementById('gameSnakeChoice')?.addEventListener('click', async () => {
             if (!activeConversationId || !activeFriend || !state.user) return;
+            const choice = document.getElementById('gameSnakeChoice');
+            if (state.challengeSending) return;
+            state.challengeSending = true; if (choice) choice.disabled = true;
             try {
                 await setDoc(doc(db,'conversations',activeConversationId), { participants:[state.user.uid,activeFriend].sort(), updatedAt:Date.now(), lastMessage:'🎮 Вызов в Змейку' }, {merge:true});
-                await addDoc(collection(db,'conversations',activeConversationId,'messages'), { senderUid:state.user.uid, text:'Я бросаю тебе вызов! Сыграй в Змейку и побей мой результат.', type:'snake-challenge', createdAt:Date.now(), challengeId:`${Date.now()}_${state.user.uid}` });
+                const challengeRef = await addDoc(collection(db,'conversations',activeConversationId,'messages'), { senderUid:state.user.uid, text:'Вызов в Змейку! Сыграй и побей мой результат.', type:'snake-challenge', createdAt:Date.now() });
                 document.getElementById('gamesModal').classList.add('hidden');
-                startSnake(null);
+                startSnake(challengeRef.id);
             } catch (err) { console.error(err); alert('Не удалось отправить вызов.'); }
+            finally { state.challengeSending = false; if (choice) choice.disabled = false; }
         });
 
         const snakeCanvas = document.getElementById('snakeCanvas');
         const snakeCtx = snakeCanvas.getContext('2d');
-        const gridN = 16, cell = snakeCanvas.width / gridN;
+        const gridN = 20, cell = snakeCanvas.width / gridN;
+        let snakeLastTick = 0, snakeAccumulator = 0, snakeFrame = 0, snakeTouchStart = null;
         function drawSnake() {
-            const g=snakeCtx; g.clearRect(0,0,snakeCanvas.width,snakeCanvas.height); g.fillStyle='#020617'; g.fillRect(0,0,snakeCanvas.width,snakeCanvas.height);
-            g.strokeStyle='rgba(148,163,184,.08)'; for(let i=0;i<=gridN;i++){g.beginPath();g.moveTo(i*cell,0);g.lineTo(i*cell,snakeCanvas.height);g.stroke();g.beginPath();g.moveTo(0,i*cell);g.lineTo(snakeCanvas.width,i*cell);g.stroke();}
-            const st=state.snakeState; if(!st)return;
-            g.fillStyle='#f472b6'; g.beginPath(); g.arc((st.food.x+.5)*cell,(st.food.y+.5)*cell,cell*.35,0,Math.PI*2);g.fill();
-            st.body.forEach((pt,i)=>{g.fillStyle=i===0?'#c4b5fd':'#7c3aed';g.beginPath();g.roundRect(pt.x*cell+1,pt.y*cell+1,cell-2,cell-2,4);g.fill();});
+            const g=snakeCtx, st=state.snakeState; if(!st)return;
+            g.clearRect(0,0,snakeCanvas.width,snakeCanvas.height);
+            const bg=g.createLinearGradient(0,0, snakeCanvas.width,snakeCanvas.height); bg.addColorStop(0,'#071426'); bg.addColorStop(1,'#10102b');
+            g.fillStyle=bg; g.fillRect(0,0,snakeCanvas.width,snakeCanvas.height);
+            g.strokeStyle='rgba(148,163,184,.055)'; g.lineWidth=1;
+            for(let i=1;i<gridN;i++){g.beginPath();g.moveTo(i*cell,0);g.lineTo(i*cell,snakeCanvas.height);g.stroke();g.beginPath();g.moveTo(0,i*cell);g.lineTo(snakeCanvas.width,i*cell);g.stroke();}
+            const fx=(st.food.x+.5)*cell, fy=(st.food.y+.5)*cell;
+            g.shadowColor='#fb7185';g.shadowBlur=16;g.fillStyle='#fb7185';g.beginPath();g.arc(fx,fy,cell*.30,0,Math.PI*2);g.fill();g.shadowBlur=0;
+            st.body.forEach((pt,i)=>{const inset=i===0?1.2:2.2;g.fillStyle=i===0?'#c4b5fd':`rgba(139,92,246,${Math.max(.38, .88-i*.018)})`;g.shadowColor=i===0?'#a78bfa':'transparent';g.shadowBlur=i===0?10:0;g.beginPath();g.roundRect(pt.x*cell+inset,pt.y*cell+inset,cell-inset*2,cell-inset*2,cell*.25);g.fill();});g.shadowBlur=0;
+            // Eyes show the current heading.
+            const h=st.body[0], d=st.dir; const ex=h.x*cell+cell/2+d.x*cell*.19, ey=h.y*cell+cell/2+d.y*cell*.19;
+            g.fillStyle='#17112e'; for(const side of [-1,1]){g.beginPath();g.arc(ex+(d.y?side*cell*.16:0),ey+(d.x?-side*cell*.16:0),cell*.055,0,Math.PI*2);g.fill();}
         }
         function startSnake(challengeId) {
+            if(state.snakeTimer) cancelAnimationFrame(state.snakeTimer);
+            state.snakeChallengeId=challengeId || null;
             document.getElementById('snakeModal').classList.remove('hidden');
-            document.getElementById('snakeHint').textContent = challengeId ? 'Побей результат в вызове друга!' : 'Набери больше очков, чем друг!';
+            document.getElementById('snakeHint').textContent = challengeId ? 'Сыграй один раунд и отправь другу результат.' : 'Собирай еду, не врезайся в стены и собственный хвост.';
             document.getElementById('snakeScore').textContent='0';
-            document.getElementById('snakeBest').textContent='Личный рекорд: '+(Number(localStorage.getItem('voicevibeSnakeBest')||0));
-            state.snakeChallengeId=challengeId;
+            document.getElementById('snakeBest').textContent='Рекорд: '+Number(localStorage.getItem('voicevibeSnakeBest')||0);
+            document.getElementById('snakeStart').textContent='Начать игру';
             resetSnake();
         }
         function resetSnake() {
-            if(state.snakeTimer) clearInterval(state.snakeTimer);
-            state.snakeState={body:[{x:7,y:8},{x:6,y:8},{x:5,y:8}],dir:{x:1,y:0},nextDir:{x:1,y:0},food:{x:11,y:8},score:0,over:true};
+            if(state.snakeTimer) cancelAnimationFrame(state.snakeTimer);
+            state.snakeState={body:[{x:9,y:10},{x:8,y:10},{x:7,y:10}],dir:{x:1,y:0},nextDir:{x:1,y:0},food:{x:14,y:10},score:0,over:true,resultSent:false};
             placeFood(); drawSnake();
         }
         function placeFood(){const st=state.snakeState;let p;do{p={x:Math.floor(Math.random()*gridN),y:Math.floor(Math.random()*gridN)}}while(st.body.some(b=>b.x===p.x&&b.y===p.y));st.food=p;}
-        function runSnake() {
-            const st=state.snakeState;if(!st)return;
-            st.over=false; if(state.snakeTimer)clearInterval(state.snakeTimer);
-            state.snakeTimer=setInterval(async()=>{
-                const h=st.body[0], d=st.nextDir;st.dir=d;const nh={x:h.x+d.x,y:h.y+d.y};
-                if(nh.x<0||nh.y<0||nh.x>=gridN||nh.y>=gridN||st.body.some((b,i)=>i>0&&b.x===nh.x&&b.y===nh.y)){endSnake();return;}
-                st.body.unshift(nh);
-                if(nh.x===st.food.x&&nh.y===st.food.y){st.score+=10;placeFood();document.getElementById('snakeScore').textContent=String(st.score);}else st.body.pop();
-                drawSnake();
-            },125);
+        function snakeStep(){
+            const st=state.snakeState;if(!st||st.over)return false;
+            const h=st.body[0],d=st.nextDir;st.dir=d;const nh={x:h.x+d.x,y:h.y+d.y};
+            const eating=nh.x===st.food.x&&nh.y===st.food.y;
+            if(nh.x<0||nh.y<0||nh.x>=gridN||nh.y>=gridN||st.body.some((b,i)=>i>(eating? -1:0)&&i<st.body.length- (eating?0:1)&&b.x===nh.x&&b.y===nh.y)){endSnake();return false;}
+            st.body.unshift(nh);
+            if(eating){st.score+=10;placeFood();document.getElementById('snakeScore').textContent=String(st.score);}else st.body.pop();
+            drawSnake(); return true;
         }
-        async function endSnake(){const st=state.snakeState;if(!st||st.over)return;st.over=true;if(state.snakeTimer)clearInterval(state.snakeTimer);state.snakeTimer=null;
-            const best=Math.max(st.score,Number(localStorage.getItem('voicevibeSnakeBest')||0));localStorage.setItem('voicevibeSnakeBest',String(best));document.getElementById('snakeBest').textContent='Личный рекорд: '+best;document.getElementById('snakeStart').textContent='Играть ещё';
-            if(state.user&&activeConversationId&&activeFriend){try{await addDoc(collection(db,'conversations',activeConversationId,'messages'),{senderUid:state.user.uid,text:`Мой результат в Змейке: ${st.score} очков. Сможешь побить?`,type:'snake-result',score:st.score,createdAt:Date.now()});}catch(e){console.warn('Could not post snake score',e);}}
+        function snakeLoop(now){
+            const st=state.snakeState;if(!st||st.over)return;
+            if(!snakeLastTick)snakeLastTick=now;
+            snakeAccumulator+=Math.min(50,now-snakeLastTick);snakeLastTick=now;
+            const interval=Math.max(135,225-Math.floor(st.score/30)*8);
+            while(snakeAccumulator>=interval){snakeAccumulator-=interval;if(!snakeStep())return;}
+            state.snakeTimer=requestAnimationFrame(snakeLoop);
+        }
+        function runSnake(){const st=state.snakeState;if(!st)return;if(!st.over)return;st.over=false;snakeLastTick=0;snakeAccumulator=0;if(state.snakeTimer)cancelAnimationFrame(state.snakeTimer);state.snakeTimer=requestAnimationFrame(snakeLoop);document.getElementById('snakeStart').textContent='Игра идёт…';}
+        async function endSnake(){
+            const st=state.snakeState;if(!st||st.over)return;st.over=true;if(state.snakeTimer)cancelAnimationFrame(state.snakeTimer);state.snakeTimer=null;
+            const previous=Number(localStorage.getItem('voicevibeSnakeBest')||0),best=Math.max(st.score,previous);localStorage.setItem('voicevibeSnakeBest',String(best));
+            document.getElementById('snakeBest').textContent='Твой рекорд: '+best;document.getElementById('snakeHint').textContent=`Игра окончена · ${st.score} очков`;
+            document.getElementById('snakeStart').textContent='Играть ещё';
+            const challengeId=state.snakeChallengeId;
+            if(challengeId&&state.user&&activeConversationId&&activeFriend&&!st.resultSent){
+                const sentKey='voicevibeSnakeSent:'+challengeId;
+                if(!localStorage.getItem(sentKey)){
+                    st.resultSent=true;localStorage.setItem(sentKey,'pending');
+                    try{await addDoc(collection(db,'conversations',activeConversationId,'messages'),{senderUid:state.user.uid,text:`Результат: ${st.score} очков · рекорд: ${best}`,type:'snake-result',score:st.score,best,challengeId,createdAt:Date.now()});localStorage.setItem(sentKey,'sent');}
+                    catch(e){localStorage.removeItem(sentKey);console.warn('Could not post snake score',e);}
+                }
+                state.snakeChallengeId=null;
+            }
         }
         document.getElementById('snakeStart')?.addEventListener('click',runSnake);
-        document.getElementById('snakeClose')?.addEventListener('click',()=>{if(state.snakeTimer)clearInterval(state.snakeTimer);state.snakeTimer=null;document.getElementById('snakeModal').classList.add('hidden');});
+        document.getElementById('snakeClose')?.addEventListener('click',()=>{if(state.snakeTimer)cancelAnimationFrame(state.snakeTimer);state.snakeTimer=null;state.snakeChallengeId=null;document.getElementById('snakeModal').classList.add('hidden');});
         document.querySelectorAll('.snake-dir').forEach(b=>b.addEventListener('click',()=>setSnakeDirection(b.dataset.dir)));
         function setSnakeDirection(dir){const st=state.snakeState;if(!st||st.over)return;const d={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}}[dir];if(d&&!(d.x===-st.dir.x&&d.y===-st.dir.y))st.nextDir=d;}
         document.addEventListener('keydown',e=>{if(document.getElementById('snakeModal').classList.contains('hidden'))return;const map={ArrowUp:'up',w:'up',ArrowDown:'down',s:'down',ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right'};if(map[e.key]){e.preventDefault();setSnakeDirection(map[e.key]);}});
+        snakeCanvas?.addEventListener('touchstart',e=>{const t=e.changedTouches[0];snakeTouchStart={x:t.clientX,y:t.clientY};},{passive:true});
+        snakeCanvas?.addEventListener('touchend',e=>{if(!snakeTouchStart)return;const t=e.changedTouches[0],dx=t.clientX-snakeTouchStart.x,dy=t.clientY-snakeTouchStart.y;snakeTouchStart=null;if(Math.max(Math.abs(dx),Math.abs(dy))<18)return;setSnakeDirection(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));},{passive:true});
 
         // Friend button is shown after a real roulette connection; the matched UID is taken from the queue document.
         const addFriendButton = document.createElement('button');
