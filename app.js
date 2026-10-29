@@ -93,6 +93,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         onAuthStateChanged(auth, async (user) => {
             state.user = user || null;
             if (user) {
+                // Hide the sign-in screen immediately; profile loading happens behind the app.
+                document.getElementById('authOverlay')?.classList.add('hidden');
                 try {
                     const profileSnap = await getDoc(doc(db, 'users', user.uid));
                     state.userProfile = profileSnap.exists() ? profileSnap.data() : {
@@ -885,8 +887,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (state.messageUnsub) state.messageUnsub();
             const conversationRef = doc(db,'conversations',activeConversationId);
             try {
+                // A chat is created only for an accepted friend relationship.
+                const myFriendRef = doc(db,'users',state.user.uid,'friends',friendUid);
+                const myFriendSnap = await getDoc(myFriendRef);
+                if (!myFriendSnap.exists()) {
+                    document.getElementById('messagesList').innerHTML = '<p class="text-sm text-rose-300">Не удалось открыть переписку: этот пользователь не найден в твоём списке друзей. Обнови список друзей или войди в правильный аккаунт.</p>';
+                    return;
+                }
                 await setDoc(conversationRef, { participants:pair, updatedAt:Date.now() }, { merge:true });
-            } catch (e) { console.warn('Conversation initialization failed:', e); }
+            } catch (e) {
+                console.error('Conversation initialization failed:', e);
+                const code = e?.code || 'unknown';
+                document.getElementById('messagesList').innerHTML = `<p class="text-sm text-rose-300">Не удалось открыть чат (${escapeHTML(code)}). Проверь, что опубликованы актуальные Firestore Rules из архива, и попробуй ещё раз.</p>`;
+                return;
+            }
             const messagesCol = collection(db,'conversations',activeConversationId,'messages');
             state.messageUnsub = onSnapshot(query(messagesCol, orderBy('createdAt','asc'), limit(100)), snap => {
                 const host = document.getElementById('messagesList');
