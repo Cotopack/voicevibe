@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Voice Roulette - Только Голос</title>
+    <title>VoiceVibe — голосовая чат-рулетка</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="tailwind-config.js"></script>
@@ -20,16 +20,46 @@
     <!-- Audio Element for Remote Voice -->
     <audio id="remoteAudio" autoplay></audio>
 
+    <!-- Sign-in gate: enable Google and Phone providers in Firebase Console first. -->
+    <section id="authOverlay" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
+      <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-2xl"><i class="fa-solid fa-microphone-lines"></i></div>
+        <h1 class="text-center text-2xl font-bold text-white">Добро пожаловать в <span class="text-violet-400">VoiceVibe</span></h1>
+        <p class="mt-2 mb-5 text-center text-sm text-slate-400">Войди, чтобы создать личный профиль и искать собеседников.</p>
+        <button id="btnGoogleLogin" class="w-full rounded-xl bg-white px-4 py-3 font-semibold text-slate-900 hover:bg-slate-100"><i class="fa-brands fa-google mr-2"></i> Продолжить с Google</button>
+        <div class="my-4 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-700"></span>ИЛИ ПО НОМЕРУ ТЕЛЕФОНА<span class="h-px flex-1 bg-slate-700"></span></div>
+        <label class="mb-1 block text-xs text-slate-400" for="phoneNumber">Номер телефона с кодом страны</label>
+        <input id="phoneNumber" type="tel" autocomplete="tel" placeholder="+380XXXXXXXXX" class="mb-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-violet-500" />
+        <div id="recaptcha-container" class="mb-3"></div>
+        <button id="btnSendCode" class="w-full rounded-xl border border-violet-500/50 bg-violet-500/15 px-4 py-3 font-semibold text-violet-200 hover:bg-violet-500/25">Отправить SMS-код</button>
+        <div id="phoneCodeArea" class="hidden mt-3 space-y-2"><input id="phoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из SMS" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"/><button id="btnVerifyCode" class="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 font-semibold text-white">Подтвердить код</button></div>
+        <p id="authMessage" class="hidden mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200" role="status"></p>
+        <p class="mt-4 text-center text-xs text-slate-500">Продолжая, ты соглашаешься соблюдать правила сообщества VoiceVibe.</p>
+      </div>
+    </section>
+    <section id="profileModal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+      <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-bold">Мой профиль</h2><button id="btnCloseProfile" class="rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-800" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button></div>
+        <p id="profileEmailText" class="mb-4 text-xs text-slate-400"></p>
+        <label class="mb-1 block text-sm text-slate-300" for="profileNameInput">Имя / никнейм</label><input id="profileNameInput" maxlength="30" class="mb-4 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" placeholder="Например, Alex" />
+        <label class="mb-1 block text-sm text-slate-300" for="profileBioInput">О себе</label><textarea id="profileBioInput" maxlength="160" rows="3" class="mb-4 w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" placeholder="Расскажи немного о себе…"></textarea>
+        <label class="mb-1 block text-sm text-slate-300" for="profilePhotoInput">Ссылка на аватар (необязательно)</label><input id="profilePhotoInput" type="url" class="mb-5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" placeholder="https://..." />
+        <button id="btnSaveProfile" class="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 font-semibold text-white">Сохранить профиль</button>
+        <button id="btnSignOut" class="mt-3 w-full rounded-xl border border-red-500/30 px-4 py-3 text-sm text-red-300 hover:bg-red-500/10">Выйти из аккаунта</button>
+      </div>
+    </section>
+
     <!-- Header / Navbar -->
     <header class="h-16 border-b border-slate-800/80 bg-slate-900/60 px-4 flex items-center justify-between z-10 shrink-0">
         <div class="flex items-center space-x-2">
             <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
                 <i class="fa-solid fa-microphone"></i>
             </div>
-            <span class="font-bold text-base tracking-tight text-white">Voice<span class="text-brand-500">Roulette</span></span>
+            <span class="font-bold text-base tracking-tight text-white">Voice<span class="text-brand-500">Vibe</span></span>
         </div>
 
         <div class="flex items-center space-x-2">
+            <button id="profileBtn" class="hidden flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-2 py-1.5 hover:border-violet-500" title="Мой профиль"><span id="profileHeaderAvatar" class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-xs font-bold text-white">П</span><span id="profileHeaderName" class="hidden max-w-24 truncate text-xs sm:inline">Профиль</span></button>
             <!-- Connection Indicator -->
             <div id="peerStatusBadge" class="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-xs text-slate-300">
                 <span id="peerStatusDot" class="w-2 h-2 rounded-full bg-amber-400"></span>

@@ -9,7 +9,7 @@
 ## 1. Configure Firebase app
 1. In Firebase Console, register a Web app (`</>`) if you haven't already.
 2. In `app.js` AND `public/app.js`, replace the demo `firebaseConfig` values with the config shown for your Firebase Web app.
-3. Enable **Authentication → Sign-in method → Anonymous**.
+3. Enable **Authentication → Sign-in method → Google** and **Phone**. Add your live site domain under **Authentication → Settings → Authorized domains**. Phone sign-in requires the reCAPTCHA verifier and may require billing/SMS quota depending on your Firebase plan and region.
 4. Create **Cloud Firestore** and configure secure Firestore rules before going public. Do not use open test rules for a public app.
 
 ## 2. Install Firebase CLI (Windows)
@@ -58,3 +58,11 @@ The project is configured for Firebase project `voicevibe-1b8c0`. Before deployi
 - `firestore.rules` contains rules for this queue path. Review them and publish them in Firebase Console → Firestore Database → Rules. These rules allow authenticated users to read queue IDs because that is required for matching; do not store personal data in queue documents.
 - If using GitHub Pages, update the root `app.js`. If using Firebase Hosting, update `public/app.js` and run `firebase deploy --only hosting`. Keep both copies in sync.
 - The app currently uses STUN servers but no TURN relay. Some mobile/Wi-Fi networks cannot establish direct WebRTC audio with STUN alone; for reliable public use, configure a reputable TURN service and add its credentials to the PeerJS `iceServers` list.
+
+
+## Google / Phone login and profile
+- Login screen supports Google popup and SMS phone verification. The first successful login creates a private `users/{uid}` profile document.
+- The profile editor saves nickname, short bio, and an optional HTTPS avatar URL.
+- Publish the updated `firestore.rules` in Firebase Console → Firestore Database → Rules before deploying.
+- For local testing, add `localhost` to Authentication → Settings → Authorized domains and serve over localhost (not by opening the HTML file directly).
+- Keep the project config in `app.js` and `public/app.js` in sync.

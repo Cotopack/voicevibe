@@ -1,10 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, RecaptchaVerifier, signInWithPhoneNumber, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             collection, 
             doc, 
             setDoc, 
+            getDoc,
             deleteDoc, 
             onSnapshot 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -39,6 +40,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             isConnected: false,
             isPaused: false,
             user: null,
+            userProfile: null,
+            confirmationResult: null,
+            recaptchaVerifier: null,
             queueUnsub: null,
             connectingTo: null,
             isHandlingDisconnect: false
@@ -68,19 +72,148 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const btnExitMenu = document.getElementById('btnExitMenu');
         const btnExitMenuBottom = document.getElementById('btnExitMenuBottom');
 
-        // Wait for Firebase authentication before allowing matchmaking.
-        const authReady = signInAnonymously(auth).then((cred) => {
-            state.user = cred.user;
-            return cred.user;
-        }).catch((err) => {
-            console.error("Firebase anonymous sign-in failed:", err);
-            throw err;
+        // Authentication is explicit: Google or phone number. No anonymous account is created.
+        let resolveAuthReady;
+        const authReady = new Promise((resolve) => { resolveAuthReady = resolve; });
+        onAuthStateChanged(auth, async (user) => {
+            state.user = user || null;
+            if (user) {
+                try {
+                    const profileSnap = await getDoc(doc(db, 'users', user.uid));
+                    state.userProfile = profileSnap.exists() ? profileSnap.data() : {
+                        displayName: user.displayName || 'Пользователь',
+                        photoURL: user.photoURL || '',
+                        bio: '',
+                        createdAt: Date.now()
+                    };
+                    if (!profileSnap.exists()) await setDoc(doc(db, 'users', user.uid), state.userProfile);
+                    applyProfileToUI();
+                    document.getElementById('authOverlay')?.classList.add('hidden');
+                    document.getElementById('profileBtn')?.classList.remove('hidden');
+                } catch (err) {
+                    console.error('Profile load failed:', err);
+                    showAuthMessage('Вход выполнен, но не удалось загрузить профиль. Проверьте Rules Firestore.');
+                }
+            } else {
+                state.userProfile = null;
+                document.getElementById('authOverlay')?.classList.remove('hidden');
+                document.getElementById('profileBtn')?.classList.add('hidden');
+            }
+            resolveAuthReady(user);
+        });
+
+        function showAuthMessage(message) {
+            const el = document.getElementById('authMessage');
+            if (el) { el.textContent = message; el.classList.remove('hidden'); }
+        }
+        function applyProfileToUI() {
+            const profile = state.userProfile || {};
+            const name = profile.displayName || state.user?.displayName || 'Мой профиль';
+            const nameEl = document.getElementById('profileHeaderName');
+            const avatarEl = document.getElementById('profileHeaderAvatar');
+            if (nameEl) nameEl.textContent = name;
+            if (avatarEl) {
+                avatarEl.innerHTML = '';
+                if (profile.photoURL || state.user?.photoURL) {
+                    const img = document.createElement('img');
+                    img.src = profile.photoURL || state.user.photoURL;
+                    img.alt = 'Аватар'; img.className = 'w-full h-full object-cover rounded-full';
+                    img.onerror = () => { avatarEl.textContent = (name[0] || 'П').toUpperCase(); };
+                    avatarEl.appendChild(img);
+                } else avatarEl.textContent = (name[0] || 'П').toUpperCase();
+            }
+        }
+
+        const googleBtn = document.getElementById('btnGoogleLogin');
+        googleBtn?.addEventListener('click', async () => {
+            try {
+                showAuthMessage('');
+                await signInWithPopup(auth, new GoogleAuthProvider());
+            } catch (err) {
+                console.error('Google sign-in failed:', err);
+                showAuthMessage(authErrorMessage(err));
+            }
+        });
+        document.getElementById('btnSendCode')?.addEventListener('click', async () => {
+            const phone = document.getElementById('phoneNumber').value.trim();
+            if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+                showAuthMessage('Введи номер в международном формате, например +380XXXXXXXXX.'); return;
+            }
+            try {
+                showAuthMessage('');
+                if (!state.recaptchaVerifier) {
+                    state.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'normal' });
+                }
+                const appVerifier = state.recaptchaVerifier;
+                state.confirmationResult = await signInWithPhoneNumber(auth, phone, appVerifier);
+                document.getElementById('phoneCodeArea').classList.remove('hidden');
+                showAuthMessage('SMS-код отправлен. Проверь телефон.');
+            } catch (err) {
+                console.error('Phone sign-in failed:', err);
+                showAuthMessage(authErrorMessage(err));
+                try { await state.recaptchaVerifier?.render(); } catch (_) {}
+            }
+        });
+        document.getElementById('btnVerifyCode')?.addEventListener('click', async () => {
+            const code = document.getElementById('phoneCode').value.trim();
+            if (!state.confirmationResult || !code) { showAuthMessage('Сначала запроси SMS-код.'); return; }
+            try { await state.confirmationResult.confirm(code); }
+            catch (err) { console.error('SMS verification failed:', err); showAuthMessage(authErrorMessage(err)); }
+        });
+        function authErrorMessage(err) {
+            const messages = {
+                'auth/unauthorized-domain': 'Домен сайта не добавлен в Firebase Authentication → Settings → Authorized domains.',
+                'auth/operation-not-allowed': 'Этот способ входа не включён в Firebase Console → Authentication → Sign-in method.',
+                'auth/popup-closed-by-user': 'Окно входа закрыто. Попробуй ещё раз.',
+                'auth/invalid-phone-number': 'Проверь номер телефона и международный код.',
+                'auth/too-many-requests': 'Слишком много попыток. Подожди и попробуй позже.',
+                'auth/billing-not-enabled': 'Для SMS-аутентификации проверь требования тарифного плана Firebase.'
+            };
+            return messages[err?.code] || `Не удалось войти (${err?.code || 'ошибка'}). Проверь настройки Firebase и попробуй ещё раз.`;
+        }
+
+        const profileModal = document.getElementById('profileModal');
+        document.getElementById('profileBtn')?.addEventListener('click', () => {
+            const p = state.userProfile || {};
+            document.getElementById('profileNameInput').value = p.displayName || state.user?.displayName || '';
+            document.getElementById('profileBioInput').value = p.bio || '';
+            document.getElementById('profilePhotoInput').value = p.photoURL || state.user?.photoURL || '';
+            document.getElementById('profileEmailText').textContent = state.user?.email || state.user?.phoneNumber || 'Аккаунт VoiceVibe';
+            profileModal.classList.remove('hidden');
+        });
+        document.getElementById('btnCloseProfile')?.addEventListener('click', () => profileModal.classList.add('hidden'));
+        document.getElementById('btnSaveProfile')?.addEventListener('click', async () => {
+            if (!state.user) return;
+            const displayName = document.getElementById('profileNameInput').value.trim();
+            const bio = document.getElementById('profileBioInput').value.trim().slice(0, 160);
+            const photoURL = document.getElementById('profilePhotoInput').value.trim();
+            if (displayName.length < 2 || displayName.length > 30) { alert('Имя должно содержать от 2 до 30 символов.'); return; }
+            if (photoURL && !/^https:\/\//i.test(photoURL)) { alert('Ссылка на аватар должна начинаться с https://'); return; }
+            try {
+                await updateProfile(state.user, { displayName, photoURL: photoURL || null });
+                const updated = { displayName, bio, photoURL, updatedAt: Date.now(), createdAt: state.userProfile?.createdAt || Date.now() };
+                await setDoc(doc(db, 'users', state.user.uid), updated, { merge: true });
+                state.userProfile = updated;
+                applyProfileToUI();
+                profileModal.classList.add('hidden');
+            } catch (err) {
+                console.error('Profile save failed:', err);
+                alert('Не удалось сохранить профиль. Проверь Rules Firestore и попробуй ещё раз.');
+            }
+        });
+        document.getElementById('btnSignOut')?.addEventListener('click', async () => {
+            if (state.isSearching || state.isConnected) pauseSearch();
+            if (state.peer) { state.peer.destroy(); state.peer = null; state.myPeerId = null; }
+            if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
+            profileModal.classList.add('hidden');
+            await signOut(auth);
         });
 
         // Step 1: Selection
         document.querySelectorAll('.btn-age').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const ageGroup = btn.getAttribute('data-age');
+                if (!state.user) { document.getElementById('authOverlay')?.classList.remove('hidden'); return; }
                 state.selectedAge = ageGroup;
                 selectedCategoryBadge.textContent = ageGroup;
 

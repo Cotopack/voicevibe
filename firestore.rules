@@ -1,8 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // VoiceVibe public matchmaking queue. Queue documents contain only PeerJS IDs,
-    // Firebase anonymous owner UID, and a timestamp; never store personal details here.
+    // Private user profile: each signed-in user can read/write only their own document.
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'bio', 'createdAt', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 30
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 160
+        && request.resource.data.photoURL is string;
+      allow delete: if false;
+    }
+
+    // Matchmaking queue. Queue docs contain no personal profile data.
     match /artifacts/{appId}/public/data/{queueName}/{peerId} {
       allow read: if request.auth != null && appId == 'voicevibe-1b8c0';
       allow create, update: if request.auth != null
