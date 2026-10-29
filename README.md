@@ -12,6 +12,16 @@
 3. Enable **Authentication → Sign-in method → Email/Password** and **Phone**. Add your live site domain under **Authentication → Settings → Authorized domains**. Phone sign-in requires the reCAPTCHA verifier and may require billing/SMS quota depending on your Firebase plan and region.
 4. Create **Cloud Firestore** and configure secure Firestore rules before going public. Do not use open test rules for a public app.
 
+
+## Cloudinary avatars (configured in this build)
+Profile photos are uploaded directly from the browser to Cloudinary using an unsigned preset. The app uses:
+- Cloud name: `yvoqyrj8`
+- Upload preset: `voicevibe_upload`
+
+In Cloudinary Console → Settings → Upload, confirm that this preset exists and is **Unsigned**. Restrict allowed formats to JPG, PNG, and WebP, and set the maximum file size to 5 MB if those controls are available. Set the preset's Asset folder to `voicevibe/avatars` if desired. The preset name and cloud name are public configuration; **never add your Cloudinary API Secret to `app.js`**.
+
+The app compresses selected avatars to a 512 px JPEG before uploading, then stores the returned `secure_url` in the user's Firestore profile. Firebase Storage is no longer used for avatar uploads, so its Storage rules are not required for this feature.
+
 ## 2. Install Firebase CLI (Windows)
 Install Node.js LTS from https://nodejs.org/ and restart VS Code/Terminal.
 Then run:

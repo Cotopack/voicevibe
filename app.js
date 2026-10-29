@@ -9,8 +9,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             deleteDoc, 
             onSnapshot, query, where, orderBy, limit, getDocs, addDoc, updateDoc, serverTimestamp, runTransaction
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-
+        
         const appId = 'voicevibe-1b8c0';
 
         const firebaseConfig = {
@@ -26,7 +25,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const storage = getStorage(app);
 
         // --- State Management ---
         const state = {
@@ -217,7 +215,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 alert('Никнейм: 3–24 символа, только латинские буквы, цифры и _.'); return;
             }
             if (photoURL && !/^https:\/\//i.test(photoURL)) { alert('Ссылка на аватар должна начинаться с https://'); return; }
-            if (file && (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024)) { alert('Выбери изображение до 8 МБ.'); return; }
+            if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+                alert('Выбери JPG, PNG или WebP размером не более 5 МБ.'); return;
+            }
             const oldUsername = state.userProfile?.username || '';
             try {
                 const usernameRef = doc(db, 'usernames', username);
@@ -227,10 +227,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
                 if (file) {
                     const compressed = await compressAvatar(file);
-                    const safeFile = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80) || 'avatar.jpg';
-                    const avatarRef = storageRef(storage, `avatars/${state.user.uid}/${Date.now()}_${safeFile}.jpg`);
-                    await uploadBytes(avatarRef, compressed, { contentType: 'image/jpeg' });
-                    photoURL = await getDownloadURL(avatarRef);
+                    photoURL = await uploadAvatarToCloudinary(compressed);
                 }
                 // The username reservation is a separate document, guarded by Firestore Rules.
                 await setDoc(usernameRef, { uid: state.user.uid, username, updatedAt: Date.now() });
@@ -248,7 +245,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 profileModal.classList.add('hidden');
             } catch (err) {
                 console.error('Profile save failed:', err);
-                alert(err.code === 'permission-denied' ? 'Firestore запретил сохранение. Проверь опубликованные Rules.' : 'Не удалось сохранить профиль. Проверь Firestore и Storage Rules.');
+                alert(err.code === 'permission-denied' ? 'Firestore запретил сохранение. Проверь опубликованные Rules.' : 'Не удалось сохранить профиль. Проверь Firestore Rules и настройки Cloudinary Upload preset.');
             }
         });
         document.getElementById('btnSignOut')?.addEventListener('click', async () => {
@@ -687,6 +684,24 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             bitmap.close?.();
             return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Не удалось обработать изображение')), 'image/jpeg', 0.82));
         }
+
+        // Cloudinary unsigned upload: never put an API secret in browser code.
+        const CLOUDINARY_CLOUD_NAME = 'yvoqyrj8';
+        const CLOUDINARY_UPLOAD_PRESET = 'voicevibe_upload';
+        async function uploadAvatarToCloudinary(blob) {
+            const formData = new FormData();
+            formData.append('file', blob, 'voicevibe-avatar.jpg');
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+            const response = await fetch(endpoint, { method: 'POST', body: formData });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.secure_url) {
+                console.error('Cloudinary upload failed:', result);
+                throw new Error(result.error?.message || `Cloudinary upload failed (${response.status})`);
+            }
+            return result.secure_url;
+        }
+
         function normalizeUsername(value) { return value.trim().toLowerCase(); }
         function escapeHTML(value='') { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
         function avatarMarkup(profile, size='h-10 w-10') {
