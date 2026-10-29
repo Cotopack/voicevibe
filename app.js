@@ -39,7 +39,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             isConnected: false,
             isPaused: false,
             user: null,
-            queueUnsub: null
+            queueUnsub: null,
+            connectingTo: null,
+            isHandlingDisconnect: false
         };
 
         // UI Bindings
@@ -66,11 +68,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const btnExitMenu = document.getElementById('btnExitMenu');
         const btnExitMenuBottom = document.getElementById('btnExitMenuBottom');
 
-        // Authenticate anonymously first
-        signInAnonymously(auth).then((cred) => {
+        // Wait for Firebase authentication before allowing matchmaking.
+        const authReady = signInAnonymously(auth).then((cred) => {
             state.user = cred.user;
+            return cred.user;
         }).catch((err) => {
-            console.warn("Auth fallback", err);
+            console.error("Firebase anonymous sign-in failed:", err);
+            throw err;
         });
 
         // Step 1: Selection
@@ -178,25 +182,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
 
             state.peer.on('call', (call) => {
-                if (state.isConnected || state.isPaused) {
+                if (state.isConnected || state.isPaused || !state.localStream) {
                     call.close();
                     return;
                 }
 
-                removeFromMatchmakingQueue();
                 state.currentCall = call;
+                state.connectingTo = call.peer;
+                removeFromMatchmakingQueue();
                 call.answer(state.localStream);
 
                 call.on('stream', (remoteStream) => {
+                    state.connectingTo = null;
+                    state.currentCall = call;
                     handleConnectedStream(remoteStream);
                 });
 
                 call.on('close', handleDisconnect);
-                call.on('error', handleDisconnect);
+                call.on('error', (err) => {
+                    console.error('Incoming call failed:', err);
+                    handleDisconnect();
+                });
             });
 
-            state.peer.on('disconnected', () => setPeerStatus('error', 'Отключено'));
-            state.peer.on('error', (err) => setPeerStatus('error', 'Ошибка P2P'));
+            state.peer.on('disconnected', () => setPeerStatus('error', 'Сигнализация отключена'));
+            state.peer.on('error', (err) => {
+                console.error('PeerJS error:', err);
+                setPeerStatus('error', 'Ошибка P2P');
+            });
         }
 
         function setPeerStatus(type, text) {
@@ -208,66 +221,110 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // --- Realtime Firebase Matchmaker ---
         async function startSearch() {
-            if (!state.peer || !state.myPeerId || state.isConnected) return;
+            if (!state.peer || !state.myPeerId || state.isConnected || state.isSearching) return;
 
-            state.isSearching = true;
-            state.isPaused = false;
-            updateUI();
+            try {
+                if (!state.user) await authReady;
+                if (!state.user) throw new Error('Не удалось войти в Firebase. Обновите страницу.');
 
-            setAvatarState('searching');
-            chatStatusTitle.textContent = "Поиск собеседника...";
-            chatStatusDesc.textContent = `Ищем свободных пользователей в группе ${state.selectedAge}`;
+                state.isSearching = true;
+                state.isPaused = false;
+                state.connectingTo = null;
+                updateUI();
 
-            const queueColPath = collection(db, 'artifacts', appId, 'public', 'data', `queue_${state.selectedAge.replace('+', 'plus')}`);
+                setAvatarState('searching');
+                chatStatusTitle.textContent = 'Поиск собеседника...';
+                chatStatusDesc.textContent = `Ищем пользователей в группе ${state.selectedAge}`;
 
-            // 1. Add current user to real-time queue
-            const myQueueDoc = doc(queueColPath, state.myPeerId);
-            await setDoc(myQueueDoc, {
-                peerId: state.myPeerId,
-                timestamp: Date.now()
-            });
+                const queueName = `queue_${state.selectedAge.replace('+', 'plus')}`;
+                const queueColPath = collection(db, 'artifacts', appId, 'public', 'data', queueName);
+                const myQueueDoc = doc(queueColPath, state.myPeerId);
 
-            // 2. Listen to active queue snapshot
-            if (state.queueUnsub) state.queueUnsub();
-
-            state.queueUnsub = onSnapshot(queueColPath, (snapshot) => {
-                if (!state.isSearching || state.isConnected) return;
-
-                const candidates = [];
-                snapshot.forEach(docSnap => {
-                    const data = docSnap.data();
-                    if (data.peerId !== state.myPeerId) {
-                        candidates.push(data.peerId);
-                    }
+                await setDoc(myQueueDoc, {
+                    peerId: state.myPeerId,
+                    ownerUid: state.user.uid,
+                    timestamp: Date.now()
                 });
 
-                // Match with first waiting stranger
-                if (candidates.length > 0) {
-                    const targetPeerId = candidates[0];
-                    connectToPeer(targetPeerId);
-                }
-            }, (err) => {
-                console.warn("Snapshot notice:", err);
-            });
+                if (state.queueUnsub) state.queueUnsub();
+                state.queueUnsub = onSnapshot(queueColPath, (snapshot) => {
+                    if (!state.isSearching || state.isConnected || state.connectingTo) return;
+
+                    const now = Date.now();
+                    const candidates = [];
+                    snapshot.forEach((docSnap) => {
+                        const data = docSnap.data();
+                        if (data.peerId === state.myPeerId) return;
+                        if (!data.peerId || typeof data.timestamp !== 'number') return;
+                        // Ignore abandoned queue entries.
+                        if (now - data.timestamp > 60000) return;
+                        candidates.push(data.peerId);
+                    });
+
+                    candidates.sort();
+                    // Only one side initiates the call. This prevents both browsers
+                    // from calling each other simultaneously and creating two calls.
+                    const targetPeerId = candidates.find((id) => state.myPeerId < id);
+                    if (targetPeerId) connectToPeer(targetPeerId);
+                }, (err) => {
+                    console.error('Firestore matchmaking listener failed:', err);
+                    state.isSearching = false;
+                    updateUI();
+                    setAvatarState('idle');
+                    chatStatusTitle.textContent = 'Не удалось начать поиск';
+                    chatStatusDesc.textContent = err.code === 'permission-denied'
+                        ? 'Firebase Firestore запрещает доступ к очереди. Проверьте правила безопасности.'
+                        : 'Ошибка подключения к очереди. Откройте консоль браузера для подробностей.';
+                });
+            } catch (err) {
+                console.error('Start search failed:', err);
+                state.isSearching = false;
+                updateUI();
+                setAvatarState('idle');
+                chatStatusTitle.textContent = 'Ошибка поиска';
+                chatStatusDesc.textContent = err.code === 'permission-denied'
+                    ? 'Firestore запрещает доступ. Проверьте правила Firestore.'
+                    : (err.message || 'Не удалось подключиться к поиску. Проверьте интернет и Firebase.');
+            }
         }
 
         function connectToPeer(targetPeerId) {
-            const call = state.peer.call(targetPeerId, state.localStream);
-            if (!call) return;
+            if (!state.peer || !state.localStream || state.connectingTo || state.isConnected) return;
+            state.connectingTo = targetPeerId;
 
+            const call = state.peer.call(targetPeerId, state.localStream);
+            if (!call) {
+                state.connectingTo = null;
+                return;
+            }
+            state.currentCall = call;
             let connected = false;
+
             call.on('stream', (remoteStream) => {
                 connected = true;
-                removeFromMatchmakingQueue();
+                state.connectingTo = null;
                 state.currentCall = call;
+                removeFromMatchmakingQueue();
                 handleConnectedStream(remoteStream);
             });
 
+            call.on('close', () => {
+                if (!connected) state.connectingTo = null;
+                handleDisconnect();
+            });
+            call.on('error', (err) => {
+                console.error('Outgoing call failed:', err);
+                if (!connected) state.connectingTo = null;
+                handleDisconnect();
+            });
+
+            // Give WebRTC time to negotiate on slower mobile connections.
             setTimeout(() => {
-                if (!connected && state.isSearching) {
-                    call.close();
+                if (!connected && state.connectingTo === targetPeerId) {
+                    state.connectingTo = null;
+                    try { call.close(); } catch (e) {}
                 }
-            }, 3500);
+            }, 15000);
         }
 
         async function removeFromMatchmakingQueue() {
@@ -276,11 +333,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 state.queueUnsub();
                 state.queueUnsub = null;
             }
-            if (state.myPeerId && state.selectedAge) {
+            if (state.myPeerId && state.selectedAge && state.user) {
                 try {
-                    const myQueueDoc = doc(db, 'artifacts', appId, 'public', 'data', `queue_${state.selectedAge.replace('+', 'plus')}`, state.myPeerId);
+                    const queueName = `queue_${state.selectedAge.replace('+', 'plus')}`;
+                    const myQueueDoc = doc(db, 'artifacts', appId, 'public', 'data', queueName, state.myPeerId);
                     await deleteDoc(myQueueDoc);
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('Could not remove queue entry:', e);
+                }
             }
         }
 
@@ -298,9 +358,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
 
         function handleDisconnect() {
-            if (state.currentCall) {
-                state.currentCall.close();
-                state.currentCall = null;
+            if (state.isHandlingDisconnect) return;
+            state.isHandlingDisconnect = true;
+            const oldCall = state.currentCall;
+            state.currentCall = null;
+            state.connectingTo = null;
+            if (oldCall) {
+                try { oldCall.close(); } catch (e) {}
             }
             remoteAudio.srcObject = null;
             state.isConnected = false;
@@ -311,13 +375,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 chatStatusDesc.textContent = "Собеседник вышел. Нажмите 'Искать' для следующего.";
             }
             updateUI();
+            state.isHandlingDisconnect = false;
         }
 
         // Actions
-        function skipPeer() {
-            removeFromMatchmakingQueue();
+        async function skipPeer() {
+            await removeFromMatchmakingQueue();
             handleDisconnect();
-            startSearch();
+            state.isPaused = false;
+            await startSearch();
         }
 
         function pauseSearch() {

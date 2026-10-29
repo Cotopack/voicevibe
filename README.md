@@ -51,3 +51,10 @@ Edit the source files in the project root, copy the updated `index.html`, `app.j
 
 ## Firebase configuration
 The project is configured for Firebase project `voicevibe-1b8c0`. Before deploying, confirm that **Authentication → Sign-in method → Anonymous** is enabled and that Cloud Firestore security rules permit only the intended authenticated queue operations. Do not deploy open test-mode Firestore rules to production.
+
+
+## Matchmaking troubleshooting update
+- The matchmaking code now waits for Firebase anonymous authentication, records the authenticated owner UID, ignores stale queue entries, and makes only one peer initiate a call to prevent simultaneous duplicate calls.
+- `firestore.rules` contains rules for this queue path. Review them and publish them in Firebase Console → Firestore Database → Rules. These rules allow authenticated users to read queue IDs because that is required for matching; do not store personal data in queue documents.
+- If using GitHub Pages, update the root `app.js`. If using Firebase Hosting, update `public/app.js` and run `firebase deploy --only hosting`. Keep both copies in sync.
+- The app currently uses STUN servers but no TURN relay. Some mobile/Wi-Fi networks cannot establish direct WebRTC audio with STUN alone; for reliable public use, configure a reputable TURN service and add its credentials to the PeerJS `iceServers` list.
