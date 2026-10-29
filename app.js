@@ -9,20 +9,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             onSnapshot 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'voice-roulette-app';
-        
-        let firebaseConfig = {
-            apiKey: "AIzaSyDemoKeyForPublicMatchmakerOnly",
-            authDomain: "voice-roulette.firebaseapp.com",
-            projectId: "voice-roulette-demo",
-            storageBucket: "voice-roulette.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123456789:web:abcdef"
-        };
+        const appId = 'voicevibe-1b8c0';
 
-        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-            try { firebaseConfig = JSON.parse(__firebase_config); } catch (e) {}
-        }
+        const firebaseConfig = {
+            apiKey: "AIzaSyDFQ4ffsLf857irvY0pTtduk35XeZCM8Ko",
+            authDomain: "voicevibe-1b8c0.firebaseapp.com",
+            projectId: "voicevibe-1b8c0",
+            storageBucket: "voicevibe-1b8c0.firebasestorage.app",
+            messagingSenderId: "60527601868",
+            appId: "1:60527601868:web:8512e2219ac0d056ebfa69",
+            measurementId: "G-8HJBHBNSCG"
+        };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);

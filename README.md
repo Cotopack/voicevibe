@@ -1,19 +1,53 @@
-# Voice Roulette — проект по файлам
+# Voice Roulette — Firebase Hosting project
 
-## Файлы
-- `index.html` — разметка приложения.
-- `styles.css` — собственные стили.
-- `app.js` — логика приложения, Firebase и WebRTC.
-- `tailwind-config.js` — настройки Tailwind CSS.
+## Project files
+- `index.html`, `styles.css`, `app.js`, `tailwind-config.js` — editable source files.
+- `public/` — the exact static files Firebase Hosting publishes. Copy any changes to the matching files in `public/` before deploying.
+- `firebase.json` — Firebase Hosting configuration.
+- `.firebaserc.example` — example only; Firebase CLI creates the real `.firebaserc` when you select your project.
 
-## Запуск
-1. Откройте папку в VS Code.
-2. Для запуска используйте расширение **Live Server** (правой кнопкой на `index.html` → Open with Live Server) или любой HTTPS-хостинг. Микрофон обычно не работает при открытии файла напрямую через `file://`.
-3. Разрешите доступ к микрофону в браузере.
+## 1. Configure Firebase app
+1. In Firebase Console, register a Web app (`</>`) if you haven't already.
+2. In `app.js` AND `public/app.js`, replace the demo `firebaseConfig` values with the config shown for your Firebase Web app.
+3. Enable **Authentication → Sign-in method → Anonymous**.
+4. Create **Cloud Firestore** and configure secure Firestore rules before going public. Do not use open test rules for a public app.
 
-## Важно: настройка Firebase
-В `app.js` сейчас указаны демонстрационные значения `firebaseConfig` (`voice-roulette-demo`). С ними подбор собеседников не заработает как настоящий сервис. Создайте проект Firebase, включите **Authentication → Anonymous** и **Cloud Firestore**, затем замените значения `firebaseConfig` на конфигурацию своего проекта. Настройте правила Firestore безопасно перед публикацией.
+## 2. Install Firebase CLI (Windows)
+Install Node.js LTS from https://nodejs.org/ and restart VS Code/Terminal.
+Then run:
 
-PeerJS использует публичный сигнализационный сервер, а соединение между пользователями устанавливается через WebRTC. Для стабильного production-сервиса понадобятся собственная серверная настройка, защита от спама/злоупотреблений, жалобы/блокировки и модерация. Выбор возрастной категории сам по себе не подтверждает возраст пользователя.
+```powershell
+npm install -g firebase-tools
+firebase login
+```
 
-Внешние библиотеки (Tailwind CDN, Font Awesome, Google Fonts, PeerJS и Firebase SDK) загружаются из интернета.
+## 3. Link this folder to your Firebase project
+Open this project folder in VS Code. Open Terminal → New Terminal and run:
+
+```powershell
+firebase use --add
+```
+
+Choose your Firebase project and set the alias to `default`.
+
+## 4. Deploy Hosting
+From this folder (the folder containing `firebase.json`), run:
+
+```powershell
+firebase deploy --only hosting
+```
+
+When deployment finishes, the CLI prints the live URL, normally `https://YOUR_PROJECT_ID.web.app` (also `https://YOUR_PROJECT_ID.firebaseapp.com`). Firebase Hosting serves the site over HTTPS, which is needed for browser microphone access.
+
+## Updating the app
+Edit the source files in the project root, copy the updated `index.html`, `app.js`, `styles.css`, and `tailwind-config.js` into `public/`, then run `firebase deploy --only hosting` again.
+
+## Important limitations
+- Hosting publishes the static front end; it does not itself configure Firestore, Authentication, or the PeerJS signaling service.
+- The demo Firebase config in the app must be replaced. Firebase config is intended to identify the client project, but Firestore Security Rules and Authentication must still be configured safely.
+- PeerJS currently uses a public signaling service. For a reliable public launch, consider a managed/self-hosted signaling setup, TURN servers, abuse prevention, reporting/blocking, and moderation.
+- Age selection is self-reported and does not verify a user's age. Do not present the app as a verified age-restricted service without appropriate controls.
+
+
+## Firebase configuration
+The project is configured for Firebase project `voicevibe-1b8c0`. Before deploying, confirm that **Authentication → Sign-in method → Anonymous** is enabled and that Cloud Firestore security rules permit only the intended authenticated queue operations. Do not deploy open test-mode Firestore rules to production.
