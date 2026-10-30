@@ -1189,12 +1189,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Vibecoin / referrals / Premium: rewards and purchases are handled by trusted Cloud Functions.
         const referralPanel = document.getElementById('referralPanel');
-        document.getElementById('openReferralPanel')?.addEventListener('click', async () => {
+        async function showReferralPanel() {
             referralPanel?.classList.remove('hidden');
             const status = document.getElementById('referralStatus'); if(status) status.textContent='Загружаем реферальную ссылку…';
             try { const res=await ensureReferralAccount(); const d=res.data||{}; state.userProfile={...(state.userProfile||{}),...d}; renderSocialProfile(); const codeEl=document.getElementById('myReferralCode'); const linkEl=document.getElementById('myReferralLink'); if(codeEl) codeEl.value=d.referralCode||''; if(linkEl) linkEl.value=`${location.origin}${location.pathname}?ref=${encodeURIComponent(d.referralCode||'')}`; if(status) status.textContent=`Баланс: ${Number(d.vibecoinBalance||0)} Vibecoin. За каждого нового приглашённого — 10 монет.`; }
             catch(e){ if(status) status.textContent='Реферальный сервер ещё не подключён. Разверни Firebase Functions из папки functions проекта.'; console.warn(e); }
-        });
+        }
+        document.getElementById('openReferralPanel')?.addEventListener('click', showReferralPanel);
+        document.getElementById('profileReferralShortcut')?.addEventListener('click', showReferralPanel);
         document.getElementById('closeReferralPanel')?.addEventListener('click',()=>referralPanel?.classList.add('hidden'));
         async function copyField(id){const el=document.getElementById(id);if(!el?.value)return;try{await navigator.clipboard.writeText(el.value);const s=document.getElementById('referralStatus');if(s)s.textContent='Скопировано! Отправь ссылку другу.';}catch(_){el.select();document.execCommand('copy');}}
         document.getElementById('copyReferralCode')?.addEventListener('click',()=>copyField('myReferralCode'));
