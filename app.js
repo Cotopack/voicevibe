@@ -773,11 +773,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function showTab(tab) {
             currentTab = tab;
             const roulette = tab === 'roulette';
+            const chatsTab = tab === 'chats' || tab === 'search';
             screenAgeSelect.classList.toggle('hidden', !roulette || !!state.selectedAge);
             screenChat.classList.toggle('hidden', !roulette || !state.selectedAge);
             socialScreen.classList.toggle('hidden', roulette);
             socialProfilePanel.classList.toggle('hidden', tab !== 'profile');
-            socialChatsPanel.classList.toggle('hidden', tab !== 'chats');
+            socialChatsPanel.classList.toggle('hidden', !chatsTab);
+            if (tab !== 'chats') { socialChatsPanel.classList.remove('chat-open'); }
+            if (tab === 'search') { setTimeout(() => document.getElementById('friendSearchInput')?.focus(), 80); }
             document.querySelectorAll('.nav-tab').forEach(b => {
                 const selected = b.dataset.tab === tab;
                 b.classList.toggle('text-violet-300', selected);
@@ -785,7 +788,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 b.classList.toggle('bg-violet-500/10', selected);
             });
             if (tab === 'profile') renderSocialProfile();
-            if (tab === 'chats') renderChatFriends();
+            if (chatsTab) renderChatFriends();
         }
         document.querySelectorAll('.nav-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
@@ -850,7 +853,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function updateConversationPresence(uid) {
             const f = friendsCache.find(x => x.uid === uid) || {};
             const header = document.getElementById('conversationHeader');
-            if (header) header.innerHTML = `<div class="flex items-center gap-3">${avatarMarkup(f,'h-9 w-9')}<div class="min-w-0"><div class="font-semibold text-slate-100">${escapeHTML(f.displayName || 'Друг')}</div>${presenceLabel(uid)}</div></div>`;
+            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100">${escapeHTML(f.displayName || 'Друг')}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button></div>`;
+            document.getElementById('conversationBack')?.addEventListener('click', closeConversation);
+            document.getElementById('conversationFriendProfile')?.addEventListener('click', () => openFriendProfile(uid));
+        }
+        function closeConversation() {
+            if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
+            activeFriend = null; activeConversationId = null;
+            socialChatsPanel.classList.remove('chat-open');
+            const pane = document.getElementById('conversationPane');
+            pane?.classList.add('hidden');
+            const list = document.getElementById('messagesList'); if (list) list.innerHTML = '';
+            const input = document.getElementById('messageInput'); if (input) { input.value = ''; input.disabled = true; }
+            const send = document.getElementById('sendMessageBtn'); if (send) send.disabled = true;
+            const game = document.getElementById('snakeChallengeBtn'); if (game) game.disabled = true;
+            renderChatFriends();
+        }
+        function openFriendProfile(uid) {
+            const f = friendsCache.find(x => String(x.uid || x.id) === String(uid)); if (!f) return;
+            const name = escapeHTML(f.displayName || 'Друг'); const nick = escapeHTML(f.username || 'user');
+            const photo = f.photoURL ? `<img src="${escapeHTML(f.photoURL)}" alt="Аватар ${name}" class="h-28 w-28 rounded-full object-cover">` : avatarMarkup(f,'h-28 w-28');
+            let modal = document.getElementById('friendProfileModal');
+            if (!modal) { modal=document.createElement('div'); modal.id='friendProfileModal'; modal.className='fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/90 p-5 backdrop-blur'; modal.innerHTML='<div class="relative w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl"><button id="friendProfileClose" class="absolute right-3 top-3 rounded-xl p-2 text-slate-400" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button><div id="friendProfileContent" class="flex flex-col items-center gap-3"></div></div>'; document.body.appendChild(modal); modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();}); modal.querySelector('#friendProfileClose').addEventListener('click',()=>modal.remove()); }
+            modal.querySelector('#friendProfileContent').innerHTML = `${photo}<h2 class="text-xl font-bold">${name}</h2><p class="text-violet-300">@${nick}</p><p class="text-sm text-slate-400">${escapeHTML(f.bio || '')}</p>`;
         }
         function renderFriends() {
             const host = document.getElementById('friendsList');
@@ -890,7 +915,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }).join('');
                     host.querySelectorAll('[data-addfriend]').forEach(b=>b.addEventListener('click',async()=>{
                         b.disabled=true; b.textContent='Отправляем…';
-                        try { await sendFriendRequest(b.dataset.addfriend); b.textContent='Заявка отправлена'; }
+                        try { await sendFriendRequest(b.dataset.addfriend); b.textContent='✓ Заявка отправлена'; b.classList.remove('bg-violet-600'); b.classList.add('bg-slate-700','text-emerald-300'); }
                         catch(err) { console.error('Friend request failed',err); b.disabled=false; b.textContent='Повторить'; alert(err.code==='permission-denied'?'Firebase запретил отправку заявки. Проверь Firestore Rules.':'Не удалось отправить заявку.'); }
                     }));
                 } catch(err) { console.error('User search failed:',err); host.innerHTML='<p class="px-2 text-xs text-rose-300">Не удалось выполнить поиск. Проверь доступ Firestore.</p>'; }
@@ -939,6 +964,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const game = document.getElementById('snakeChallengeBtn');
             const pane = document.getElementById('conversationPane');
             if (pane) pane.classList.remove('hidden', 'conversation-empty');
+            socialChatsPanel.classList.add('chat-open');
             if (host) host.innerHTML = '<p class="text-sm text-slate-400">Открываем переписку…</p>';
             if (input) input.disabled = true;
             if (send) send.disabled = true;
@@ -1087,7 +1113,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             while(snakeAccumulator>=interval){snakeAccumulator-=interval;if(!snakeStep())return;}
             state.snakeTimer=requestAnimationFrame(snakeLoop);
         }
-        function runSnake(){const st=state.snakeState;if(!st)return;if(!st.over)return;st.over=false;snakeLastTick=0;snakeAccumulator=0;if(state.snakeTimer)cancelAnimationFrame(state.snakeTimer);state.snakeTimer=requestAnimationFrame(snakeLoop);document.getElementById('snakeStart').textContent='Игра идёт…';}
+        function runSnake(){let st=state.snakeState;if(!st)return;if(!st.over)return;resetSnake();st=state.snakeState;st.over=false;snakeLastTick=0;snakeAccumulator=0;if(state.snakeTimer)cancelAnimationFrame(state.snakeTimer);state.snakeTimer=requestAnimationFrame(snakeLoop);document.getElementById('snakeStart').textContent='Игра идёт…';}
         async function endSnake(){
             const st=state.snakeState;if(!st||st.over)return;st.over=true;if(state.snakeTimer)cancelAnimationFrame(state.snakeTimer);state.snakeTimer=null;
             const previous=Number(localStorage.getItem('voicevibeSnakeBest')||0),best=Math.max(st.score,previous);localStorage.setItem('voicevibeSnakeBest',String(best));
