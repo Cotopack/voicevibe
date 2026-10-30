@@ -8,7 +8,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if signedIn();
       allow create, update: if isMe(userId)
-        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt'])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 30
         && request.resource.data.username is string

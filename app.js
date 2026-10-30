@@ -227,56 +227,53 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('profileBtn')?.addEventListener('click', () => {
             const p = state.userProfile || {};
             document.getElementById('profileNameInput').value = p.displayName || state.user?.displayName || '';
+            document.getElementById('profileUsernameInput').value = p.username ? '@' + p.username : '';
             document.getElementById('profileBioInput').value = p.bio || '';
             document.getElementById('profilePhotoInput').value = p.photoURL || state.user?.photoURL || '';
             document.getElementById('profileEmailText').textContent = state.user?.email || state.user?.phoneNumber || 'Аккаунт VoiceVibe';
+            const changedAt = Number(p.usernameChangedAt || 0);
+            const remaining = Math.max(0, 14*24*60*60*1000 - (Date.now()-changedAt));
+            const hint = document.getElementById('usernameChangeHint');
+            if (hint) hint.textContent = remaining ? `Следующая смена @nickname через ${Math.ceil(remaining/86400000)} дн.` : 'Можно менять @nickname. Следующая смена будет доступна через 14 дней.';
             profileModal.classList.remove('hidden');
         });
         document.getElementById('btnCloseProfile')?.addEventListener('click', () => profileModal.classList.add('hidden'));
         document.getElementById('btnSaveProfile')?.addEventListener('click', async () => {
             if (!state.user) return;
-            const displayName = document.getElementById('profileNameInput').value.trim();
-            const bio = document.getElementById('profileBioInput').value.trim().slice(0, 160);
+            const displayName = document.getElementById('profileNameInput').value.trim().slice(0,30);
+            const bio = document.getElementById('profileBioInput').value.trim().slice(0,160);
             const file = document.getElementById('profileAvatarFile')?.files?.[0];
             let photoURL = document.getElementById('profilePhotoInput').value.trim();
-            const username = normalizeUsername(displayName);
-            if (displayName.length < 3 || displayName.length > 24 || !/^[a-zA-Z0-9_]+$/.test(displayName)) {
-                alert('Никнейм: 3–24 символа, только латинские буквы, цифры и _.'); return;
-            }
+            const username = normalizeUsername(document.getElementById('profileUsernameInput').value.replace(/^@/,''));
+            if (displayName.length < 1) { alert('Укажи отображаемое имя.'); return; }
+            if (!/^[a-z0-9_]{3,24}$/.test(username)) { alert('@nickname: 3–24 символа, латинские буквы, цифры и _.'); return; }
             if (photoURL && !/^https:\/\//i.test(photoURL)) { alert('Ссылка на аватар должна начинаться с https://'); return; }
-            if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
-                alert('Выбери JPG, PNG или WebP размером не более 5 МБ.'); return;
-            }
+            if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5*1024*1024)) { alert('Выбери JPG, PNG или WebP размером до 5 МБ.'); return; }
             const oldUsername = state.userProfile?.username || '';
-            try {
-                const usernameRef = doc(db, 'usernames', username);
-                const usernameSnap = await getDoc(usernameRef);
-                if (usernameSnap.exists() && usernameSnap.data().uid !== state.user.uid) {
-                    alert('Этот никнейм уже занят. Выбери другой.'); return;
-                }
-                if (file) {
-                    const compressed = await compressAvatar(file);
-                    photoURL = await uploadAvatarToCloudinary(compressed);
-                }
-                // The username reservation is a separate document, guarded by Firestore Rules.
-                await setDoc(usernameRef, { uid: state.user.uid, username, updatedAt: Date.now() });
-                const updated = { displayName, username, bio, photoURL, updatedAt: Date.now(), createdAt: state.userProfile?.createdAt || Date.now() };
-                await setDoc(doc(db, 'users', state.user.uid), updated, { merge: true });
-                if (oldUsername && oldUsername !== username) {
-                    const oldRef = doc(db, 'usernames', oldUsername);
-                    const oldSnap = await getDoc(oldRef);
-                    if (oldSnap.exists() && oldSnap.data().uid === state.user.uid) await deleteDoc(oldRef);
-                }
-                try { await updateProfile(state.user, { displayName, photoURL: photoURL || null }); } catch (e) { console.warn('Auth profile sync skipped', e); }
-                state.userProfile = updated;
-                document.getElementById('profileAvatarFile').value = '';
-                applyProfileToUI(); renderSocialProfile();
-                profileModal.classList.add('hidden');
-            } catch (err) {
-                console.error('Profile save failed:', err);
-                alert(err.code === 'permission-denied' ? 'Firestore запретил сохранение. Проверь опубликованные Rules.' : 'Не удалось сохранить профиль. Проверь Firestore Rules и настройки Cloudinary Upload preset.');
+            const changedAt = Number(state.userProfile?.usernameChangedAt || 0);
+            const changing = oldUsername !== username;
+            if (changing && oldUsername && Date.now()-changedAt < 14*86400000) {
+                const days = Math.ceil((14*86400000-(Date.now()-changedAt))/86400000);
+                alert(`Менять @nickname можно раз в 14 дней. Осталось ${days} дн.`); return;
             }
+            try {
+                const usernameRef = doc(db,'usernames',username);
+                const usernameSnap = await getDoc(usernameRef);
+                if (usernameSnap.exists() && usernameSnap.data().uid !== state.user.uid) { alert('Этот @nickname уже занят.'); return; }
+                if (file) photoURL = await uploadAvatarToCloudinary(await compressAvatar(file));
+                await setDoc(usernameRef,{uid:state.user.uid,username,updatedAt:Date.now()});
+                const updated = {displayName,username,bio,photoURL,usernameChangedAt:changing?Date.now():changedAt,updatedAt:Date.now(),createdAt:state.userProfile?.createdAt||Date.now()};
+                await setDoc(doc(db,'users',state.user.uid),updated,{merge:true});
+                if (oldUsername && oldUsername!==username) {
+                    const oldRef=doc(db,'usernames',oldUsername), oldSnap=await getDoc(oldRef);
+                    if (oldSnap.exists() && oldSnap.data().uid===state.user.uid) await deleteDoc(oldRef);
+                }
+                try { await updateProfile(state.user,{displayName,photoURL:photoURL||null}); } catch(e) { console.warn('Auth profile sync:',e); }
+                state.userProfile=updated; document.getElementById('profileAvatarFile').value='';
+                applyProfileToUI(); renderSocialProfile(); profileModal.classList.add('hidden');
+            } catch(err) { console.error('Profile save failed:',err); alert(err.code==='permission-denied'?'Firestore запретил сохранение. Проверь опубликованные Rules.':'Не удалось сохранить профиль.'); }
         });
+
         document.getElementById('btnSignOut')?.addEventListener('click', async () => {
             if (state.isSearching || state.isConnected) pauseSearch();
             if (state.peer) { if (state.myPeerId && state.user) deleteDoc(doc(db, 'peerSessions', state.myPeerId)).catch(() => {}); state.peer.destroy(); state.peer = null; state.myPeerId = null; }
@@ -839,7 +836,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const host = document.getElementById('friendRequestsList');
             document.getElementById('requestCount').textContent = String(friendRequestsCache.length);
             if (!friendRequestsCache.length) { host.innerHTML = '<p class="text-sm text-slate-500">Пока нет заявок.</p>'; return; }
-            host.innerHTML = friendRequestsCache.map(r => `<div class="flex items-center gap-3 rounded-2xl bg-slate-950/70 p-3">${avatarMarkup(r,'h-10 w-10')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(r.displayName || 'Пользователь')}</p><p class="text-xs text-slate-500">@${escapeHTML(r.username || 'user')}</p></div><button data-accept="${escapeHTML(r.fromUid)}" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold">Принять</button><button data-reject="${escapeHTML(r.fromUid)}" class="rounded-lg bg-slate-800 px-3 py-2 text-xs">Отклонить</button></div>`).join('');
+            host.innerHTML = friendRequestsCache.map(r => `<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-slate-950/80 p-3">${avatarMarkup(r,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(r.displayName || 'Пользователь')} <span class="ml-1 text-xs font-normal text-violet-300">хочет добавить вас</span></p><p class="text-xs text-slate-400">@${escapeHTML(r.username || 'user')}</p></div><button data-accept="${escapeHTML(r.fromUid)}" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold">Принять</button><button data-reject="${escapeHTML(r.fromUid)}" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs">Отклонить</button></div>`).join('');
             host.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => acceptFriend(b.dataset.accept)));
             host.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => rejectFriend(b.dataset.reject)));
         }
@@ -873,6 +870,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }).join('');
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
         }
+        let friendSearchTimer = null;
+        document.getElementById('friendSearchInput')?.addEventListener('input', event => {
+            clearTimeout(friendSearchTimer);
+            const value = normalizeUsername(event.target.value.replace(/^@/,''));
+            const host = document.getElementById('friendSearchResults');
+            if (!value) { host.innerHTML = ''; return; }
+            if (value.length < 2) { host.innerHTML = '<p class="px-2 text-xs text-slate-500">Введи минимум 2 символа.</p>'; return; }
+            host.innerHTML = '<p class="px-2 text-xs text-slate-400">Ищем пользователей…</p>';
+            friendSearchTimer = setTimeout(async () => {
+                try {
+                    const q = query(collection(db,'users'), where('username','>=',value), where('username','<=',value+'\\uf8ff'), limit(8));
+                    const snap = await getDocs(q);
+                    const users = snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>u.uid!==state.user?.uid);
+                    if (!users.length) { host.innerHTML = '<p class="px-2 text-xs text-slate-500">Никого не нашли. Проверь @nickname.</p>'; return; }
+                    host.innerHTML = users.map(u => {
+                        const isFriend = friendsCache.some(f=>(f.uid||f.id)===u.uid);
+                        return `<div class="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-2">${avatarMarkup(u,'h-9 w-9')}<div class="min-w-0 flex-1"><p class="truncate text-xs font-semibold">${escapeHTML(u.displayName||'Пользователь')}</p><p class="text-[11px] text-slate-500">@${escapeHTML(u.username||'')}</p></div>${isFriend?'<span class="text-[11px] text-emerald-400">Друг</span>':`<button data-addfriend="${escapeHTML(u.uid)}" class="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-semibold">Добавить</button>`}</div>`;
+                    }).join('');
+                    host.querySelectorAll('[data-addfriend]').forEach(b=>b.addEventListener('click',async()=>{
+                        b.disabled=true; b.textContent='Отправляем…';
+                        try { await sendFriendRequest(b.dataset.addfriend); b.textContent='Заявка отправлена'; }
+                        catch(err) { console.error('Friend request failed',err); b.disabled=false; b.textContent='Повторить'; alert(err.code==='permission-denied'?'Firebase запретил отправку заявки. Проверь Firestore Rules.':'Не удалось отправить заявку.'); }
+                    }));
+                } catch(err) { console.error('User search failed:',err); host.innerHTML='<p class="px-2 text-xs text-rose-300">Не удалось выполнить поиск. Проверь доступ Firestore.</p>'; }
+            },300);
+        });
         async function sendFriendRequest(targetUid) {
             if (!state.user || !targetUid || targetUid === state.user.uid) return;
             const existing = await getDoc(doc(db,'users',state.user.uid,'friends',targetUid));

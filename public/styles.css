@@ -6,3 +6,8 @@ body { font-family: 'Inter', sans-serif; user-select: none; }
         @keyframes pulse-ring {
             to { box-shadow: 0 0 0 30px rgba(99, 102, 241, 0); }
         }
+
+/* VoiceVibe social polish */
+#friendSearchInput:focus,#profileUsernameInput:focus,#profileNameInput:focus{outline:2px solid rgba(139,92,246,.65);outline-offset:1px}
+#friendSearchResults>div{animation:vvMessageIn .16s ease-out}
+#friendRequestsList>div{box-shadow:0 8px 24px rgba(0,0,0,.12)}
