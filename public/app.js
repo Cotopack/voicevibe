@@ -396,21 +396,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     call.close();
                     return;
                 }
-                // Resolve the other account UID before removing its queue entry.
+                // Answer immediately: waiting for Firestore here can exceed mobile WebRTC timeouts.
+                state.currentCall = call;
+                state.connectingTo = call.peer;
+                call.answer(state.localStream);
+                removeFromMatchmakingQueue();
+                // Resolve the account UID in parallel with media negotiation.
                 try {
                     const sessionSnap = await getDoc(doc(db, 'peerSessions', call.peer));
                     if (sessionSnap.exists()) state.currentMatchUid = sessionSnap.data().ownerUid || null;
                     const qName = state.selectedAge ? `queue_${state.selectedAge.replace('+', 'plus')}` : '';
-                    if (qName) {
+                    if (!state.currentMatchUid && qName) {
                         const qSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', qName));
                         qSnap.forEach((d) => { const item=d.data(); if (item.peerId === call.peer) state.currentMatchUid = item.ownerUid || null; });
                     }
                 } catch (e) { console.warn('Could not resolve matched user UID:', e); }
-
-                state.currentCall = call;
-                state.connectingTo = call.peer;
-                removeFromMatchmakingQueue();
-                call.answer(state.localStream);
 
                 call.on('stream', (remoteStream) => {
                     state.connectingTo = null;
@@ -569,8 +569,35 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.isSearching = false;
             updateUI();
 
+            remoteAudio.autoplay = true;
+            remoteAudio.playsInline = true;
+            remoteAudio.muted = false;
             remoteAudio.srcObject = remoteStream;
-            remoteAudio.play().catch(e => console.warn("Autoplay block", e));
+            // iOS Safari may block autoplay until the user taps the page.
+            const tryPlayRemoteAudio = () => remoteAudio.play().then(() => {
+                const unlock = document.getElementById('vvAudioUnlock');
+                if (unlock) unlock.remove();
+            }).catch(err => {
+                console.warn('Remote audio playback requires a user gesture:', err);
+                let unlock = document.getElementById('vvAudioUnlock');
+                if (!unlock) {
+                    unlock = document.createElement('button');
+                    unlock.id = 'vvAudioUnlock';
+                    unlock.type = 'button';
+                    unlock.textContent = '🔊 Включить звук собеседника';
+                    unlock.className = 'fixed bottom-24 left-1/2 z-[100] -translate-x-1/2 rounded-full border border-violet-300/30 bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-xl';
+                    unlock.addEventListener('click', () => {
+                        remoteAudio.muted = false;
+                        tryPlayRemoteAudio();
+                    });
+                    document.body.appendChild(unlock);
+                }
+            });
+            remoteStream.getAudioTracks().forEach(track => {
+                track.enabled = true;
+                track.onunmute = tryPlayRemoteAudio;
+            });
+            tryPlayRemoteAudio();
 
             setAvatarState('connected');
             chatStatusTitle.textContent = "Собеседник подключен!";
@@ -875,47 +902,84 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         async function openConversation(friendUid) {
             if (!state.user || !friendUid || friendUid === state.user.uid) return;
-            activeFriend = friendUid;
-            const pair = [state.user.uid, friendUid].sort();
-            activeConversationId = pair.join('_');
-            const friend = friendsCache.find(f => (f.uid || f.id) === friendUid) || {};
-            document.getElementById('conversationPane')?.classList.remove('conversation-empty');
-            updateConversationPresence(friendUid);
-            document.getElementById('messageInput').disabled = false;
-            document.getElementById('sendMessageBtn').disabled = false;
-            document.getElementById('snakeChallengeBtn').disabled = false;
-            if (state.messageUnsub) state.messageUnsub();
-            const conversationRef = doc(db,'conversations',activeConversationId);
-            try {
-                // A chat is created only for an accepted friend relationship.
-                const myFriendRef = doc(db,'users',state.user.uid,'friends',friendUid);
-                const myFriendSnap = await getDoc(myFriendRef);
-                if (!myFriendSnap.exists()) {
-                    document.getElementById('messagesList').innerHTML = '<p class="text-sm text-rose-300">Не удалось открыть переписку: этот пользователь не найден в твоём списке друзей. Обнови список друзей или войди в правильный аккаунт.</p>';
-                    return;
-                }
-                await setDoc(conversationRef, { participants:pair, updatedAt:Date.now() }, { merge:true });
-            } catch (e) {
-                console.error('Conversation initialization failed:', e);
-                const code = e?.code || 'unknown';
-                document.getElementById('messagesList').innerHTML = `<p class="text-sm text-rose-300">Не удалось открыть чат (${escapeHTML(code)}). Проверь, что опубликованы актуальные Firestore Rules из архива, и попробуй ещё раз.</p>`;
-                return;
+            const uid = String(friendUid);
+            const friendDoc = friendsCache.find(f => String(f.uid || f.id) === uid);
+            if (!friendDoc) {
+                console.warn('Friend is not in local cache; attempting direct lookup', uid);
             }
-            const messagesCol = collection(db,'conversations',activeConversationId,'messages');
-            state.messageUnsub = onSnapshot(query(messagesCol, orderBy('createdAt','asc'), limit(100)), snap => {
-                const host = document.getElementById('messagesList');
-                if (snap.empty) host.innerHTML = '<p class="text-sm text-slate-500">Начни разговор 👋</p>';
-                else host.innerHTML = snap.docs.map(d => {
-                    const m=d.data(); const mine=m.senderUid===state.user.uid;
-                    if (m.type === 'snake-challenge') return `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm"><b>🎮 Вызов в Змейку</b><p class="mt-1 text-xs text-slate-300">${escapeHTML(m.text || 'Сыграем?')}</p><button data-playchallenge="${escapeHTML(d.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold">Играть</button></div>`;
-                    if (m.type === 'snake-result') return `<div class="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 text-sm">🐍 ${escapeHTML(m.text || '')}</div>`;
-                    return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</p></div></div>`;
-                }).join('');
-                host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
-                host.scrollTop = host.scrollHeight;
-            }, err => { console.warn('Chat listener:', err); document.getElementById('messagesList').innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить чат. Проверь Firestore Rules.</p>'; });
-            renderChatFriends();
-            showTab('chats');
+            activeFriend = uid;
+            const pair = [state.user.uid, uid].sort();
+            activeConversationId = pair.join('_');
+            const host = document.getElementById('messagesList');
+            const input = document.getElementById('messageInput');
+            const send = document.getElementById('sendMessageBtn');
+            const game = document.getElementById('snakeChallengeBtn');
+            const pane = document.getElementById('conversationPane');
+            if (pane) pane.classList.remove('hidden', 'conversation-empty');
+            if (host) host.innerHTML = '<p class="text-sm text-slate-400">Открываем переписку…</p>';
+            if (input) input.disabled = true;
+            if (send) send.disabled = true;
+            if (game) game.disabled = true;
+            if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
+
+            try {
+                // Read the canonical friend document before attempting to create a conversation.
+                const friendRef = doc(db, 'users', state.user.uid, 'friends', uid);
+                const friendSnap = await getDoc(friendRef);
+                if (!friendSnap.exists()) {
+                    throw new Error('FRIEND_DOC_MISSING: Этот пользователь отсутствует в списке друзей текущего аккаунта.');
+                }
+                const friendData = { uid, ...friendSnap.data() };
+                updateConversationPresence(uid);
+                const conversationRef = doc(db, 'conversations', activeConversationId);
+                const conversationSnap = await getDoc(conversationRef);
+                if (!conversationSnap.exists()) {
+                    await setDoc(conversationRef, {
+                        participants: pair,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+                } else {
+                    const participants = conversationSnap.data().participants || [];
+                    if (participants.length !== 2 || !participants.includes(state.user.uid) || !participants.includes(uid)) {
+                        throw new Error('CHAT_PARTICIPANTS_MISMATCH: Документ переписки содержит другие UID.');
+                    }
+                }
+
+                const messagesCol = collection(db, 'conversations', activeConversationId, 'messages');
+                state.messageUnsub = onSnapshot(
+                    query(messagesCol, orderBy('createdAt', 'asc'), limit(100)),
+                    snap => {
+                        if (activeConversationId !== pair.join('_')) return;
+                        if (!host) return;
+                        if (snap.empty) host.innerHTML = '<p class="text-sm text-slate-500">Пока нет сообщений. Напиши первым 👋</p>';
+                        else host.innerHTML = snap.docs.map(d => {
+                            const m = d.data();
+                            const mine = m.senderUid === state.user.uid;
+                            if (m.type === 'snake-challenge') return `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm"><b>🎮 Вызов в Змейку</b><p class="mt-1 text-xs text-slate-300">${escapeHTML(m.text || 'Сыграем?')}</p><button data-playchallenge="${escapeHTML(d.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold">Играть</button></div>`;
+                            if (m.type === 'snake-result') return `<div class="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 text-sm">🐍 ${escapeHTML(m.text || '')}</div>`;
+                            return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
+                        }).join('');
+                        host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
+                        host.scrollTop = host.scrollHeight;
+                    },
+                    err => {
+                        console.error('Chat messages listener failed:', err);
+                        if (host) host.innerHTML = `<div class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">Не удалось загрузить сообщения (${escapeHTML(err.code || 'unknown')}). Проверь Firestore Rules и доступ к документу conversations/${escapeHTML(activeConversationId)}.</div>`;
+                    }
+                );
+                if (input) input.disabled = false;
+                if (send) send.disabled = false;
+                if (game) game.disabled = false;
+                renderChatFriends();
+                showTab('chats');
+            } catch (e) {
+                console.error('Conversation open failed:', e);
+                if (host) host.innerHTML = `<div class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200"><b>Не удалось открыть чат</b><p class="mt-1">${escapeHTML(e.message || e.code || 'Неизвестная ошибка')}</p><p class="mt-2 text-xs text-rose-300">Проверь, что оба аккаунта добавлены друг к другу в друзья и опубликованы актуальные Firestore Rules.</p></div>`;
+                if (input) input.disabled = true;
+                if (send) send.disabled = true;
+                if (game) game.disabled = true;
+            }
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
             e.preventDefault();
@@ -1027,7 +1091,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Friend button is shown after a real roulette connection; the matched UID is taken from the queue document.
         const addFriendButton = document.createElement('button');
-        addFriendButton.id='addRouletteFriend'; addFriendButton.className='hidden mt-3 rounded-xl border border-violet-500/40 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-200'; addFriendButton.innerHTML='<i class="fa-solid fa-user-plus mr-2"></i>Добавить в друзья';
+        addFriendButton.id='addRouletteFriend'; addFriendButton.className='hidden mt-3 rounded-full border border-violet-300/30 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-violet-950/30 transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0'; addFriendButton.innerHTML='<i class="fa-solid fa-user-plus mr-2"></i>Добавить в друзья';
         chatStatusDesc?.parentElement?.appendChild(addFriendButton);
         addFriendButton.addEventListener('click',async()=>{try{if(!state.currentMatchUid){alert('Не удалось определить аккаунт собеседника. Попробуйте ещё раз или познакомьтесь через чат.');return;}await sendFriendRequest(state.currentMatchUid); }catch(e){console.error(e);alert('Не удалось отправить заявку. Проверь Firestore Rules.');}});
         const oldHandleConnectedStream = handleConnectedStream;

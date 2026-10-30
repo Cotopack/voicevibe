@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Publicly readable only to signed-in members; edits remain owner-only.
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isMe(userId)
+        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 30
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 24
+        && request.resource.data.photoURL is string
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 160;
+      allow delete: if false;
+
+      match /friendRequests/{fromUid} {
+        allow read, delete: if isMe(userId);
+        allow create: if signedIn()
+          && request.auth.uid == fromUid
+          && fromUid != userId
+          && request.resource.data.fromUid == fromUid
+          && request.resource.data.toUid == userId
+          && request.resource.data.status == 'pending'
+          && request.resource.data.displayName is string
+          && request.resource.data.username is string
+          && request.resource.data.photoURL is string;
+        allow update: if false;
+      }
+
+      match /friends/{friendUid} {
+        allow read: if signedIn() && (request.auth.uid == userId || request.auth.uid == friendUid);
+        allow create: if signedIn() && (
+          request.auth.uid == userId ||
+          (request.auth.uid == friendUid && exists(/databases/$(database)/documents/users/$(friendUid)/friendRequests/$(userId)))
+        ) && request.resource.data.uid == friendUid;
+        allow update: if signedIn() && (request.auth.uid == userId || request.auth.uid == friendUid)
+          && request.resource.data.uid == friendUid;
+        allow delete: if isMe(userId);
+      }
+    }
+
+    // Unique nickname reservations: the document ID is the normalized nickname.
+    match /usernames/{username} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/usernames/$(username))
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == username;
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == username;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Ephemeral peer-to-account mapping used for friend requests after a match.
+    match /peerSessions/{peerId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.resource.data.peerId == peerId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['peerId','ownerUid','updatedAt']);
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Voice roulette matchmaking queue. Keep profile details out of queue docs.
+    match /artifacts/{appId}/public/data/{queueName}/{peerId} {
+      allow read: if signedIn() && appId == 'voicevibe-1b8c0';
+      allow create, update: if signedIn()
+        && appId == 'voicevibe-1b8c0'
+        && request.resource.data.keys().hasAll(['peerId','ownerUid','timestamp'])
+        && request.resource.data.keys().hasOnly(['peerId','ownerUid','timestamp'])
+        && request.resource.data.peerId == peerId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.timestamp is int;
+      allow delete: if signedIn() && appId == 'voicevibe-1b8c0'
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+
+    // Lightweight online presence. A member can update only their own status;
+    // friends can read it to see whether the person is currently online.
+    match /presence/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(userId))
+      );
+      allow create, update: if isMe(userId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.online is bool
+        && request.resource.data.lastSeen is int
+        && request.resource.data.keys().hasOnly(['uid','online','lastSeen']);
+      allow delete: if isMe(userId);
+    }
+
+    // One conversation per sorted UID pair. Only its participants can read/write.
+    match /conversations/{chatId} {
+      function isFriendConversation(data) {
+        let otherUid = data.participants[0] == request.auth.uid ? data.participants[1] : data.participants[0];
+        return exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUid))
+          || exists(/databases/$(database)/documents/users/$(otherUid)/friends/$(request.auth.uid));
+      }
+      allow read: if signedIn() && resource.data.participants is list
+        && resource.data.participants.hasAny([request.auth.uid]);
+      allow create: if signedIn()
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.participants.hasAny([request.auth.uid])
+        && isFriendConversation(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.participants is list
+        && resource.data.participants.hasAny([request.auth.uid])
+        && request.resource.data.participants == resource.data.participants;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function participant() {
+          return signedIn() && get(/databases/$(database)/documents/conversations/$(chatId)).data.participants.hasAny([request.auth.uid]);
+        }
+        allow read: if participant();
+        allow create: if participant()
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.type in ['text','snake-challenge','snake-result'];
+        allow update, delete: if false;
+      }
+    }
+  }
+}

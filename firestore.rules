@@ -102,7 +102,8 @@ service cloud.firestore {
     match /conversations/{chatId} {
       function isFriendConversation(data) {
         let otherUid = data.participants[0] == request.auth.uid ? data.participants[1] : data.participants[0];
-        return exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUid));
+        return exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUid))
+          || exists(/databases/$(database)/documents/users/$(otherUid)/friends/$(request.auth.uid));
       }
       allow read: if signedIn() && resource.data.participants is list
         && resource.data.participants.hasAny([request.auth.uid]);

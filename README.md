@@ -99,3 +99,22 @@ challenge, not after every casual practice game.
 
 ## Snake update
 - Snake now uses animation-frame timing, touch swipe, gradually increasing speed, a clearer board and a one-result-per-challenge guard.
+
+
+## Chat / iOS audio review hotfix
+
+This revision changes chat initialization to validate the signed-in user's friend document,
+checks an existing conversation's participant UIDs before subscribing, and displays the
+actual Firestore error code when opening or reading a chat fails. It also answers incoming
+PeerJS calls immediately rather than waiting for Firestore lookups, and adds an explicit
+"Enable sound" button when iOS Safari blocks remote audio autoplay.
+
+After deploying, publish the updated `firestore.rules` in Firebase Console as well as the
+site files. Existing friend documents must exist under `users/{yourUid}/friends/{friendUid}`
+for each account; this patch does not migrate or merge duplicate Firebase accounts.
+On iPhone, tap "Enable sound" if Safari blocks autoplay. Test with two distinct accounts
+while both pages are open.
+
+JavaScript syntax was checked with Node.js. A live Firebase / iPhone WebRTC test cannot be
+performed from this archive, so use the displayed error code and browser console if any
+issue remains.
