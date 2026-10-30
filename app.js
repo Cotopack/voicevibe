@@ -945,13 +945,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return result.secure_url;
         }
         let storyAdvanceTimer = null;
+        function stopStoryMedia() {
+            const viewer = document.getElementById('storyViewer');
+            viewer?.querySelectorAll('audio, video').forEach(media => {
+                try { media.pause(); media.currentTime = 0; media.removeAttribute('src'); media.load(); } catch (_) {}
+            });
+        }
+        function closeStoryViewer() {
+            clearTimeout(storyAdvanceTimer);
+            stopStoryMedia();
+            document.getElementById('storyViewer')?.classList.add('hidden');
+            setCurrentStoryAvatar('');
+        }
         function renderStoryViewer() {
             clearTimeout(storyAdvanceTimer);
+            stopStoryMedia();
             const st = activeStoryItems[activeStoryIndex];
             const viewer = document.getElementById('storyViewer');
             if (!st || !viewer) return;
             const media = st.mediaType === 'video' && st.mediaURL
-                ? `<video src="${storyEscape(st.mediaURL)}" class="absolute inset-0 h-full w-full object-contain" autoplay playsinline controls preload="metadata"></video>`
+                ? `<video src="${storyEscape(st.mediaURL)}" class="absolute inset-0 h-full w-full object-contain bg-transparent" autoplay playsinline controls preload="metadata"></video>`
                 : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain"/>` : '';
             const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
             const views = Array.isArray(st.views) ? st.views : [];
@@ -962,16 +975,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const ownerStats = isOwnStory ? `<button id="storyViewersBtn" class="rounded-full bg-white/15 px-3 py-2 text-xs"><i class="fa-regular fa-eye mr-1"></i>${views.length} просмотров</button>` : '';
             const likeCount = isOwnStory ? `<span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span>` : '';
             const viewersList = isOwnStory ? `<div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div>` : '';
-            viewer.innerHTML = `<div class="relative flex h-full min-h-[70dvh] w-full flex-col overflow-hidden rounded-3xl bg-black text-white">
-                ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-10 p-4"><div class="mb-3 h-1 overflow-hidden rounded-full bg-white/25"><div class="h-full w-full bg-white/90"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-white/70">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full bg-black/30 px-3 py-2" aria-label="Закрыть">✕</button></div></div>
+            viewer.innerHTML = `<div class="relative flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-rose-100 via-violet-100 to-sky-100 text-slate-800">
+                ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-20 p-4 sm:p-6"><div class="mb-3 h-1 overflow-hidden rounded-full bg-slate-800/10"><div class="h-full w-full bg-violet-500"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-slate-500">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full border border-white/80 bg-white/80 px-3 py-2 text-slate-700 shadow-lg backdrop-blur-xl" aria-label="Закрыть">✕</button></div></div>
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
-                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-10 p-4">${st.text ? `<div class="story-text-card mb-3 mx-auto max-w-md whitespace-pre-wrap break-words"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text)}</p></div>` : ''}${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
+                ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text)}</p></div></div>` : ''}
+                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
             viewer.classList.remove('hidden');
-            const advanceStory = () => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } else { viewer.classList.add('hidden'); setCurrentStoryAvatar(''); clearTimeout(storyAdvanceTimer); } };
+            const advanceStory = () => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } else { closeStoryViewer(); } };
             if (st.mediaType === 'video') { const video = viewer.querySelector('video'); video?.addEventListener('ended', advanceStory, { once:true }); video?.addEventListener('error', () => { chatStatusDesc.textContent = 'Не удалось загрузить видеоисторию.'; }, { once:true }); }
             else storyAdvanceTimer = setTimeout(advanceStory, 10000);
-            document.getElementById('storyOwnerProfile')?.addEventListener('click', () => { const owner=st.uid; clearTimeout(storyAdvanceTimer); viewer.classList.add('hidden'); storiesModal?.classList.add('hidden'); openAnyUserProfile(owner); });
-            document.getElementById('storyViewerClose')?.addEventListener('click', () => { clearTimeout(storyAdvanceTimer); viewer.classList.add('hidden'); setCurrentStoryAvatar(''); });
+            document.getElementById('storyOwnerProfile')?.addEventListener('click', () => { const owner=st.uid; closeStoryViewer(); storiesModal?.classList.add('hidden'); openAnyUserProfile(owner); });
+            document.getElementById('storyViewerClose')?.addEventListener('click', closeStoryViewer);
             let storyTouchStart = null;
             viewer.ontouchstart = (ev) => { if (ev.target.closest('button, form, input, textarea, audio, video, a')) return; const t=ev.changedTouches?.[0]; if(t) storyTouchStart={x:t.clientX,y:t.clientY}; };
             viewer.ontouchend = (ev) => { if(!storyTouchStart) return; const t=ev.changedTouches?.[0]; const start=storyTouchStart; storyTouchStart=null; if(!t) return; const dx=t.clientX-start.x, dy=t.clientY-start.y; if(Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.2){ clearTimeout(storyAdvanceTimer); if(dx<0 && activeStoryIndex<activeStoryItems.length-1){activeStoryIndex++;renderStoryViewer();markStoryViewed(activeStoryItems[activeStoryIndex]);} else if(dx>0 && activeStoryIndex>0){activeStoryIndex--;renderStoryViewer();markStoryViewed(activeStoryItems[activeStoryIndex]);} } };
@@ -1011,24 +1025,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
         function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
-        document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); document.getElementById('storyViewer')?.classList.add('hidden'); await refreshStories(); });
+        document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); closeStoryViewer(); await refreshStories(); });
         document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user || event.target.closest('#friendProfileModal')) return; const uid=avatar.dataset.storyAvatar; const hasStory=activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now()); if(hasStory){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();storiesModal?.classList.remove('hidden');storyCreateForm?.classList.add('hidden');storiesList?.classList.remove('hidden');openStoryByUser(uid);} else { event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.(); if(uid===state.user.uid) document.getElementById('profileBtn')?.click(); else openAnyUserProfile(uid); } }, true);
         document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
-        document.getElementById('storiesClose')?.addEventListener('click', () => { storiesModal?.classList.add('hidden'); setCurrentStoryAvatar(''); });
-        storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) storiesModal.classList.add('hidden'); });
+        document.getElementById('storiesClose')?.addEventListener('click', () => { closeStoryViewer(); storiesModal?.classList.add('hidden'); });
+        storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) { closeStoryViewer(); storiesModal.classList.add('hidden'); } });
         document.getElementById('storyCreateToggle')?.addEventListener('click', () => { const opening=storyCreateForm?.classList.contains('hidden'); storyCreateForm?.classList.toggle('hidden'); storyStatus?.classList.add('hidden'); if (storiesList) storiesList.classList.toggle('hidden', !!opening); const btn=document.getElementById('storyCreateToggle'); if(btn) btn.innerHTML=opening ? '<i class="fa-solid fa-arrow-left"></i> Назад к историям' : '<i class="fa-solid fa-plus"></i> Добавить фото или видео'; if (opening) { storiesList?.classList.add('hidden'); storyTextInput?.focus({preventScroll:true}); } });
         const musicStartInput=document.getElementById('storyMusicStart');
         const musicLengthInput=document.getElementById('storyMusicLength');
-        const musicLibrarySelect=document.getElementById('storyBuiltInMusic');
         let storyMusicPreviewURL = null;
-        let generatedMusicFile = null;
-        const musicTracks = {
-            chill: {name:'Night Chill', notes:[220,0,261.63,329.63,0,293.66,261.63,0,196,0,220,293.66]},
-            dream: {name:'Dreamy', notes:[392,0,329.63,493.88,440,0,329.63,0,523.25,0,440,392]},
-            pulse: {name:'Neon Pulse', notes:[130.81,0,196,0,261.63,0,196,0,146.83,0,220,0]},
-            sunrise: {name:'Sunrise', notes:[261.63,329.63,392,0,329.63,392,523.25,0,293.66,349.23,440,0]},
-            lofi: {name:'Soft Lo-fi', notes:[174.61,0,220,261.63,0,220,196,0,164.81,0,196,220]}
-        };
         function drawMusicWave() {
             const wave=document.getElementById('storyMusicWave'); if(!wave)return;
             wave.innerHTML=Array.from({length:56},(_,i)=>`<span style="height:${8+Math.abs(Math.sin(i*1.71)*Math.cos(i*.37))*31}px"></span>`).join('');
@@ -1042,24 +1047,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(musicLengthInput){musicLengthInput.max=String(maxLength);if(Number(musicLengthInput.value)>maxLength)musicLengthInput.value=String(maxLength);}
             const length=Math.max(3,Math.min(maxLength,Number(musicLengthInput?.value)||10));
             const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`Обрезка: ${start}–${start+length} сек. · в историю попадёт только этот фрагмент`;
-        }
-        function makeRoyaltyFreeTrack(key) {
-            const track=musicTracks[key]; if(!track) return null;
-            const rate=44100, duration=30, total=Math.floor(rate*duration), data=new Float32Array(total), step=duration/track.notes.length;
-            track.notes.forEach((freq,i)=>{
-                const from=Math.floor(i*step*rate), to=Math.min(total,Math.floor((i+1)*step*rate));
-                for(let n=from;n<to;n++){
-                    const t=(n-from)/rate, local=(n-from)/(Math.max(1,to-from));
-                    const fade=Math.min(1,t*16,(1-local)*14);
-                    if(freq){
-                        const beat=key==='pulse'||key==='lofi' ? (1+0.12*Math.sin(2*Math.PI*4*t)) : 1;
-                        data[n]+=(Math.sin(2*Math.PI*freq*t)+0.28*Math.sin(2*Math.PI*freq*2*t))*0.13*fade*beat;
-                    } else if(key==='pulse' && local<0.12) {
-                        data[n]+=Math.sin(2*Math.PI*55*t)*0.12*Math.max(0,1-local/0.12);
-                    }
-                }
-            });
-            return audioBufferToWavFile(data,rate,`voicevibe-${key}.wav`);
         }
         function audioBufferToWavFile(samples, sampleRate, filename='voicevibe-trimmed.wav') {
             const total=samples.length, buffer=new ArrayBuffer(44+total*2), view=new DataView(buffer);
@@ -1107,17 +1094,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         musicLengthInput?.addEventListener('input', updateMusicTrimLabel);
         storyMusicInput?.addEventListener('change', () => {
             const file=storyMusicInput.files?.[0];
-            if(file) { generatedMusicFile=null; if(musicLibrarySelect)musicLibrarySelect.value=''; setMusicPreviewFile(file); }
+            if(file) { setMusicPreviewFile(file); }
             const name=document.getElementById('storyMusicName');if(name)name.textContent=file?.name||'Файл не выбран';
         });
-        musicLibrarySelect?.addEventListener('change', () => {
-            const key=musicLibrarySelect.value; generatedMusicFile=key?makeRoyaltyFreeTrack(key):null;
-            if(generatedMusicFile){ if(storyMusicInput)storyMusicInput.value=''; const name=document.getElementById('storyMusicName');if(name)name.textContent=`Оригинальная мелодия: ${musicTracks[key].name}`; setMusicPreviewFile(generatedMusicFile); }
-            else {setMusicPreviewFile(storyMusicInput?.files?.[0]||null);const name=document.getElementById('storyMusicName');if(name)name.textContent=storyMusicInput?.files?.[0]?.name||'Файл не выбран';}
-        });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
-            const source=generatedMusicFile || storyMusicInput?.files?.[0];
-            if(!source){storyStatus.textContent='Сначала выбери аудиофайл на устройстве или мелодию VoiceVibe.';storyStatus.classList.remove('hidden');return;}
+            const source=storyMusicInput?.files?.[0];
+            if(!source){storyStatus.textContent='Сначала выбери аудиофайл на устройстве.';storyStatus.classList.remove('hidden');return;}
             const btn=document.getElementById('storyMusicPreviewPlay');
             try {
                 btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin mr-1"></i>Готовим фрагмент…';
@@ -1140,7 +1122,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
-            const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=generatedMusicFile || storyMusicInput?.files?.[0] || null;
+            const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=storyMusicInput?.files?.[0] || null;
             if(image&&video){storyStatus.textContent='Выбери фото или видео, не оба сразу.';storyStatus.classList.remove('hidden');return;}
             if(!text&&!image&&!video){storyStatus.textContent='Добавь текст, фото или видео.';storyStatus.classList.remove('hidden');return;}
             if(video&&!video.type.startsWith('video/')){storyStatus.textContent='Выбери видеофайл.';storyStatus.classList.remove('hidden');return;}
@@ -1155,7 +1137,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
                 await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';['storyImageName','storyVideoName','storyMusicName'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Файл не выбран';});if(musicLibrarySelect)musicLibrarySelect.value='';generatedMusicFile=null;if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';['storyImageName','storyVideoName','storyMusicName'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Файл не выбран';});if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
