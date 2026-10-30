@@ -132,6 +132,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function applyProfileToUI() {
             const profile = state.userProfile || {};
             const name = profile.displayName || state.user?.displayName || 'Мой профиль';
+            const photoURL = Object.prototype.hasOwnProperty.call(profile, 'photoURL') ? profile.photoURL : state.user?.photoURL;
             const nameEl = document.getElementById('profileHeaderName');
             const avatarEl = document.getElementById('profileHeaderAvatar');
             if (nameEl) nameEl.textContent = name;
@@ -229,7 +230,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('profileNameInput').value = p.displayName || state.user?.displayName || '';
             document.getElementById('profileUsernameInput').value = p.username ? '@' + p.username : '';
             document.getElementById('profileBioInput').value = p.bio || '';
-            document.getElementById('profilePhotoInput').value = p.photoURL || state.user?.photoURL || '';
+            const preview = document.getElementById('profileEditAvatarPreview');
+            if (preview) preview.innerHTML = avatarMarkup(p, 'h-14 w-14');
+            const removeAvatarButton = document.getElementById('btnRemoveAvatar');
+            if (removeAvatarButton) { removeAvatarButton.dataset.remove = 'false'; removeAvatarButton.innerHTML = '<i class="fa-regular fa-trash-can mr-1"></i> Удалить аватар'; removeAvatarButton.classList.remove('border-rose-500/50','text-rose-200'); }
             document.getElementById('profileEmailText').textContent = state.user?.email || state.user?.phoneNumber || 'Аккаунт VoiceVibe';
             const changedAt = Number(p.usernameChangedAt || 0);
             const remaining = Math.max(0, 14*24*60*60*1000 - (Date.now()-changedAt));
@@ -238,16 +242,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             profileModal.classList.remove('hidden');
         });
         document.getElementById('btnCloseProfile')?.addEventListener('click', () => profileModal.classList.add('hidden'));
+        document.getElementById('btnRemoveAvatar')?.addEventListener('click', () => {
+            const button = document.getElementById('btnRemoveAvatar');
+            button.dataset.remove = button.dataset.remove === 'true' ? 'false' : 'true';
+            const preview = document.getElementById('profileEditAvatarPreview');
+            if (button.dataset.remove === 'true') {
+                const name = document.getElementById('profileNameInput').value.trim() || 'V';
+                preview.innerHTML = `<span class="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600">${escapeHTML(name.slice(0,1).toUpperCase())}</span>`;
+                button.innerHTML = '<i class="fa-solid fa-rotate-left mr-1"></i> Оставить фото';
+                button.classList.add('border-rose-500/50','text-rose-200');
+            } else {
+                preview.innerHTML = avatarMarkup(state.userProfile || {}, 'h-14 w-14');
+                button.innerHTML = '<i class="fa-regular fa-trash-can mr-1"></i> Удалить аватар';
+                button.classList.remove('border-rose-500/50','text-rose-200');
+            }
+        });
+        document.getElementById('profileAvatarFile')?.addEventListener('change', () => {
+            const button = document.getElementById('btnRemoveAvatar'); if (button) button.dataset.remove = 'false';
+            const file = document.getElementById('profileAvatarFile')?.files?.[0];
+            if (!file || !file.type.startsWith('image/')) return;
+            const preview = document.getElementById('profileEditAvatarPreview');
+            if (preview) { const url = URL.createObjectURL(file); preview.innerHTML = `<img src="${url}" alt="Предпросмотр аватара" class="h-14 w-14 rounded-full object-cover" onload="URL.revokeObjectURL(this.src)">`; }
+        });
         document.getElementById('btnSaveProfile')?.addEventListener('click', async () => {
             if (!state.user) return;
             const displayName = document.getElementById('profileNameInput').value.trim().slice(0,30);
             const bio = document.getElementById('profileBioInput').value.trim().slice(0,160);
             const file = document.getElementById('profileAvatarFile')?.files?.[0];
-            let photoURL = document.getElementById('profilePhotoInput').value.trim();
+            let photoURL = state.userProfile?.photoURL || state.user?.photoURL || '';
             const username = normalizeUsername(document.getElementById('profileUsernameInput').value.replace(/^@/,''));
             if (displayName.length < 1) { alert('Укажи отображаемое имя.'); return; }
             if (!/^[a-z0-9_]{3,24}$/.test(username)) { alert('@nickname: 3–24 символа, латинские буквы, цифры и _.'); return; }
-            if (photoURL && !/^https:\/\//i.test(photoURL)) { alert('Ссылка на аватар должна начинаться с https://'); return; }
             if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5*1024*1024)) { alert('Выбери JPG, PNG или WebP размером до 5 МБ.'); return; }
             const oldUsername = state.userProfile?.username || '';
             const changedAt = Number(state.userProfile?.usernameChangedAt || 0);
@@ -261,6 +286,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const usernameSnap = await getDoc(usernameRef);
                 if (usernameSnap.exists() && usernameSnap.data().uid !== state.user.uid) { alert('Этот @nickname уже занят.'); return; }
                 if (file) photoURL = await uploadAvatarToCloudinary(await compressAvatar(file));
+                if (document.getElementById('btnRemoveAvatar')?.dataset.remove === 'true') photoURL = '';
                 await setDoc(usernameRef,{uid:state.user.uid,username,updatedAt:Date.now()});
                 const updated = {displayName,username,bio,photoURL,usernameChangedAt:changing?Date.now():changedAt,updatedAt:Date.now(),createdAt:state.userProfile?.createdAt||Date.now()};
                 await setDoc(doc(db,'users',state.user.uid),updated,{merge:true});
@@ -270,17 +296,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }
                 try { await updateProfile(state.user,{displayName,photoURL:photoURL||null}); } catch(e) { console.warn('Auth profile sync:',e); }
                 state.userProfile=updated; document.getElementById('profileAvatarFile').value='';
+                const removeAvatarButton = document.getElementById('btnRemoveAvatar'); if (removeAvatarButton) removeAvatarButton.dataset.remove = 'false';
                 applyProfileToUI(); renderSocialProfile(); profileModal.classList.add('hidden');
             } catch(err) { console.error('Profile save failed:',err); alert(err.code==='permission-denied'?'Firestore запретил сохранение. Проверь опубликованные Rules.':'Не удалось сохранить профиль.'); }
         });
 
-        document.getElementById('btnSignOut')?.addEventListener('click', async () => {
+        async function performSignOut() {
             if (state.isSearching || state.isConnected) pauseSearch();
             if (state.peer) { if (state.myPeerId && state.user) deleteDoc(doc(db, 'peerSessions', state.myPeerId)).catch(() => {}); state.peer.destroy(); state.peer = null; state.myPeerId = null; }
             if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
             profileModal.classList.add('hidden');
             await signOut(auth);
-        });
+        }
+        document.getElementById('btnSignOut')?.addEventListener('click', performSignOut);
+        document.getElementById('socialSignOut')?.addEventListener('click', performSignOut);
 
         // Step 1: Selection
         document.querySelectorAll('.btn-age').forEach(btn => {
@@ -778,6 +807,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('socialName').textContent = p.displayName || 'Настрой профиль';
             document.getElementById('socialHandle').textContent = p.username ? '@' + p.username : 'Выбери уникальный никнейм';
             document.getElementById('socialBio').textContent = p.bio || 'Добавь короткое описание о себе.';
+            const count = friendsCache.length;
+            const countText = count === 1 ? '1 друг' : (count >= 2 && count <= 4 ? `${count} друга` : `${count} друзей`);
+            const countEl = document.getElementById('socialFriendCount'); if (countEl) countEl.textContent = countText;
+            const badge = document.getElementById('socialFriendCountBadge'); if (badge) badge.textContent = String(count);
         }
         function showTab(tab) {
             currentTab = tab;
@@ -786,6 +819,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             screenAgeSelect.classList.toggle('hidden', !roulette || !!state.selectedAge);
             screenChat.classList.toggle('hidden', !roulette || !state.selectedAge);
             socialScreen.classList.toggle('hidden', roulette);
+            socialScreen.classList.toggle('chat-tab-active', chatsTab);
             socialProfilePanel.classList.toggle('hidden', tab !== 'profile');
             socialChatsPanel.classList.toggle('hidden', !chatsTab);
             socialSearchPanel?.classList.toggle('hidden', tab !== 'search');
@@ -827,7 +861,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }, err => console.warn('Friend request listener:', err)));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
                 friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data(), uid:d.data().uid || d.id }));
-                renderFriends(); renderChatFriends();
+                renderFriends(); renderChatFriends(); renderSocialProfile();
                 state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
                 state.presenceUnsubs = [];
                 for (const friend of friendsCache) {
