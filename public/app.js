@@ -888,6 +888,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const countEl = document.getElementById('socialFriendCount'); if (countEl) countEl.textContent = countText;
             const balanceEl = document.getElementById('vibecoinBalance'); if (balanceEl) balanceEl.textContent = String(Math.max(0, Number(p.vibecoinBalance || 0)));
             const premiumBadge = document.getElementById('premiumStatusBadge'); const premium = Number(p.premiumUntil || 0) > Date.now(); if (premiumBadge) premiumBadge.classList.toggle('hidden', !premium);
+            // Hide Premium-only controls from non-Premium accounts; keep the purchase button visible.
+            ['profileBannerFile','uploadProfileBannerBtn','chatWallpaperFile','stickerUploadInput','stickerUploadBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('.vv-premium-feature') || el.closest('section') || el.parentElement; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
+            document.querySelectorAll('[data-premium-only]').forEach(el => el.classList.toggle('hidden', !premium));
             const banner = document.getElementById('socialProfileBanner'); if (banner) { banner.style.backgroundImage = p.bannerURL ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(p.bannerURL).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !p.bannerURL); }
         }
         function showTab(tab) {
