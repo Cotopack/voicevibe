@@ -53,6 +53,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             currentFriendUid: null,
             messageUnsub: null,
             socialUnsubs: [],
+            unreadUnsubs: [],
+            unreadCounts: new Map(),
             presenceUnsubs: [],
             presenceCache: new Map(),
             presenceHeartbeat: null,
@@ -333,8 +335,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } catch (err) {
                 console.error("Mic access error:", err);
                 if (errorAlert && errorAlertText) {
-                    errorAlertText.textContent = err.message || "Микрофон не найден!";
+                    const denied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError' || err?.code === 'permission-denied';
+                    errorAlertText.textContent = denied
+                        ? 'Доступ к микрофону не разрешён. Нажми «Повторить запрос». Если браузер уже заблокировал доступ, открой настройки сайта рядом с адресной строкой и разреши микрофон.'
+                        : (err.message || 'Микрофон не найден!');
                     errorAlert.classList.remove('hidden');
+                    let retry = document.getElementById('retryMicPermission');
+                    if (!retry) {
+                        retry = document.createElement('button'); retry.id = 'retryMicPermission'; retry.type = 'button';
+                        retry.className = 'mt-3 rounded-xl bg-rose-500/20 px-4 py-2 font-semibold text-rose-100 ring-1 ring-rose-300/30 hover:bg-rose-500/30';
+                        retry.textContent = 'Повторить запрос'; errorAlert.appendChild(retry);
+                        retry.addEventListener('click', async () => { retry.disabled = true; retry.textContent = 'Запрашиваем доступ…'; const ok = await initAudioStream(); retry.disabled = false; retry.textContent = 'Повторить запрос'; if (ok) { errorAlert.classList.add('hidden'); screenAgeSelect.classList.add('hidden'); screenChat.classList.remove('hidden'); btnExitMenu.classList.remove('hidden'); initPeerJS(); } });
+                    }
                 }
                 return false;
             }
@@ -830,6 +842,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function showTab(tab) {
             currentTab = tab;
+            if (tab === 'chats' && activeFriend) {
+                localStorage.setItem(unreadStorageKey(activeFriend), String(Date.now()));
+                state.unreadCounts.set(activeFriend, 0); updateUnreadBadge(); renderChatFriends();
+            }
             const roulette = tab === 'roulette';
             const chatsTab = tab === 'chats';
             screenAgeSelect.classList.toggle('hidden', !roulette || !!state.selectedAge);
@@ -920,7 +936,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const isOwnStory = st.uid === state.user?.uid;
             setCurrentStoryAvatar(st.uid);
             const viewNames = views.map(v => typeof v === 'string' ? v : (v.displayName || v.username || 'Пользователь'));
-            const music = st.musicURL ? `<audio src="${storyEscape(st.musicURL)}" autoplay loop controls class="mx-auto mt-2 max-w-full"></audio>` : '';
+            const music = st.musicURL ? `<audio src="${storyEscape(st.musicURL)}" autoplay loop playsinline class="hidden" aria-hidden="true"></audio>` : '';
             const ownerStats = isOwnStory ? `<button id="storyViewersBtn" class="rounded-full bg-white/15 px-3 py-2 text-xs"><i class="fa-regular fa-eye mr-1"></i>${views.length} просмотров</button>` : '';
             const likeCount = isOwnStory ? `<span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span>` : '';
             const viewersList = isOwnStory ? `<div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div>` : '';
@@ -931,6 +947,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             viewer.classList.remove('hidden');
             if (st.mediaType !== 'video') storyAdvanceTimer = setTimeout(() => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } else { viewer.classList.add('hidden'); setCurrentStoryAvatar(''); } }, 10000);
             document.getElementById('storyViewerClose')?.addEventListener('click', () => { clearTimeout(storyAdvanceTimer); viewer.classList.add('hidden'); setCurrentStoryAvatar(''); });
+            viewer.onclick = (ev) => {
+                if (ev.target.closest('button, form, input, textarea, audio, video, a')) return;
+                const rect = viewer.getBoundingClientRect(); const x = ev.clientX - rect.left;
+                if (x < rect.width * 0.35 && activeStoryIndex > 0) { clearTimeout(storyAdvanceTimer); activeStoryIndex--; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
+                else if (x > rect.width * 0.65 && activeStoryIndex < activeStoryItems.length - 1) { clearTimeout(storyAdvanceTimer); activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
+            };
             document.getElementById('storyPrev')?.addEventListener('click', () => { if (activeStoryIndex > 0) { activeStoryIndex--; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } });
             document.getElementById('storyNext')?.addEventListener('click', () => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } });
             document.getElementById('storyLikeBtn')?.addEventListener('click', async () => { try { const likedNow = (activeStoryItems[activeStoryIndex].likes || []).includes(state.user.uid); await updateDoc(doc(db,'stories',st.id), { likes: likedNow ? arrayRemove(state.user.uid) : arrayUnion(state.user.uid) }); st.likes = likedNow ? (st.likes||[]).filter(x=>x!==state.user.uid) : [...(st.likes||[]),state.user.uid]; renderStoryViewer(); } catch(e) { console.error(e); alert('Не удалось поставить лайк. Проверь Firestore Rules.'); } });
@@ -970,6 +992,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const musicStartInput=document.getElementById('storyMusicStart'); const musicEndInput=document.getElementById('storyMusicEnd');
         musicStartInput?.addEventListener('input',()=>{const start=Math.max(0,Math.floor(Number(musicStartInput.value)||0)); if(!musicEndInput.value||Number(musicEndInput.value)<=start||Number(musicEndInput.value)-start>10) musicEndInput.value=String(start+10);});
         musicEndInput?.addEventListener('change',()=>{const start=Math.max(0,Math.floor(Number(musicStartInput?.value)||0)); const end=Math.floor(Number(musicEndInput.value)||start+10); if(end<=start) musicEndInput.value=String(start+10); else if(end-start>10) musicEndInput.value=String(start+10);});
+        let storyMusicPreviewURL = null;
+        storyMusicInput?.addEventListener('change', () => {
+            const preview = document.getElementById('storyMusicPreview'); if (!preview) return;
+            if (storyMusicPreviewURL) URL.revokeObjectURL(storyMusicPreviewURL);
+            storyMusicPreviewURL = storyMusicInput.files?.[0] ? URL.createObjectURL(storyMusicInput.files[0]) : null;
+            preview.src = storyMusicPreviewURL || ''; preview.load();
+            if (storyMusicPreviewURL) preview.onloadedmetadata = () => {
+                const duration = Math.floor(preview.duration || 0);
+                if (musicStartInput) musicStartInput.max = String(Math.max(0, duration - 1));
+                if (musicEndInput) { musicEndInput.max = String(duration); if (!musicEndInput.value) musicEndInput.value = String(Math.min(10, duration)); }
+            };
+        });
+        document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
+            const preview = document.getElementById('storyMusicPreview'); if (!preview?.src) { storyStatus.textContent = 'Сначала выбери аудиофайл.'; storyStatus.classList.remove('hidden'); return; }
+            const start = Math.max(0, Number(musicStartInput?.value) || 0);
+            const end = Math.min(Number(musicEndInput?.value) || start + 10, start + 10, preview.duration || start + 10);
+            if (end <= start) { storyStatus.textContent = 'Укажи корректный промежуток музыки.'; storyStatus.classList.remove('hidden'); return; }
+            preview.pause(); preview.currentTime = Math.min(start, Math.max(0, (preview.duration || start) - 0.1));
+            try { await preview.play(); } catch (err) { console.warn('Music preview playback:', err); return; }
+            preview.ontimeupdate = () => { if (preview.currentTime >= end) { preview.pause(); preview.currentTime = start; } };
+        });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
             const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=storyMusicInput?.files?.[0]||null;
@@ -995,6 +1038,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function stopSocialListeners() {
             state.socialUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
             state.socialUnsubs = [];
+            state.unreadUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
+            state.unreadUnsubs = [];
+            state.unreadCounts.clear(); updateUnreadBadge();
             state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
             state.presenceUnsubs = [];
             if (state.presenceHeartbeat) { clearInterval(state.presenceHeartbeat); state.presenceHeartbeat = null; }
@@ -1017,6 +1063,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }, err => console.warn('Friend request listener:', err)));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
                 friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data(), uid:d.data().uid || d.id }));
+                refreshUnreadListeners();
                 renderFriends(); renderChatFriends(); renderSocialProfile();
                 state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
                 state.presenceUnsubs = [];
@@ -1089,13 +1136,47 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }).join('');
             host.querySelectorAll('[data-chatfriend]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.chatfriend)));
         }
+        function unreadStorageKey(friendUid) { return `vv_read_${state.user?.uid || 'guest'}_${friendUid}`; }
+        function getLastReadAt(friendUid) { return Number(localStorage.getItem(unreadStorageKey(friendUid)) || 0); }
+        function updateUnreadBadge() {
+            const total = [...state.unreadCounts.values()].reduce((sum, n) => sum + n, 0);
+            const nav = document.querySelector('[data-tab="chats"]');
+            if (nav) {
+                let badge = document.getElementById('chatsUnreadBadge');
+                if (!badge) { badge = document.createElement('span'); badge.id='chatsUnreadBadge'; badge.className='absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-gradient-to-r from-fuchsia-500 to-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center shadow-lg shadow-fuchsia-900/40'; nav.classList.add('relative'); nav.appendChild(badge); }
+                badge.textContent = total > 99 ? '99+' : String(total); badge.classList.toggle('hidden', total === 0);
+            }
+        }
+        function refreshUnreadListeners() {
+            state.unreadUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} }); state.unreadUnsubs = [];
+            state.unreadCounts.clear(); updateUnreadBadge();
+            if (!state.user) return;
+            for (const f of friendsCache) {
+                const uid = String(f.uid || f.id || ''); if (!uid || uid === state.user.uid) continue;
+                const chatId = [state.user.uid, uid].sort().join('_');
+                const messagesRef = collection(db, 'conversations', chatId, 'messages');
+                const unsub = onSnapshot(query(messagesRef, orderBy('createdAt','desc'), limit(100)), snap => {
+                    const lastRead = getLastReadAt(uid);
+                    let count = 0;
+                    if (activeFriend !== uid || currentTab !== 'chats') {
+                        count = snap.docs.filter(d => { const m=d.data(); return m.senderUid !== state.user.uid && Number(m.createdAt || 0) > lastRead; }).length;
+                    } else {
+                        localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
+                    }
+                    state.unreadCounts.set(uid, count); updateUnreadBadge(); renderChatFriends();
+                }, err => { if (err?.code !== 'permission-denied') console.warn('Unread count listener:', err); });
+                state.unreadUnsubs.push(unsub);
+            }
+        }
+
         async function renderChatFriends() {
             const host = document.getElementById('chatFriendsList');
             if (!friendsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">У тебя пока нет друзей.</p>'; return; }
             await preloadRoles(friendsCache);
             host.innerHTML = friendsCache.map(f => {
                 const uid=f.uid || f.id;
-                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span class="text-xs text-slate-500">›</span></button>`;
+                const unread = Number(state.unreadCounts.get(uid) || 0);
+                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center shadow-lg shadow-violet-900/40">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('');
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
         }
@@ -1325,6 +1406,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 console.warn('Friend is not in local cache; attempting direct lookup', uid);
             }
             activeFriend = uid;
+            localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
+            state.unreadCounts.set(uid, 0); updateUnreadBadge();
             const pair = [state.user.uid, uid].sort();
             activeConversationId = pair.join('_');
             const host = document.getElementById('messagesList');
@@ -1380,6 +1463,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         }).join('');
                         host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
                         host.scrollTop = host.scrollHeight;
+                        localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
+                        state.unreadCounts.set(uid, 0); updateUnreadBadge(); renderChatFriends();
                     },
                     err => {
                         console.error('Chat messages listener failed:', err);
