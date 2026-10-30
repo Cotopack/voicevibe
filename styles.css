@@ -28,3 +28,5 @@ button[aria-busy="true"]{cursor:progress}
 @keyframes vvSpin{to{transform:rotate(360deg)}}
 @keyframes vvFadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.vv-spinner,.vv-loading-state,#storyViewer video,#storyViewer img,.vv-avatar-story-wrap{animation:none!important;transition:none!important}#messagesList{scroll-behavior:auto}}
+.vv-premium-name{color:#c4b5fd!important;text-shadow:0 0 12px rgba(167,139,250,.45);}
+#stickersGrid img{transition:transform .15s ease}#stickersGrid button:hover img{transform:scale(1.06)}

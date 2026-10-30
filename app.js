@@ -1,3 +1,5 @@
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -27,6 +29,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const functions = getFunctions(app, 'us-central1');
+        const storage = getStorage(app);
+        const ensureReferralAccount = httpsCallable(functions, 'ensureReferralAccount');
+        const claimReferralCall = httpsCallable(functions, 'claimReferral');
+        const purchasePremiumCall = httpsCallable(functions, 'purchasePremium');
+        const claimAdCoinsCall = httpsCallable(functions, 'claimAdCoins');
+        const createGroupCall = httpsCallable(functions, 'createGroup');
+        const pendingReferralCode = new URLSearchParams(location.search).get('ref') || localStorage.getItem('vv_pending_referral') || '';
+        if (new URLSearchParams(location.search).get('ref')) localStorage.setItem('vv_pending_referral', new URLSearchParams(location.search).get('ref'));
         // Keep the same account signed in across normal browser restarts.
         await setPersistence(auth, browserLocalPersistence).catch(err => console.warn('Auth persistence:', err));
         getRedirectResult(auth).catch(err => { if (err?.code) console.warn('Google redirect result:', err); });
@@ -65,7 +76,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             snakeChallengeId: null,
             searchStarting: false,
             peerReconnectTimer: null,
-            storyUploading: false
+            storyUploading: false,
+            groupUnsub: null
         };
 
         // UI Bindings
@@ -110,6 +122,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         createdAt: Date.now()
                     };
                     if (!profileSnap.exists()) await setDoc(doc(db, 'users', user.uid), state.userProfile);
+                    try {
+                        const walletResult = await ensureReferralAccount();
+                        state.userProfile = { ...(state.userProfile || {}), ...(walletResult.data || {}) };
+                        const referralToClaim = pendingReferralCode.trim();
+                        if (referralToClaim && referralToClaim.toUpperCase() !== String(walletResult.data?.referralCode || '').toUpperCase() && !walletResult.data?.referredBy) {
+                            try { await claimReferralCall({ code: referralToClaim }); localStorage.removeItem('vv_pending_referral'); }
+                            catch (claimErr) { console.warn('Automatic referral claim:', claimErr); }
+                        }
+                    } catch (walletErr) { console.warn('Vibecoin backend is not deployed/configured yet:', walletErr); }
                     applyProfileToUI();
                     document.getElementById('authOverlay')?.classList.add('hidden');
                     document.getElementById('profileBtn')?.classList.remove('hidden');
@@ -274,7 +295,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if (oldSnap.exists() && oldSnap.data().uid===state.user.uid) await deleteDoc(oldRef);
                 }
                 try { await updateProfile(state.user,{displayName,photoURL:photoURL||null}); } catch(e) { console.warn('Auth profile sync:',e); }
-                state.userProfile=updated; document.getElementById('profileAvatarFile').value='';
+                state.userProfile={...(state.userProfile||{}),...updated}; document.getElementById('profileAvatarFile').value='';
                 const removeAvatarButton = document.getElementById('btnRemoveAvatar'); if (removeAvatarButton) removeAvatarButton.dataset.remove = 'false';
                 applyProfileToUI(); renderSocialProfile(); profileModal.classList.add('hidden');
             } catch(err) { console.error('Profile save failed:',err); alert(err.code==='permission-denied'?'Firestore запретил сохранение. Проверь опубликованные Rules.':'Не удалось сохранить профиль.'); }
@@ -770,8 +791,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let activeConversationId = null;
         let friendRequestsCache = [];
         let friendsCache = [];
+        let groupsCache = [];
+        let activeGroupId = null;
         // Roles are read from a protected Firestore collection, never from editable user profiles.
         const roleCache = new Map();
+        let premiumExpiryTimer = null;
         async function loadRole(uid) {
             uid = String(uid || '');
             if (!uid) return 'user';
@@ -852,7 +876,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('socialAvatar').innerHTML = avatarMarkup({ ...p, uid: state.user.uid }, 'h-20 w-20');
             const socialName = document.getElementById('socialName');
             const ownUid = state.user.uid;
-            socialName.innerHTML = `${escapeHTML(p.displayName || 'Настрой профиль')} ${roleBadgeMarkup(ownUid)}`;
+            const ownPremium = Number(p.premiumUntil || 0) > Date.now(); socialName.classList.toggle('vv-premium-name', ownPremium); socialName.innerHTML = `${escapeHTML(p.displayName || 'Настрой профиль')}${ownPremium ? ' 👑' : ''} ${roleBadgeMarkup(ownUid)}`;
+            if (premiumExpiryTimer) clearTimeout(premiumExpiryTimer); if (Number(p.premiumUntil || 0) > Date.now()) premiumExpiryTimer = setTimeout(() => renderSocialProfile(), Math.min(2147483000, Number(p.premiumUntil) - Date.now() + 1000));
             if (!roleCache.has(ownUid)) loadRole(ownUid).then(() => {
                 if (state.user?.uid === ownUid) renderSocialProfile();
             });
@@ -861,6 +886,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const count = friendsCache.length;
             const countText = count === 1 ? '1 друг' : (count >= 2 && count <= 4 ? `${count} друга` : `${count} друзей`);
             const countEl = document.getElementById('socialFriendCount'); if (countEl) countEl.textContent = countText;
+            const balanceEl = document.getElementById('vibecoinBalance'); if (balanceEl) balanceEl.textContent = String(Math.max(0, Number(p.vibecoinBalance || 0)));
+            const premiumBadge = document.getElementById('premiumStatusBadge'); const premium = Number(p.premiumUntil || 0) > Date.now(); if (premiumBadge) premiumBadge.classList.toggle('hidden', !premium);
+            const banner = document.getElementById('socialProfileBanner'); if (banner) { banner.style.backgroundImage = p.bannerURL ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(p.bannerURL).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !p.bannerURL); }
         }
         function showTab(tab) {
             currentTab = tab;
@@ -1142,6 +1170,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
 
+        // Vibecoin / referrals / Premium: rewards and purchases are handled by trusted Cloud Functions.
+        const referralPanel = document.getElementById('referralPanel');
+        document.getElementById('openReferralPanel')?.addEventListener('click', async () => {
+            referralPanel?.classList.remove('hidden');
+            const status = document.getElementById('referralStatus'); if(status) status.textContent='Загружаем реферальную ссылку…';
+            try { const res=await ensureReferralAccount(); const d=res.data||{}; state.userProfile={...(state.userProfile||{}),...d}; renderSocialProfile(); const codeEl=document.getElementById('myReferralCode'); const linkEl=document.getElementById('myReferralLink'); if(codeEl) codeEl.value=d.referralCode||''; if(linkEl) linkEl.value=`${location.origin}${location.pathname}?ref=${encodeURIComponent(d.referralCode||'')}`; if(status) status.textContent=`Баланс: ${Number(d.vibecoinBalance||0)} Vibecoin. За каждого нового приглашённого — 10 монет.`; }
+            catch(e){ if(status) status.textContent='Реферальный сервер ещё не подключён. Разверни Firebase Functions из папки functions проекта.'; console.warn(e); }
+        });
+        document.getElementById('closeReferralPanel')?.addEventListener('click',()=>referralPanel?.classList.add('hidden'));
+        async function copyField(id){const el=document.getElementById(id);if(!el?.value)return;try{await navigator.clipboard.writeText(el.value);const s=document.getElementById('referralStatus');if(s)s.textContent='Скопировано! Отправь ссылку другу.';}catch(_){el.select();document.execCommand('copy');}}
+        document.getElementById('copyReferralCode')?.addEventListener('click',()=>copyField('myReferralCode'));
+        document.getElementById('copyReferralLink')?.addEventListener('click',()=>copyField('myReferralLink'));
+        document.getElementById('claimReferralBtn')?.addEventListener('click',async()=>{const code=(document.getElementById('claimReferralCode')?.value||'').trim();const status=document.getElementById('referralStatus');if(!code)return;if(status)status.textContent='Проверяем код…';try{const res=await claimReferralCall({code});if(status)status.textContent=res.data?.message||'Код применён!';const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();}catch(e){if(status)status.textContent=e?.message||'Не удалось применить код.';}});
+        document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{const res=await purchasePremiumCall();const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();alert(res.data?.message||'Premium активирован на 30 дней!');}catch(e){alert(e?.message||'Не удалось купить Premium. Убедись, что развернуты Firebase Functions.');}finally{b.disabled=false;}});
+        document.getElementById('watchAdCoinsBtn')?.addEventListener('click',async()=>{try{const res=await claimAdCoinsCall();alert(res.data?.message||'Попробуйте позже — реклама пока не подключена.');}catch(e){alert(e?.message||'Попробуйте позже — реклама пока не подключена.');}});
+        document.getElementById('profileBannerFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];const n=document.getElementById('profileBannerFileName');if(n)n.textContent=f?.name||'Файл не выбран';});
+        document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const r=storageRef(storage,`profileBanners/${state.user.uid}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`);await uploadBytes(r,f,{contentType:f.type});const url=await getDownloadURL(r);await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert('Не удалось загрузить банер. Проверь Storage Rules.');}finally{b.disabled=false;}});
+
+        // Groups are available only for people already in the user's friend list.
+        const groupModal=document.getElementById('createGroupModal');
+        document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
+        document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
+        document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent='Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
+        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span>`;document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limit(200)),snap=>{if(activeGroupId!==groupId)return;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>{const m=d.data();const mine=m.senderUid===state.user.uid;const senderProfile=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);const sender=mine?(state.userProfile?.displayName||'Вы'):(senderProfile?.displayName||'Участник');const senderPremium=Number(senderProfile?.premiumUntil||0)>Date.now();if(m.type==='sticker')return `<div class="flex ${mine?'justify-end':'justify-start'}"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"></div>`;return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[88%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold opacity-75 ${senderPremium?'vv-premium-name':''}">${escapeHTML(sender)}${senderPremium?' 👑':''}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`;}).join('');host.scrollTop=host.scrollHeight;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+
+        // Premium custom sticker library. Existing stickers remain visible after Premium expires.
+        document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
+        document.getElementById('stickerFileInput')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return alert('Выбери изображение.');if(f.size>2*1024*1024)return alert('Стикер должен быть меньше 2 МБ.');try{const r=storageRef(storage,`stickers/${state.user.uid}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`);await uploadBytes(r,f,{contentType:f.type});const url=await getDownloadURL(r);const stickerRef=doc(collection(db,'users',state.user.uid,'stickers'));await setDoc(stickerRef,{url,name:f.name.slice(0,80),createdAt:Date.now()});e.target.value='';alert('Стикер добавлен в твою коллекцию!');}catch(err){console.error(err);alert('Не удалось загрузить стикер. Проверь Storage/Firestore Rules.');}});
+        document.getElementById('openStickersBtn')?.addEventListener('click',async()=>{const panel=document.getElementById('stickersPanel');panel.classList.toggle('hidden');if(panel.classList.contains('hidden'))return;const grid=document.getElementById('stickersGrid');const hint=document.getElementById('stickersPanelHint');grid.innerHTML='<span class="text-xs text-slate-400">Загружаем стикеры…</span>';try{const owners=[state.user.uid,...(activeGroupId?[]:(activeFriend?[activeFriend]:[]))];const all=[];for(const owner of owners){const snap=await getDocs(query(collection(db,'users',owner,'stickers'),orderBy('createdAt','desc'),limit(50)));snap.docs.forEach(d=>all.push({id:d.id,owner,...d.data()}));}grid.innerHTML=all.length?all.map(st=>`<button data-send-sticker="${escapeHTML(st.url)}" data-sticker-owner="${escapeHTML(st.owner)}" class="rounded-xl border border-slate-700 p-1"><img src="${escapeHTML(st.url)}" alt="Стикер" class="h-14 w-14 rounded-lg object-contain"></button>`).join(''):'<span class="text-xs text-slate-400">Пока нет стикеров. Premium позволяет загрузить свои.</span>';hint.textContent=Number(state.userProfile?.premiumUntil||0)>Date.now()?'Нажми на стикер, чтобы отправить его.':'Ты можешь просматривать стикеры, но отправка доступна только Premium.';grid.querySelectorAll('[data-send-sticker]').forEach(b=>b.addEventListener('click',async()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Отправка стикеров доступна только Premium.');try{const url=b.dataset.sendSticker;const payload={senderUid:state.user.uid,text:url,type:'sticker',createdAt:Date.now()};if(activeGroupId){await addDoc(collection(db,'groups',activeGroupId,'messages'),payload);await updateDoc(doc(db,'groups',activeGroupId),{updatedAt:Date.now(),lastMessage:'✨ Стикер'});}else if(activeConversationId){await addDoc(collection(db,'conversations',activeConversationId,'messages'),payload);}else return;panel.classList.add('hidden');}catch(err){console.error(err);alert('Не удалось отправить стикер. Проверь Rules.');}}));}catch(err){console.error(err);grid.innerHTML='<span class="text-xs text-rose-300">Не удалось загрузить стикеры. Проверь Firestore Rules.</span>';}});
+        document.getElementById('chatWallpaperFile')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Обои в чате доступны только Premium.');if(!activeConversationId&&!activeGroupId)return alert('Сначала открой чат.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');try{const r=storageRef(storage,`chatWallpapers/${state.user.uid}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`);await uploadBytes(r,f,{contentType:f.type});const url=await getDownloadURL(r);if(activeGroupId)await updateDoc(doc(db,'groups',activeGroupId),{wallpaperURL:url,updatedAt:Date.now()});else await updateDoc(doc(db,'conversations',activeConversationId),{wallpaperURL:url});document.getElementById('messagesList').style.backgroundImage=`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${url}")`;document.getElementById('messagesList').style.backgroundSize='cover';alert('Обои установлены!');}catch(err){console.error(err);alert('Не удалось установить обои. Проверь Rules.');}finally{e.target.value='';}});
+
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
 
         function stopSocialListeners() {
@@ -1154,12 +1213,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.presenceUnsubs = [];
             if (state.presenceHeartbeat) { clearInterval(state.presenceHeartbeat); state.presenceHeartbeat = null; }
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
+            if (state.groupUnsub) { state.groupUnsub(); state.groupUnsub = null; }
+            groupsCache = []; activeGroupId = null;
         }
         function startSocialListeners() {
             stopSocialListeners();
             if (!state.user) return;
             const uid = state.user.uid;
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)); renderChatFriends(); }, err => console.warn('Groups listener:',err));
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
+            state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
             const presenceRef = doc(db, 'presence', uid);
             const publishPresence = () => setDoc(presenceRef, { uid, online: !document.hidden, lastSeen: Date.now() }, { merge:true }).catch(err => console.warn('Presence update:', err));
             publishPresence();
@@ -1237,7 +1300,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             let modal=document.getElementById('friendProfileModal');
             if(!modal){modal=document.createElement('div');modal.id='friendProfileModal';modal.className='fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/90 p-5 backdrop-blur';modal.innerHTML='<div class="relative w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl"><button id="friendProfileClose" class="absolute right-3 top-3 rounded-xl p-2 text-slate-400" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button><div id="friendProfileContent" class="flex flex-col items-center gap-3"></div></div>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});modal.querySelector('#friendProfileClose').addEventListener('click',()=>modal.remove());}
             const content=modal.querySelector('#friendProfileContent');
-            content.innerHTML=`${avatarMarkup(profile,'h-24 w-24')}<h2 class="text-xl font-bold">${escapeHTML(profile.displayName||'Пользователь')} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p><p class="max-w-full whitespace-pre-wrap break-words text-sm text-slate-400">${escapeHTML(profile.bio||'')}</p><div class="flex w-full gap-2 pt-2"><button id="profileViewStories" class="flex-1 rounded-xl border border-slate-700 px-3 py-2 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold">Добавить в друзья</button>`}</div>`;
+            content.innerHTML=`${profile.bannerURL?`<div class="h-24 w-full rounded-2xl bg-cover bg-center" style="background-image:url('${escapeHTML(profile.bannerURL)}')"></div>`:''}${avatarMarkup(profile,'h-24 w-24')}<h2 class="text-xl font-bold ${Number(profile.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(profile.displayName||'Пользователь')}${Number(profile.premiumUntil||0)>Date.now()?' 👑':''} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p><p class="max-w-full whitespace-pre-wrap break-words text-sm text-slate-400">${escapeHTML(profile.bio||'')}</p><div class="flex w-full gap-2 pt-2"><button id="profileViewStories" class="flex-1 rounded-xl border border-slate-700 px-3 py-2 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold">Добавить в друзья</button>`}</div>`;
             content.querySelector('#profileViewStories')?.addEventListener('click',()=>{const has=activeStoryItems.some(st=>st.uid===uid&&Number(st.expiresAt)>Date.now());if(has){modal.remove();storiesModal?.classList.remove('hidden');openStoryByUser(uid);}else{storiesModal?.classList.remove('hidden');refreshStories();}});
             content.querySelector('#profileMessageUser')?.addEventListener('click',()=>{modal.remove();openConversation(uid);});
             content.querySelector('#profileAddUser')?.addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='Отправляем…';try{await sendFriendRequest(uid);b.textContent='Заявка отправлена';}catch(err){b.disabled=false;b.textContent='Повторить';alert(err.message||'Не удалось отправить заявку.');}});
@@ -1297,14 +1360,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         async function renderChatFriends() {
             const host = document.getElementById('chatFriendsList');
-            if (!friendsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">У тебя пока нет друзей.</p>'; return; }
+            if (!friendsCache.length && !groupsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">Добавь друга или создай группу, чтобы начать переписку.</p>'; return; }
             await preloadRoles(friendsCache);
-            host.innerHTML = friendsCache.map(f => {
-                const uid=f.uid || f.id;
-                const unread = Number(state.unreadCounts.get(uid) || 0);
-                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center shadow-lg shadow-violet-900/40">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+            const friendsHtml = friendsCache.map(f => {
+                const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0);
+                const isPremium = Number(f.premiumUntil || 0) > Date.now();
+                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('');
+            const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('');
+            host.innerHTML = `${groupsCache.length?'<p class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-violet-300">Группы</p>':''}${groupsHtml}${friendsCache.length?'<p class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Друзья</p>':''}${friendsHtml}`;
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
+            host.querySelectorAll('[data-opengroup]').forEach(b => b.addEventListener('click', () => openGroupConversation(b.dataset.opengroup)));
         }
         let friendSearchTimer = null;
         let searchGeneration = 0;
@@ -1533,6 +1599,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 console.warn('Friend is not in local cache; attempting direct lookup', uid);
             }
             activeFriend = uid;
+            activeGroupId = null;
+            const convHeader = document.getElementById('conversationHeader'); if (convHeader) convHeader.innerHTML = `<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button>${escapeHTML(friendDoc?.displayName || 'Чат')} <span class="text-xs text-slate-500">Личный чат</span>`;
+            setTimeout(()=>document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open')),0);
             localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
             state.unreadCounts.set(uid, 0); updateUnreadBadge();
             const pair = [state.user.uid, uid].sort();
@@ -1574,6 +1643,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 }
 
+                const freshConversation = await getDoc(conversationRef); const wallpaperURL = freshConversation.exists() ? freshConversation.data().wallpaperURL : ''; const messageArea = document.getElementById('messagesList'); if(messageArea){messageArea.style.backgroundImage=wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${wallpaperURL}")`:'';messageArea.style.backgroundSize='cover';}
                 const messagesCol = collection(db, 'conversations', activeConversationId, 'messages');
                 state.messageUnsub = onSnapshot(
                     query(messagesCol, orderBy('createdAt', 'asc'), limit(100)),
@@ -1586,7 +1656,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             const mine = m.senderUid === state.user.uid;
                             if (m.type === 'snake-challenge') return `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm"><b>🎮 Вызов в Змейку</b><p class="mt-1 text-xs text-slate-300">${escapeHTML(m.text || 'Сыграем?')}</p><button data-playchallenge="${escapeHTML(d.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold">Играть</button></div>`;
                             if (m.type === 'snake-result') return `<div class="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 text-sm">🐍 ${escapeHTML(m.text || '')}</div>`;
-                            return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
+                            if(m.type==='sticker') return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[85%] rounded-2xl p-2"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"><p class="mt-1 text-right text-[10px] text-slate-400">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`; const senderName=mine?(state.userProfile?.displayName||'Вы'):(friendDoc?.displayName||'Друг');const senderPremium=mine?Number(state.userProfile?.premiumUntil||0)>Date.now():Number(friendDoc?.premiumUntil||0)>Date.now();return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold ${senderPremium?'vv-premium-name':''}">${escapeHTML(senderName)}${senderPremium?' 👑':''}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
                         }).join('');
                         host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
                         host.scrollTop = host.scrollHeight;
@@ -1614,7 +1684,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
             e.preventDefault();
             const text = document.getElementById('messageInput').value.trim();
-            if (!text || !state.user || !activeConversationId || !activeFriend) return;
+            if (!text || !state.user) return;
+            if (activeGroupId) {
+                const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
+                try { const groupId=activeGroupId; await addDoc(collection(db,'groups',groupId,'messages'), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now()}); await updateDoc(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); document.getElementById('messageInput').value=''; } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false;} return;
+            }
+            if (!activeConversationId || !activeFriend) return;
             const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
             const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now(), clientMessageId: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`) };
             try {

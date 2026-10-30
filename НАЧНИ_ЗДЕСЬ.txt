@@ -14,3 +14,10 @@ VOICEVIBE — ИСТОРИИ ЧЕРЕЗ CLOUDINARY
 
 Не добавляйте Cloudinary API Secret в код сайта. Firebase Storage для медиа историй не используется.
 Проверены синтаксис app.js и целостность ZIP; live-проверка сайта и загрузки в реальный Cloudinary не выполнялась.
+
+НОВЫЕ ФУНКЦИИ Vibecoin / Premium / ГРУППЫ:
+Перед публикацией обязательно прочитай файл НАСТРОЙКА_VIBECOIN_PREMIUM.md и разверни Firebase Functions и обновлённые Firestore/Storage Rules:
+  npm --prefix functions install
+  firebase deploy --only functions,firestore:rules,storage
+  firebase deploy --only hosting
+Cloud Functions могут требовать тариф Firebase Blaze. Реклама намеренно не начисляет монеты — кнопка пока сообщает «Попробуйте позже».

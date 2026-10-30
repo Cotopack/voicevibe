@@ -19,16 +19,34 @@ service cloud.firestore {
     // Publicly readable only to signed-in members; edits remain owner-only.
     match /users/{userId} {
       allow read: if signedIn();
-      allow create, update: if isMe(userId)
+      // Clients may create only public profile fields. Wallet/premium/referral fields are server-owned.
+      allow create: if isMe(userId)
         && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt'])
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() <= 30
-        && request.resource.data.username is string
-        && request.resource.data.username.size() <= 24
+        && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 30
+        && request.resource.data.username is string && request.resource.data.username.size() <= 24
         && request.resource.data.photoURL is string
-        && request.resource.data.bio is string
-        && request.resource.data.bio.size() <= 160;
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 160;
+      allow update: if isMe(userId)
+        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt','bannerURL','referralCode','vibecoinBalance','premiumUntil','referredBy','referredAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','username','photoURL','bio','updatedAt','usernameChangedAt','bannerURL'])
+        && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 30
+        && request.resource.data.username is string && request.resource.data.username.size() <= 24
+        && request.resource.data.photoURL is string
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 160
+        && (!request.resource.data.keys().hasAny(['bannerURL']) || request.resource.data.bannerURL is string);
       allow delete: if false;
+
+      match /stickers/{stickerId} {
+        allow read: if signedIn();
+        allow create: if isMe(userId)
+          && get(/databases/$(database)/documents/users/$(userId)).data.premiumUntil > request.time.toMillis()
+          && request.resource.data.keys().hasOnly(['url','name','createdAt'])
+          && request.resource.data.url is string && request.resource.data.url.size() <= 2000
+          && request.resource.data.name is string && request.resource.data.name.size() <= 80
+          && request.resource.data.createdAt is int;
+        allow update: if false;
+        allow delete: if isMe(userId);
+      }
 
       match /friendRequests/{fromUid} {
         allow read, delete: if isMe(userId);
@@ -189,9 +207,37 @@ service cloud.firestore {
           && request.resource.data.senderUid == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 1000
-          && request.resource.data.type in ['text','snake-challenge','snake-result'];
+          && request.resource.data.type in ['text','snake-challenge','snake-result','sticker']
+          && (request.resource.data.type != 'sticker' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumUntil > request.time.toMillis());
         allow update, delete: if false;
       }
     }
+
+    // Group membership is established by the trusted createGroup callable function.
+    match /groups/{groupId} {
+      allow read: if signedIn() && resource.data.members is list && resource.data.members.hasAny([request.auth.uid]);
+      allow create: if false;
+      allow update: if signedIn()
+        && resource.data.members is list && resource.data.members.hasAny([request.auth.uid])
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt','lastMessage','wallpaperURL'])
+        && request.resource.data.updatedAt is int;
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+      match /messages/{messageId} {
+        function groupMember() { return signedIn() && get(/databases/$(database)/documents/groups/$(groupId)).data.members.hasAny([request.auth.uid]); }
+        allow read: if groupMember();
+        allow create: if groupMember()
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string && request.resource.data.text.size() <= 2000
+          && request.resource.data.type in ['text','sticker']
+          && request.resource.data.createdAt is int
+          && (request.resource.data.type != 'sticker' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumUntil > request.time.toMillis());
+        allow update, delete: if false;
+      }
+    }
+    match /referralCodes/{code} { allow read: if signedIn(); allow write: if false; }
+    match /referralClaims/{uid} { allow read: if signedIn() && request.auth.uid == uid; allow write: if false; }
   }
 }
