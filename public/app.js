@@ -367,6 +367,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Initialize WebRTC Peer
         function initPeerJS() {
+            // Do not leave an older Peer instance alive if the user re-enters roulette.
+            if (state.peer) {
+                try { state.peer.destroy(); } catch (_) {}
+                state.peer = null;
+                state.myPeerId = null;
+            }
             setPeerStatus('connecting', 'Сеть...');
             const safeAgeTag = state.selectedAge.replace('+', 'plus');
             const randomID = 'vr-' + safeAgeTag + '-' + Math.floor(100000 + Math.random() * 900000);
@@ -388,38 +394,40 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 setPeerStatus('ready', 'Готов к поиску');
             });
 
-            state.peer.on('call', async (call) => {
+            state.peer.on('call', (call) => {
                 if (state.isConnected || state.isPaused || !state.localStream) {
                     call.close();
                     return;
                 }
-                // Answer immediately: waiting for Firestore here can exceed mobile WebRTC timeouts.
+                // Register media handlers BEFORE answering or awaiting Firestore. A fast
+                // connection can emit `stream` while an async UID lookup is still running.
                 state.currentCall = call;
                 state.connectingTo = call.peer;
-                call.answer(state.localStream);
-                removeFromMatchmakingQueue();
-                // Resolve the account UID in parallel with media negotiation.
-                try {
-                    const sessionSnap = await getDoc(doc(db, 'peerSessions', call.peer));
-                    if (sessionSnap.exists()) state.currentMatchUid = sessionSnap.data().ownerUid || null;
-                    const qName = state.selectedAge ? `queue_${state.selectedAge.replace('+', 'plus')}` : '';
-                    if (!state.currentMatchUid && qName) {
-                        const qSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', qName));
-                        qSnap.forEach((d) => { const item=d.data(); if (item.peerId === call.peer) state.currentMatchUid = item.ownerUid || null; });
-                    }
-                } catch (e) { console.warn('Could not resolve matched user UID:', e); }
-
                 call.on('stream', (remoteStream) => {
                     state.connectingTo = null;
                     state.currentCall = call;
                     handleConnectedStream(remoteStream);
                 });
-
                 call.on('close', handleDisconnect);
                 call.on('error', (err) => {
                     console.error('Incoming call failed:', err);
                     handleDisconnect();
                 });
+                call.answer(state.localStream);
+                removeFromMatchmakingQueue();
+
+                // Resolve the account UID in parallel with media negotiation.
+                (async () => {
+                    try {
+                        const sessionSnap = await getDoc(doc(db, 'peerSessions', call.peer));
+                        if (sessionSnap.exists()) state.currentMatchUid = sessionSnap.data().ownerUid || null;
+                        const qName = state.selectedAge ? `queue_${state.selectedAge.replace('+', 'plus')}` : '';
+                        if (!state.currentMatchUid && qName) {
+                            const qSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', qName));
+                            qSnap.forEach((d) => { const item=d.data(); if (item.peerId === call.peer) state.currentMatchUid = item.ownerUid || null; });
+                        }
+                    } catch (e) { console.warn('Could not resolve matched user UID:', e); }
+                })();
             });
 
             state.peer.on('disconnected', () => setPeerStatus('error', 'Сигнализация отключена'));

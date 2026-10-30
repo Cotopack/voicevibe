@@ -8,5 +8,8 @@
     ],
     "cleanUrls": true,
     "trailingSlash": false
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }
