@@ -13,14 +13,13 @@
 4. Create **Cloud Firestore** and configure secure Firestore rules before going public. Do not use open test rules for a public app.
 
 
-## Cloudinary avatars (configured in this build)
-Profile photos are uploaded directly from the browser to Cloudinary using an unsigned preset. The app uses:
-- Cloud name: `yvoqyrj8`
-- Upload preset: `voicevibe_upload`
+## Cloudinary uploads (avatars and stories)
+Profile photos and story media are uploaded directly from the browser to Cloudinary. Configured Cloudinary cloud name: `yvoqyrj8`.
 
-In Cloudinary Console → Settings → Upload, confirm that this preset exists and is **Unsigned**. Restrict allowed formats to JPG, PNG, and WebP, and set the maximum file size to 5 MB if those controls are available. Set the preset's Asset folder to `voicevibe/avatars` if desired. The preset name and cloud name are public configuration; **never add your Cloudinary API Secret to `app.js`**.
+- Avatars use the existing unsigned preset `voicevibe_upload` and are compressed to JPEG.
+- Stories use a separate unsigned preset named `voicevibe_stories` so photos, videos and audio can be accepted without changing avatar restrictions.
 
-The app compresses selected avatars to a 512 px JPEG before uploading, then stores the returned `secure_url` in the user's Firestore profile. Firebase Storage is no longer used for avatar uploads, so its Storage rules are not required for this feature.
+Before publishing stories, open Cloudinary Console → Settings → Upload → Upload presets and create `voicevibe_stories` with **Signing Mode: Unsigned**. Allow image and video uploads; audio is uploaded using Cloudinary's `video` resource type. Do not limit this preset to image-only formats. If available, set a suitable maximum file size (the app checks 12 MB for photos/audio and 25 MB for videos). The app stores Cloudinary `secure_url` links in Firestore. **Never add your Cloudinary API Secret to `app.js`.** Firebase Storage is not used for story uploads.
 
 ## 2. Install Firebase CLI (Windows)
 Install Node.js LTS from https://nodejs.org/ and restart VS Code/Terminal.
@@ -72,13 +71,13 @@ The project is configured for Firebase project `voicevibe-1b8c0`. Before deployi
 
 ## Sign-in, social profile, friends, chat, and Snake
 - Login methods in this build: email/password and phone/SMS. Enable Email/Password and Phone in Firebase Authentication → Sign-in method.
-- The profile has a unique nickname, bio, and avatar upload. Avatar uploads use Firebase Storage; create/enable the default Storage bucket and publish `storage.rules` in Firebase Console → Storage → Rules.
+- The profile has a unique nickname, bio, and avatar upload. Avatar and story media uploads use Cloudinary; Firebase Storage is not required for these features.
 - Publish `firestore.rules` in Firebase Console → Firestore Database → Rules. It covers user profiles, unique nickname reservations, friend requests/friends, the roulette queue, and private friend conversations.
 - Friends can be added while matched in roulette if the match UID is available. Friend requests can be accepted or declined; declined requests may be sent again.
 - The chat has text messages and an asynchronous Snake challenge: each friend can play and send their score in the conversation.
 - If using GitHub Pages, upload `public/index.html`, `public/app.js`, `public/styles.css`, and `public/tailwind-config.js` to the repository's published folder (for a project site this is normally the repository root if configured that way).
 - For local testing, add `localhost` to Authentication → Settings → Authorized domains and serve over localhost (not by opening the HTML file directly).
-- Keep root source files and `public/` copies in sync. Firebase Storage must be enabled for gallery avatar uploads.
+- Keep root source files and `public/` copies in sync. Confirm Cloudinary unsigned presets `voicevibe_upload` (avatars) and `voicevibe_stories` (stories) are configured.
 
 
 ## VoiceVibe polish update

@@ -56,6 +56,19 @@ service cloud.firestore {
       }
     }
 
+    // Private notifications for replies to a user's story.
+    match /users/{userId}/storyReplies/{replyId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.fromName is string
+        && request.resource.data.storyId is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 300
+        && request.resource.data.createdAt is int;
+      allow update, delete: if signedIn() && request.auth.uid == userId;
+    }
+
     // Unique nickname reservations: the document ID is the normalized nickname.
     match /usernames/{username} {
       allow read: if signedIn();
@@ -108,6 +121,35 @@ service cloud.firestore {
         && request.resource.data.lastSeen is int
         && request.resource.data.keys().hasOnly(['uid','online','lastSeen']);
       allow delete: if isMe(userId);
+    }
+
+    // Stories are visible to signed-in users and expire in the UI after 24 hours.
+    match /stories/{storyId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid','displayName','username','photoURL','text','mediaURL','mediaType','musicURL','likes','views','replies','createdAt','expiresAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.username is string
+        && request.resource.data.photoURL is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.mediaURL is string
+        && request.resource.data.mediaType in ['text','image','video']
+        && request.resource.data.musicURL is string
+        && request.resource.data.likes is list && request.resource.data.likes.size() <= 5000
+        && request.resource.data.views is list && request.resource.data.views.size() <= 5000
+        && request.resource.data.replies is list && request.resource.data.replies.size() <= 500
+        && request.resource.data.createdAt is int
+        && request.resource.data.expiresAt is int
+        && request.resource.data.expiresAt > request.resource.data.createdAt
+        && request.resource.data.expiresAt <= request.resource.data.createdAt + 86400000;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','views','replies'])
+        && request.resource.data.likes is list && request.resource.data.likes.size() <= 5000
+        && request.resource.data.views is list && request.resource.data.views.size() <= 5000
+        && request.resource.data.replies is list && request.resource.data.replies.size() <= 500;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
     // One conversation per sorted UID pair. Only its participants can read/write.

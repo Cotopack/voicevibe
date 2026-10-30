@@ -6,7 +6,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             doc, 
             setDoc, 
             getDoc,
-            deleteDoc, 
+            deleteDoc, arrayUnion, arrayRemove, 
             onSnapshot, query, where, orderBy, limit, getDocs, addDoc, updateDoc, serverTimestamp, runTransaction
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
@@ -846,6 +846,116 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (chatsTab) renderChatFriends();
         }
         document.querySelectorAll('.nav-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+        // Stories: 24-hour photo/video stories, optional audio, reactions, views and replies.
+        const storiesModal = document.getElementById('storiesModal');
+        const storiesList = document.getElementById('storiesList');
+        const storyCreateForm = document.getElementById('storyCreateForm');
+        const storyTextInput = document.getElementById('storyText');
+        const storyImageInput = document.getElementById('storyImage');
+        const storyVideoInput = document.getElementById('storyVideo');
+        const storyMusicInput = document.getElementById('storyMusic');
+        const storyStatus = document.getElementById('storyCreateStatus');
+        const storyPublishBtn = document.getElementById('storyPublishBtn');
+        let activeStoryItems = [];
+        let activeStoryIndex = 0;
+        function storyEscape(value) { return escapeHTML(String(value || '')); }
+        function storyAvatar(st) {
+            const inner = st.photoURL ? `<img src="${storyEscape(st.photoURL)}" alt="" class="h-full w-full rounded-full object-cover"/>` : `<span>${storyEscape((st.displayName || 'П')[0])}</span>`;
+            return `<span class="story-avatar-ring">${inner}</span>`;
+        }
+        // Stories media uses Cloudinary (not Firebase Storage). Keep this preset separate
+        // from the avatar preset so it can accept image, video and audio files.
+        const CLOUDINARY_STORIES_UPLOAD_PRESET = 'voicevibe_stories';
+        async function uploadStoryMedia(file, kind) {
+            if (!file) return '';
+            const max = kind === 'video' ? 25 * 1024 * 1024 : 12 * 1024 * 1024;
+            const sizeLabel = kind === 'video' ? 'Видео' : kind === 'audio' ? 'Аудио' : 'Фото';
+            if (file.size > max) throw new Error(`${sizeLabel} должно быть не больше ${kind === 'video' ? '25' : '12'} МБ.`);
+            const resourceType = kind === 'image' ? 'image' : 'video'; // Cloudinary stores audio under video resource type.
+            const formData = new FormData();
+            formData.append('file', file, String(file.name || `voicevibe-story.${kind === 'image' ? 'jpg' : kind === 'video' ? 'mp4' : 'mp3'}`).replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100));
+            formData.append('upload_preset', CLOUDINARY_STORIES_UPLOAD_PRESET);
+            formData.append('folder', `voicevibe/stories/${state.user.uid}`);
+            const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
+            const response = await fetch(endpoint, { method: 'POST', body: formData });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.secure_url) {
+                console.error('Cloudinary story upload failed:', result);
+                throw new Error(result.error?.message || `Не удалось загрузить ${kind === 'image' ? 'фото' : kind === 'video' ? 'видео' : 'музыку'} в Cloudinary (${response.status}). Проверь unsigned preset voicevibe_stories.`);
+            }
+            return result.secure_url;
+        }
+        function renderStoryViewer() {
+            const st = activeStoryItems[activeStoryIndex];
+            const viewer = document.getElementById('storyViewer');
+            if (!st || !viewer) return;
+            const media = st.mediaType === 'video' && st.mediaURL
+                ? `<video src="${storyEscape(st.mediaURL)}" class="absolute inset-0 h-full w-full object-contain" autoplay playsinline controls></video>`
+                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" class="absolute inset-0 h-full w-full object-contain"/>` : '';
+            const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
+            const views = Array.isArray(st.views) ? st.views : [];
+            const viewNames = views.map(v => typeof v === 'string' ? v : (v.displayName || v.username || 'Пользователь'));
+            const music = st.musicURL ? `<audio src="${storyEscape(st.musicURL)}" autoplay loop controls class="mx-auto mt-2 max-w-full"></audio>` : '';
+            viewer.innerHTML = `<div class="relative flex h-full min-h-[70dvh] w-full flex-col overflow-hidden rounded-3xl bg-black text-white">
+                ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-10 p-4"><div class="mb-3 h-1 overflow-hidden rounded-full bg-white/25"><div class="h-full w-full bg-white/90"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><b class="block truncate text-sm">${storyEscape(st.displayName || 'Пользователь')}</b><small class="text-white/70">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full bg-black/30 px-3 py-2" aria-label="Закрыть">✕</button></div></div>
+                <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
+                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-10 p-4">${st.text ? `<p class="mb-2 whitespace-pre-wrap break-words text-sm">${storyEscape(st.text)}</p>` : ''}${music}<div class="mt-3 flex items-center justify-between gap-3"><button id="storyViewersBtn" class="rounded-full bg-white/15 px-3 py-2 text-xs"><i class="fa-regular fa-eye mr-1"></i>${views.length} просмотров</button><button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> <span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span></button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form><div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div></div></div>`;
+            viewer.classList.remove('hidden');
+            document.getElementById('storyViewerClose')?.addEventListener('click', () => viewer.classList.add('hidden'));
+            document.getElementById('storyPrev')?.addEventListener('click', () => { if (activeStoryIndex > 0) { activeStoryIndex--; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } });
+            document.getElementById('storyNext')?.addEventListener('click', () => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } });
+            document.getElementById('storyLikeBtn')?.addEventListener('click', async () => { try { const likedNow = (activeStoryItems[activeStoryIndex].likes || []).includes(state.user.uid); await updateDoc(doc(db,'stories',st.id), { likes: likedNow ? arrayRemove(state.user.uid) : arrayUnion(state.user.uid) }); st.likes = likedNow ? (st.likes||[]).filter(x=>x!==state.user.uid) : [...(st.likes||[]),state.user.uid]; renderStoryViewer(); } catch(e) { console.error(e); alert('Не удалось поставить лайк. Проверь Firestore Rules.'); } });
+            document.getElementById('storyViewersBtn')?.addEventListener('click', () => document.getElementById('storyViewersList')?.classList.toggle('hidden'));
+            document.getElementById('storyReplyForm')?.addEventListener('submit', async ev => { ev.preventDefault(); const input=document.getElementById('storyReplyInput'); const reply=(input?.value||'').trim(); if(!reply) return; try { await updateDoc(doc(db,'stories',st.id), { replies: arrayUnion({uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',text:reply.slice(0,300),createdAt:Date.now()}) }); if(st.uid!==state.user.uid) await addDoc(collection(db,'users',st.uid,'storyReplies'), {fromUid:state.user.uid,fromName:state.userProfile?.displayName||state.user.displayName||'Пользователь',storyId:st.id,text:reply.slice(0,300),createdAt:Date.now()}); input.value=''; input.placeholder='Ответ отправлен'; } catch(e) { console.error(e); alert('Не удалось отправить ответ. Проверь Firestore Rules.'); } });
+        }
+        async function markStoryViewed(st) {
+            if (!st || st.uid === state.user?.uid || (st.views || []).some(v => (typeof v === 'string' ? v : v.uid) === state.user?.uid)) return;
+            const viewer = {uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||''};
+            try { await updateDoc(doc(db,'stories',st.id), { views: arrayUnion(viewer) }); st.views = [...(st.views||[]),viewer]; } catch(e) { console.warn('Could not record story view:',e); }
+        }
+        async function refreshStories() {
+            if (!storiesList) return;
+            if (!state.user) { storiesList.innerHTML = '<p class="text-sm text-slate-400">Войди в аккаунт, чтобы смотреть истории.</p>'; return; }
+            storiesList.innerHTML = '<p class="text-sm text-slate-400">Загружаем истории…</p>';
+            try {
+                const snap = await getDocs(collection(db, 'stories'));
+                const now = Date.now();
+                activeStoryItems = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(st => Number(st.expiresAt) > now).sort((a,b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+                if (!activeStoryItems.length) { storiesList.innerHTML = '<p class="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Пока нет историй. Нажми «+» и опубликуй первую.</p>'; return; }
+                const groups = new Map(); activeStoryItems.forEach(st => { if(!groups.has(st.uid)) groups.set(st.uid,[]); groups.get(st.uid).push(st); });
+                storiesList.innerHTML = `<div class="mb-3 flex gap-4 overflow-x-auto pb-3">${[...groups.entries()].map(([uid,items]) => { const st=items[0]; return `<button data-open-story-user="${storyEscape(uid)}" class="flex w-16 shrink-0 flex-col items-center gap-1 text-center text-xs">${storyAvatar(st)}<span class="w-16 truncate">${uid===state.user.uid?'Ваша история':storyEscape(st.displayName||'Пользователь')}</span></button>`; }).join('')}</div><div class="space-y-2">${activeStoryItems.map(st => `<article class="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950/60 p-3">${storyAvatar(st)}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${storyEscape(st.displayName||'Пользователь')} ${st.username?`<span class="text-xs font-normal text-violet-300">@${storyEscape(st.username)}</span>`:''}</p><p class="text-xs text-slate-500">${Math.max(1,Math.ceil((Number(st.expiresAt)-now)/3600000))} ч. осталось · ${(st.views||[]).length} просмотров</p></div><button data-open-story="${storyEscape(st.id)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold">Смотреть</button>${st.uid===state.user.uid?`<button data-delete-story="${storyEscape(st.id)}" class="rounded-xl px-2 py-2 text-xs text-rose-300">Удалить</button>`:''}</article>`).join('')}</div>`;
+                storiesList.querySelectorAll('[data-open-story-user]').forEach(btn=>btn.addEventListener('click',()=>openStoryByUser(btn.dataset.openStoryUser)));
+                storiesList.querySelectorAll('[data-open-story]').forEach(btn=>btn.addEventListener('click',()=>openStory(btn.dataset.openStory)));
+                storiesList.querySelectorAll('[data-delete-story]').forEach(btn=>btn.addEventListener('click',async()=>{try{await deleteDoc(doc(db,'stories',btn.dataset.deleteStory));await refreshStories();}catch(e){console.error(e);alert('Не удалось удалить историю.');}}));
+            } catch (err) { console.error('Load stories failed:', err); storiesList.innerHTML = '<p class="rounded-2xl border border-rose-500/30 p-4 text-sm text-rose-200">Не удалось загрузить истории. Проверь Firestore Rules.</p>'; }
+        }
+        function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
+        function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
+        document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); document.getElementById('storyViewer')?.classList.add('hidden'); await refreshStories(); });
+        document.getElementById('storiesClose')?.addEventListener('click', () => storiesModal?.classList.add('hidden'));
+        storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) storiesModal.classList.add('hidden'); });
+        document.getElementById('storyCreateToggle')?.addEventListener('click', () => { storyCreateForm?.classList.toggle('hidden'); storyStatus?.classList.add('hidden'); if (!storyCreateForm?.classList.contains('hidden')) storyTextInput?.focus({preventScroll:true}); });
+        storyCreateForm?.addEventListener('submit', async event => {
+            event.preventDefault(); if (!state.user) return;
+            const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=storyMusicInput?.files?.[0]||null;
+            if(image&&video){storyStatus.textContent='Выбери фото или видео, не оба сразу.';storyStatus.classList.remove('hidden');return;}
+            if(!text&&!image&&!video){storyStatus.textContent='Добавь текст, фото или видео.';storyStatus.classList.remove('hidden');return;}
+            if(video&&!video.type.startsWith('video/')){storyStatus.textContent='Выбери видеофайл.';storyStatus.classList.remove('hidden');return;}
+            if(music&&!music.type.startsWith('audio/')){storyStatus.textContent='Музыка должна быть аудиофайлом.';storyStatus.classList.remove('hidden');return;}
+            storyPublishBtn.disabled=true; storyPublishBtn.textContent='Публикуем…'; storyStatus.classList.add('hidden');
+            try {
+                let mediaURL='', musicURL='', mediaType='text';
+                if(image){ mediaURL=await uploadStoryMedia(image,'image'); mediaType='image'; }
+                if(video){ mediaURL=await uploadStoryMedia(video,'video'); mediaType='video'; }
+                if(music) musicURL=await uploadStoryMedia(music,'audio');
+                const now=Date.now();
+                await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
+                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';storyCreateForm.classList.add('hidden');await refreshStories();
+            } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
+            finally{storyPublishBtn.disabled=false;storyPublishBtn.textContent='Опубликовать';}
+        });
+
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
 
         function stopSocialListeners() {
