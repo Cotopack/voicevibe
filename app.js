@@ -62,7 +62,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             challengeSending: false,
             snakeTimer: null,
             snakeState: null,
-            snakeChallengeId: null
+            snakeChallengeId: null,
+            searchStarting: false,
+            peerReconnectTimer: null,
+            storyUploading: false
         };
 
         // UI Bindings
@@ -338,7 +341,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     const denied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError' || err?.code === 'permission-denied';
                     errorAlertText.textContent = denied
                         ? 'Доступ к микрофону не разрешён. Нажми «Повторить запрос». Если браузер уже заблокировал доступ, открой настройки сайта рядом с адресной строкой и разреши микрофон.'
-                        : (err.message || 'Микрофон не найден!');
+                        : (err?.name === 'NotFoundError' ? 'Микрофон не найден. Подключи устройство и нажми «Повторить запрос».' : err?.name === 'NotReadableError' ? 'Микрофон занят другим приложением. Закрой его и попробуй снова.' : (err.message || 'Не удалось включить микрофон.'));
                     errorAlert.classList.remove('hidden');
                     let retry = document.getElementById('retryMicPermission');
                     if (!retry) {
@@ -394,12 +397,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             state.peer = new Peer(randomID, {
                 debug: 1,
+                pingInterval: 5000,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
                         { urls: 'stun:stun2.l.google.com:19302' }
-                    ]
+                    ],
+                    iceCandidatePoolSize: 4
                 }
             });
 
@@ -445,10 +450,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 })();
             });
 
-            state.peer.on('disconnected', () => setPeerStatus('error', 'Сигнализация отключена'));
+            state.peer.on('disconnected', () => {
+                setPeerStatus('error', 'Восстанавливаем соединение…');
+                if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
+                state.peerReconnectTimer = setTimeout(() => {
+                    if (state.peer && !state.peer.destroyed && state.peer.disconnected) {
+                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); }
+                    }
+                }, 1200);
+            });
             state.peer.on('error', (err) => {
                 console.error('PeerJS error:', err);
-                setPeerStatus('error', 'Ошибка P2P');
+                setPeerStatus('error', err?.type === 'network' ? 'Проблема сети' : 'Ошибка P2P');
+                if (['network','socket-error','socket-closed'].includes(err?.type) && state.peer && !state.peer.destroyed) {
+                    if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
+                    state.peerReconnectTimer = setTimeout(() => { try { state.peer?.reconnect(); } catch (_) {} }, 1800);
+                }
             });
         }
 
@@ -461,7 +478,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // --- Realtime Firebase Matchmaker ---
         async function startSearch() {
-            if (!state.peer || !state.myPeerId || state.isConnected || state.isSearching) return;
+            if (!state.peer || !state.myPeerId || state.isConnected || state.isSearching || state.searchStarting) return;
+            state.searchStarting = true;
+            if (btnStartSearch) { btnStartSearch.disabled = true; btnStartSearch.setAttribute('aria-busy','true'); }
 
             try {
                 if (!state.user) await authReady;
@@ -525,6 +544,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 chatStatusDesc.textContent = err.code === 'permission-denied'
                     ? 'Firestore запрещает доступ. Проверьте правила Firestore.'
                     : (err.message || 'Не удалось подключиться к поиску. Проверьте интернет и Firebase.');
+            } finally {
+                state.searchStarting = false;
+                if (btnStartSearch) { btnStartSearch.disabled = false; btnStartSearch.removeAttribute('aria-busy'); }
             }
         }
 
@@ -929,8 +951,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const viewer = document.getElementById('storyViewer');
             if (!st || !viewer) return;
             const media = st.mediaType === 'video' && st.mediaURL
-                ? `<video src="${storyEscape(st.mediaURL)}" class="absolute inset-0 h-full w-full object-contain" autoplay playsinline controls></video>`
-                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" class="absolute inset-0 h-full w-full object-contain"/>` : '';
+                ? `<video src="${storyEscape(st.mediaURL)}" class="absolute inset-0 h-full w-full object-contain" autoplay playsinline controls preload="metadata"></video>`
+                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain"/>` : '';
             const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
             const views = Array.isArray(st.views) ? st.views : [];
             const isOwnStory = st.uid === state.user?.uid;
@@ -941,12 +963,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const likeCount = isOwnStory ? `<span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span>` : '';
             const viewersList = isOwnStory ? `<div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div>` : '';
             viewer.innerHTML = `<div class="relative flex h-full min-h-[70dvh] w-full flex-col overflow-hidden rounded-3xl bg-black text-white">
-                ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-10 p-4"><div class="mb-3 h-1 overflow-hidden rounded-full bg-white/25"><div class="h-full w-full bg-white/90"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><b class="block truncate text-sm">${storyEscape(st.displayName || 'Пользователь')}</b><small class="text-white/70">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full bg-black/30 px-3 py-2" aria-label="Закрыть">✕</button></div></div>
+                ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-10 p-4"><div class="mb-3 h-1 overflow-hidden rounded-full bg-white/25"><div class="h-full w-full bg-white/90"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-white/70">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full bg-black/30 px-3 py-2" aria-label="Закрыть">✕</button></div></div>
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
                 <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-10 p-4">${st.text ? `<div class="story-text-card mb-3 mx-auto max-w-md whitespace-pre-wrap break-words"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text)}</p></div>` : ''}${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
             viewer.classList.remove('hidden');
-            if (st.mediaType !== 'video') storyAdvanceTimer = setTimeout(() => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } else { viewer.classList.add('hidden'); setCurrentStoryAvatar(''); } }, 10000);
+            const advanceStory = () => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } else { viewer.classList.add('hidden'); setCurrentStoryAvatar(''); clearTimeout(storyAdvanceTimer); } };
+            if (st.mediaType === 'video') { const video = viewer.querySelector('video'); video?.addEventListener('ended', advanceStory, { once:true }); video?.addEventListener('error', () => { chatStatusDesc.textContent = 'Не удалось загрузить видеоисторию.'; }, { once:true }); }
+            else storyAdvanceTimer = setTimeout(advanceStory, 10000);
+            document.getElementById('storyOwnerProfile')?.addEventListener('click', () => { const owner=st.uid; clearTimeout(storyAdvanceTimer); viewer.classList.add('hidden'); storiesModal?.classList.add('hidden'); openAnyUserProfile(owner); });
             document.getElementById('storyViewerClose')?.addEventListener('click', () => { clearTimeout(storyAdvanceTimer); viewer.classList.add('hidden'); setCurrentStoryAvatar(''); });
+            let storyTouchStart = null;
+            viewer.ontouchstart = (ev) => { if (ev.target.closest('button, form, input, textarea, audio, video, a')) return; const t=ev.changedTouches?.[0]; if(t) storyTouchStart={x:t.clientX,y:t.clientY}; };
+            viewer.ontouchend = (ev) => { if(!storyTouchStart) return; const t=ev.changedTouches?.[0]; const start=storyTouchStart; storyTouchStart=null; if(!t) return; const dx=t.clientX-start.x, dy=t.clientY-start.y; if(Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.2){ clearTimeout(storyAdvanceTimer); if(dx<0 && activeStoryIndex<activeStoryItems.length-1){activeStoryIndex++;renderStoryViewer();markStoryViewed(activeStoryItems[activeStoryIndex]);} else if(dx>0 && activeStoryIndex>0){activeStoryIndex--;renderStoryViewer();markStoryViewed(activeStoryItems[activeStoryIndex]);} } };
             viewer.onclick = (ev) => {
                 if (ev.target.closest('button, form, input, textarea, audio, video, a')) return;
                 const rect = viewer.getBoundingClientRect(); const x = ev.clientX - rect.left;
@@ -967,7 +995,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         async function refreshStories() {
             if (!storiesList) return;
             if (!state.user) { storiesList.innerHTML = '<p class="text-sm text-slate-400">Войди в аккаунт, чтобы смотреть истории.</p>'; return; }
-            storiesList.innerHTML = '<p class="text-sm text-slate-400">Загружаем истории…</p>';
+            storiesList.innerHTML = '<div class="vv-loading-state rounded-2xl border border-slate-800 p-4 text-sm text-slate-300"><span class="vv-spinner" aria-hidden="true"></span> Загружаем истории…</div>'; 
             try {
                 const snap = await getDocs(collection(db, 'stories'));
                 const now = Date.now();
@@ -984,53 +1012,87 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
         function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
         document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); document.getElementById('storyViewer')?.classList.add('hidden'); await refreshStories(); });
-        document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user) return; const uid=avatar.dataset.storyAvatar; if(!activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now())) { storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); storiesList?.classList.remove('hidden'); await refreshStories(); } if(activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now())) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); storiesList?.classList.remove('hidden'); openStoryByUser(uid); } }, true);
+        document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user || event.target.closest('#friendProfileModal')) return; const uid=avatar.dataset.storyAvatar; const hasStory=activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now()); if(hasStory){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();storiesModal?.classList.remove('hidden');storyCreateForm?.classList.add('hidden');storiesList?.classList.remove('hidden');openStoryByUser(uid);} else { event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.(); if(uid===state.user.uid) document.getElementById('profileBtn')?.click(); else openAnyUserProfile(uid); } }, true);
         document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
         document.getElementById('storiesClose')?.addEventListener('click', () => { storiesModal?.classList.add('hidden'); setCurrentStoryAvatar(''); });
         storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) storiesModal.classList.add('hidden'); });
         document.getElementById('storyCreateToggle')?.addEventListener('click', () => { const opening=storyCreateForm?.classList.contains('hidden'); storyCreateForm?.classList.toggle('hidden'); storyStatus?.classList.add('hidden'); if (storiesList) storiesList.classList.toggle('hidden', !!opening); const btn=document.getElementById('storyCreateToggle'); if(btn) btn.innerHTML=opening ? '<i class="fa-solid fa-arrow-left"></i> Назад к историям' : '<i class="fa-solid fa-plus"></i> Добавить фото или видео'; if (opening) { storiesList?.classList.add('hidden'); storyTextInput?.focus({preventScroll:true}); } });
-        const musicStartInput=document.getElementById('storyMusicStart'); const musicEndInput=document.getElementById('storyMusicEnd');
-        musicStartInput?.addEventListener('input',()=>{const start=Math.max(0,Math.floor(Number(musicStartInput.value)||0)); if(!musicEndInput.value||Number(musicEndInput.value)<=start||Number(musicEndInput.value)-start>10) musicEndInput.value=String(start+10);});
-        musicEndInput?.addEventListener('change',()=>{const start=Math.max(0,Math.floor(Number(musicStartInput?.value)||0)); const end=Math.floor(Number(musicEndInput.value)||start+10); if(end<=start) musicEndInput.value=String(start+10); else if(end-start>10) musicEndInput.value=String(start+10);});
+        const musicStartInput=document.getElementById('storyMusicStart');
+        const musicLengthInput=document.getElementById('storyMusicLength');
+        const musicLibrarySelect=document.getElementById('storyBuiltInMusic');
         let storyMusicPreviewURL = null;
+        let generatedMusicFile = null;
+        const musicTracks = {
+            chill: {name:'Night Chill', notes:[220,0,261.63,329.63,0,293.66,261.63,0,196,0,220,293.66]},
+            dream: {name:'Dreamy', notes:[392,0,329.63,493.88,440,0,329.63,0,523.25,0,440,392]},
+            pulse: {name:'Neon Pulse', notes:[130.81,0,196,0,261.63,0,196,0,146.83,0,220,0]},
+            sunrise: {name:'Sunrise', notes:[261.63,329.63,392,0,329.63,392,523.25,0,293.66,349.23,440,0]},
+            lofi: {name:'Soft Lo-fi', notes:[174.61,0,220,261.63,0,220,196,0,164.81,0,196,220]}
+        };
+        function drawMusicWave() {
+            const wave=document.getElementById('storyMusicWave'); if(!wave)return;
+            wave.innerHTML=Array.from({length:56},(_,i)=>`<span style="height:${8+Math.abs(Math.sin(i*1.71)*Math.cos(i*.37))*31}px"></span>`).join('');
+        }
+        function updateMusicTrimLabel() {
+            const start=Math.max(0,Number(musicStartInput?.value)||0), length=Math.max(3,Number(musicLengthInput?.value)||10);
+            const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`От ${start} до ${start+length} сек. · ${length} сек.`;
+        }
+        function makeRoyaltyFreeTrack(key) {
+            const track=musicTracks[key]; if(!track) return null;
+            const rate=22050, duration=30, total=Math.floor(rate*duration), data=new Float32Array(total), step=duration/track.notes.length;
+            track.notes.forEach((freq,i)=>{ if(!freq)return; const from=Math.floor(i*step*rate), to=Math.min(total,Math.floor((i+1)*step*rate)); for(let n=from;n<to;n++){const t=(n-from)/rate, fade=Math.min(1,t*18,((to-n)/rate)*12); data[n]+=Math.sin(2*Math.PI*freq*t)*0.16*fade + Math.sin(2*Math.PI*(freq/2)*t)*0.035*fade; }});
+            const buffer=new ArrayBuffer(44+total*2), view=new DataView(buffer);
+            const write=(o,str)=>{for(let i=0;i<str.length;i++)view.setUint8(o+i,str.charCodeAt(i));};
+            write(0,'RIFF');view.setUint32(4,36+total*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,total*2,true);
+            for(let i=0;i<total;i++)view.setInt16(44+i*2,Math.max(-1,Math.min(1,data[i]))*32767,true);
+            return new File([buffer],`voicevibe-${key}.wav`,{type:'audio/wav'});
+        }
+        function setMusicPreviewFile(file) {
+            const preview=document.getElementById('storyMusicPreview'); if(!preview)return;
+            if(storyMusicPreviewURL) URL.revokeObjectURL(storyMusicPreviewURL);
+            storyMusicPreviewURL=file?URL.createObjectURL(file):null; preview.pause(); preview.src=storyMusicPreviewURL||''; preview.load();
+            if(musicStartInput) musicStartInput.max='180'; updateMusicTrimLabel();
+        }
+        drawMusicWave(); updateMusicTrimLabel();
+        musicStartInput?.addEventListener('input', updateMusicTrimLabel);
+        musicLengthInput?.addEventListener('input', updateMusicTrimLabel);
         storyMusicInput?.addEventListener('change', () => {
-            const preview = document.getElementById('storyMusicPreview'); if (!preview) return;
-            if (storyMusicPreviewURL) URL.revokeObjectURL(storyMusicPreviewURL);
-            storyMusicPreviewURL = storyMusicInput.files?.[0] ? URL.createObjectURL(storyMusicInput.files[0]) : null;
-            preview.src = storyMusicPreviewURL || ''; preview.load();
-            if (storyMusicPreviewURL) preview.onloadedmetadata = () => {
-                const duration = Math.floor(preview.duration || 0);
-                if (musicStartInput) musicStartInput.max = String(Math.max(0, duration - 1));
-                if (musicEndInput) { musicEndInput.max = String(duration); if (!musicEndInput.value) musicEndInput.value = String(Math.min(10, duration)); }
-            };
+            if(storyMusicInput.files?.[0]) { generatedMusicFile=null; if(musicLibrarySelect)musicLibrarySelect.value=''; setMusicPreviewFile(storyMusicInput.files[0]); }
+        });
+        musicLibrarySelect?.addEventListener('change', () => {
+            const key=musicLibrarySelect.value; generatedMusicFile=key?makeRoyaltyFreeTrack(key):null;
+            if(generatedMusicFile){ if(storyMusicInput)storyMusicInput.value=''; setMusicPreviewFile(generatedMusicFile); }
+            else setMusicPreviewFile(storyMusicInput?.files?.[0]||null);
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
-            const preview = document.getElementById('storyMusicPreview'); if (!preview?.src) { storyStatus.textContent = 'Сначала выбери аудиофайл.'; storyStatus.classList.remove('hidden'); return; }
-            const start = Math.max(0, Number(musicStartInput?.value) || 0);
-            const end = Math.min(Number(musicEndInput?.value) || start + 10, start + 10, preview.duration || start + 10);
-            if (end <= start) { storyStatus.textContent = 'Укажи корректный промежуток музыки.'; storyStatus.classList.remove('hidden'); return; }
-            preview.pause(); preview.currentTime = Math.min(start, Math.max(0, (preview.duration || start) - 0.1));
-            try { await preview.play(); } catch (err) { console.warn('Music preview playback:', err); return; }
-            preview.ontimeupdate = () => { if (preview.currentTime >= end) { preview.pause(); preview.currentTime = start; } };
+            const preview=document.getElementById('storyMusicPreview'); if(!preview?.src){storyStatus.textContent='Сначала загрузи аудио или выбери мелодию из коллекции.';storyStatus.classList.remove('hidden');return;}
+            const start=Math.max(0,Number(musicStartInput?.value)||0), length=Math.max(3,Number(musicLengthInput?.value)||10);
+            const end=Math.min(start+length,Number.isFinite(preview.duration)?preview.duration:start+length);
+            if(end<=start){storyStatus.textContent='Не удалось прочитать выбранный аудиофайл.';storyStatus.classList.remove('hidden');return;}
+            preview.pause(); preview.currentTime=Math.min(start,Math.max(0,(preview.duration||start)-.1));
+            try{await preview.play();}catch(err){console.warn('Music preview playback:',err);return;}
+            preview.ontimeupdate=()=>{if(preview.currentTime>=end){preview.pause();preview.currentTime=start;}};
         });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
-            const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=storyMusicInput?.files?.[0]||null;
+            const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=generatedMusicFile || storyMusicInput?.files?.[0] || null;
             if(image&&video){storyStatus.textContent='Выбери фото или видео, не оба сразу.';storyStatus.classList.remove('hidden');return;}
             if(!text&&!image&&!video){storyStatus.textContent='Добавь текст, фото или видео.';storyStatus.classList.remove('hidden');return;}
             if(video&&!video.type.startsWith('video/')){storyStatus.textContent='Выбери видеофайл.';storyStatus.classList.remove('hidden');return;}
             if(music&&!music.type.startsWith('audio/')){storyStatus.textContent='Музыка должна быть аудиофайлом.';storyStatus.classList.remove('hidden');return;}
-            storyPublishBtn.disabled=true; storyPublishBtn.textContent='Публикуем…'; storyStatus.classList.add('hidden');
+            if (state.storyUploading) return;
+            state.storyUploading = true;
+            storyPublishBtn.disabled=true; storyPublishBtn.setAttribute('aria-busy','true'); storyPublishBtn.textContent='Загружаем историю…'; storyStatus.classList.remove('hidden'); storyStatus.textContent='Подготавливаем файлы и загружаем. Не закрывай это окно.'; storyPublishBtn.classList.add('vv-loading-button');
             try {
                 let mediaURL='', musicURL='', mediaType='text';
                 if(image){ mediaURL=await uploadStoryMedia(image,'image'); mediaType='image'; }
                 if(video){ mediaURL=await uploadStoryMedia(video,'video'); mediaType='video'; }
-                if(music) { musicURL=await uploadStoryMedia(music,'audio'); const start=Math.max(0,Math.floor(Number(document.getElementById('storyMusicStart')?.value)||0)); const rawEnd=Number(document.getElementById('storyMusicEnd')?.value); const end=Number.isFinite(rawEnd)&&rawEnd>start?Math.floor(rawEnd):start+10; if(end-start>10){ throw new Error('Для истории можно выбрать не больше 10 секунд музыки.'); } const trimParts=[]; if(start>0) trimParts.push(`so_${start}`); trimParts.push(`eo_${end}`); musicURL=musicURL.replace('/video/upload/','/video/upload/'+trimParts.join(',')+'/'); }
+                if(music) { musicURL=await uploadStoryMedia(music,'audio'); const start=Math.max(0,Math.floor(Number(musicStartInput?.value)||0)); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const end=start+length; const trimParts=[]; if(start>0) trimParts.push(`so_${start}`); trimParts.push(`eo_${end}`); musicURL=musicURL.replace('/video/upload/','/video/upload/'+trimParts.join(',')+'/'); }
                 const now=Date.now();
                 await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';document.getElementById('storyMusicStart').value='0';document.getElementById('storyMusicEnd').value='';storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';if(musicLibrarySelect)musicLibrarySelect.value='';generatedMusicFile=null;if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
-            finally{storyPublishBtn.disabled=false;storyPublishBtn.textContent='Опубликовать';}
+            finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
 
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
@@ -1117,6 +1179,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const game = document.getElementById('snakeChallengeBtn'); if (game) game.disabled = true;
             renderChatFriends();
         }
+        async function openAnyUserProfile(uid) {
+            if (!uid || !state.user) return;
+            if (uid === state.user.uid) { document.getElementById('profileBtn')?.click(); return; }
+            let profile=friendsCache.find(x=>String(x.uid||x.id)===String(uid));
+            try { const snap=await getDoc(doc(db,'users',uid)); if(snap.exists()) profile={...(profile||{}),...snap.data(),uid}; }
+            catch(err){console.warn('Could not load public profile:',err);}
+            if(!profile){ alert('Не удалось загрузить профиль пользователя.'); return; }
+            await loadRole(uid);
+            let modal=document.getElementById('friendProfileModal');
+            if(!modal){modal=document.createElement('div');modal.id='friendProfileModal';modal.className='fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/90 p-5 backdrop-blur';modal.innerHTML='<div class="relative w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl"><button id="friendProfileClose" class="absolute right-3 top-3 rounded-xl p-2 text-slate-400" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button><div id="friendProfileContent" class="flex flex-col items-center gap-3"></div></div>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});modal.querySelector('#friendProfileClose').addEventListener('click',()=>modal.remove());}
+            const content=modal.querySelector('#friendProfileContent');
+            content.innerHTML=`${avatarMarkup(profile,'h-24 w-24')}<h2 class="text-xl font-bold">${escapeHTML(profile.displayName||'Пользователь')} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p><p class="max-w-full whitespace-pre-wrap break-words text-sm text-slate-400">${escapeHTML(profile.bio||'')}</p><div class="flex w-full gap-2 pt-2"><button id="profileViewStories" class="flex-1 rounded-xl border border-slate-700 px-3 py-2 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="flex-1 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold">Добавить в друзья</button>`}</div>`;
+            content.querySelector('#profileViewStories')?.addEventListener('click',()=>{const has=activeStoryItems.some(st=>st.uid===uid&&Number(st.expiresAt)>Date.now());if(has){modal.remove();storiesModal?.classList.remove('hidden');openStoryByUser(uid);}else{storiesModal?.classList.remove('hidden');refreshStories();}});
+            content.querySelector('#profileMessageUser')?.addEventListener('click',()=>{modal.remove();openConversation(uid);});
+            content.querySelector('#profileAddUser')?.addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='Отправляем…';try{await sendFriendRequest(uid);b.textContent='Заявка отправлена';}catch(err){b.disabled=false;b.textContent='Повторить';alert(err.message||'Не удалось отправить заявку.');}});
+        }
         async function openFriendProfile(uid) {
             const f = friendsCache.find(x => String(x.uid || x.id) === String(uid)); if (!f) return;
             await loadRole(uid);
@@ -1132,9 +1210,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             await preloadRoles(friendsCache);
             host.innerHTML = friendsCache.map(f => {
                 const uid=f.uid || f.id;
-                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</p><p class="text-xs text-slate-500">@${escapeHTML(f.username || 'user')}</p>${presenceLabel(uid)}</div><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
+                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><button type="button" data-view-profile="${escapeHTML(uid)}" class="block max-w-full truncate text-left text-sm font-semibold hover:text-violet-300">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</button><button type="button" data-view-profile="${escapeHTML(uid)}" class="block text-left text-xs text-slate-500 hover:text-violet-300">@${escapeHTML(f.username || 'user')}</button>${presenceLabel(uid)}</div><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
             }).join('');
             host.querySelectorAll('[data-chatfriend]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.chatfriend)));
+            host.querySelectorAll('[data-view-profile]').forEach(b => b.addEventListener('click', () => openAnyUserProfile(b.dataset.viewProfile)));
         }
         function unreadStorageKey(friendUid) { return `vv_read_${state.user?.uid || 'guest'}_${friendUid}`; }
         function getLastReadAt(friendUid) { return Number(localStorage.getItem(unreadStorageKey(friendUid)) || 0); }
@@ -1155,11 +1234,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const uid = String(f.uid || f.id || ''); if (!uid || uid === state.user.uid) continue;
                 const chatId = [state.user.uid, uid].sort().join('_');
                 const messagesRef = collection(db, 'conversations', chatId, 'messages');
-                const unsub = onSnapshot(query(messagesRef, orderBy('createdAt','desc'), limit(100)), snap => {
+                const unsub = onSnapshot(query(messagesRef, orderBy('createdAt','desc'), limit(200)), snap => {
                     const lastRead = getLastReadAt(uid);
                     let count = 0;
                     if (activeFriend !== uid || currentTab !== 'chats') {
-                        count = snap.docs.filter(d => { const m=d.data(); return m.senderUid !== state.user.uid && Number(m.createdAt || 0) > lastRead; }).length;
+                        count = snap.docs.filter(d => { const m=d.data(); return m.senderUid !== state.user.uid && Number(m.createdAt || m.createdAtMs || 0) > lastRead; }).length;
                     } else {
                         localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
                     }
@@ -1198,12 +1277,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const pending = !!u.requestPending;
                 return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
                     <div class="shrink-0">${avatarMarkup(u,'h-12 w-12')}</div>
-                    <div class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold text-white">${escapeHTML(u.displayName || 'Пользователь')} ${roleBadgeMarkup(uid)}</span><span class="text-xs text-violet-300">@${escapeHTML(u.username || '')}</span></div>
+                    <div class="min-w-0 flex-1"><button type="button" data-view-profile="${escapeHTML(uid)}" class="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-violet-300">${escapeHTML(u.displayName || 'Пользователь')} ${roleBadgeMarkup(uid)}</button><button type="button" data-view-profile="${escapeHTML(uid)}" class="block text-xs text-violet-300 hover:underline">@${escapeHTML(u.username || '')}</button></div>
                     ${isFriend ? '<span class="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">Друг</span>' :
                     pending ? '<span class="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">Заявка отправлена</span>' :
                     `<button type="button" data-addfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500">Добавить</button>`}
                 </div>`;
             }).join('');
+            host.querySelectorAll('[data-view-profile]').forEach(button => button.addEventListener('click', () => openAnyUserProfile(button.dataset.viewProfile)));
             host.querySelectorAll('[data-addfriend]').forEach(button => button.addEventListener('click', async () => {
                 button.disabled = true; button.textContent = 'Отправляем…';
                 try {
@@ -1489,7 +1569,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const text = document.getElementById('messageInput').value.trim();
             if (!text || !state.user || !activeConversationId || !activeFriend) return;
             const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
-            const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now() };
+            const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now(), clientMessageId: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`) };
             try {
                 const conversationRef = doc(db,'conversations',activeConversationId);
                 await setDoc(conversationRef, { participants:[state.user.uid,activeFriend].sort(), updatedAt:Date.now(), lastMessage:text.slice(0,100) }, {merge:true});
