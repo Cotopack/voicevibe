@@ -19,7 +19,9 @@ Profile photos and story media are uploaded directly from the browser to Cloudin
 - Avatars use the existing unsigned preset `voicevibe_upload` and are compressed to JPEG.
 - Stories use a separate unsigned preset named `voicevibe_stories` so photos, videos and audio can be accepted without changing avatar restrictions.
 
-Before publishing stories, open Cloudinary Console → Settings → Upload → Upload presets and create `voicevibe_stories` with **Signing Mode: Unsigned**. Allow image and video uploads; audio is uploaded using Cloudinary's `video` resource type. Do not limit this preset to image-only formats. If available, set a suitable maximum file size (the app checks 12 MB for photos/audio and 25 MB for videos). The app stores Cloudinary `secure_url` links in Firestore. **Never add your Cloudinary API Secret to `app.js`.** Firebase Storage is not used for story uploads.
+Before using any media upload, open Cloudinary Console → Settings → Upload → Upload presets and create `voicevibe_upload` with **Signing Mode: Unsigned** for images (avatars, profile banners, stickers, chat wallpapers). The cloud name configured in `app.js` is `yvoqyrj8`. The app sends uploads directly to Cloudinary and stores only the returned `secure_url` in Firestore. Never add your Cloudinary API Secret to browser code. Firebase Storage is not used.
+
+Before publishing stories, open Cloudinary Console → Settings → Upload → Upload presets and create `voicevibe_stories` with **Signing Mode: Unsigned**. Allow image and video uploads; audio is uploaded using Cloudinary's `video` resource type. Do not limit this preset to image-only formats. If available, set a suitable maximum file size (the app checks 12 MB for photos/audio and 25 MB for videos). The app stores Cloudinary `secure_url` links in Firestore. **Never add your Cloudinary API Secret to `app.js`.** Firebase Storage is not used anywhere in this project; avatars, stories, profile banners, stickers, and chat wallpapers are uploaded to Cloudinary.
 
 ## 2. Install Firebase CLI (Windows)
 Install Node.js LTS from https://nodejs.org/ and restart VS Code/Terminal.
@@ -71,13 +73,13 @@ The project is configured for Firebase project `voicevibe-1b8c0`. Before deployi
 
 ## Sign-in, social profile, friends, chat, and Snake
 - Login methods in this build: email/password and phone/SMS. Enable Email/Password and Phone in Firebase Authentication → Sign-in method.
-- The profile has a unique nickname, bio, and avatar upload. Avatar and story media uploads use Cloudinary; Firebase Storage is not required for these features.
+- The profile has a unique nickname, bio, and avatar upload. Avatar, story media, profile banners, stickers, and chat wallpapers use Cloudinary. Firebase Storage is not used by this project.
 - Publish `firestore.rules` in Firebase Console → Firestore Database → Rules. It covers user profiles, unique nickname reservations, friend requests/friends, the roulette queue, and private friend conversations.
 - Friends can be added while matched in roulette if the match UID is available. Friend requests can be accepted or declined; declined requests may be sent again.
 - The chat has text messages and an asynchronous Snake challenge: each friend can play and send their score in the conversation.
 - If using GitHub Pages, upload `public/index.html`, `public/app.js`, `public/styles.css`, and `public/tailwind-config.js` to the repository's published folder (for a project site this is normally the repository root if configured that way).
 - For local testing, add `localhost` to Authentication → Settings → Authorized domains and serve over localhost (not by opening the HTML file directly).
-- Keep root source files and `public/` copies in sync. Confirm Cloudinary unsigned presets `voicevibe_upload` (avatars) and `voicevibe_stories` (stories) are configured.
+- Keep root source files and `public/` copies in sync. Confirm the existing Cloudinary unsigned preset `voicevibe_upload` is configured for the media types you plan to upload.
 
 
 ## VoiceVibe polish update
@@ -134,4 +136,4 @@ issue remains.
 - добавлены лёгкие анимации, индикатор загрузки и поддержка `prefers-reduced-motion`;
 - синхронизированы корневые файлы и файлы в `public/`, которые использует Firebase Hosting.
 
-Примечание: стабильность WebRTC зависит также от сети и конфигурации ICE. В этой сборке используются публичные STUN-серверы; TURN-сервер не добавлен, так как для него нужны реальные данные сервера/провайдера. Перед публичным запуском проверьте работу двумя аккаунтами и на разных сетях, а также актуальные Firestore/Storage Rules и настройки Cloudinary.
+Примечание: стабильность WebRTC зависит также от сети и конфигурации ICE. В этой сборке используются публичные STUN-серверы; TURN-сервер не добавлен, так как для него нужны реальные данные сервера/провайдера. Перед публичным запуском проверьте работу двумя аккаунтами и на разных сетях, а также актуальные Firestore Rules и настройки Cloudinary.

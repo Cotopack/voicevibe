@@ -1,5 +1,4 @@
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
-        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -30,7 +29,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const auth = getAuth(app);
         const db = getFirestore(app);
         const functions = getFunctions(app, 'us-central1');
-        const storage = getStorage(app);
         const ensureReferralAccount = httpsCallable(functions, 'ensureReferralAccount');
         const claimReferralCall = httpsCallable(functions, 'claimReferral');
         const purchasePremiumCall = httpsCallable(functions, 'purchasePremium');
@@ -854,6 +852,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return result.secure_url;
         }
 
+        // All user image assets are stored in Cloudinary; Firebase Storage is not used.
+        async function uploadImageToCloudinary(file, folder) {
+            if (!file || !file.type?.startsWith('image/')) throw new Error('Выбери файл изображения.');
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            formData.append('folder', `voicevibe/${folder}`);
+            const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+            const response = await fetch(endpoint, { method: 'POST', body: formData });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.secure_url) {
+                console.error('Cloudinary image upload failed:', result);
+                throw new Error(result.error?.message || `Cloudinary upload failed (${response.status})`);
+            }
+            return result.secure_url;
+        }
+
         function normalizeUsername(value) { return value.trim().toLowerCase(); }
         function escapeHTML(value='') { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
         function avatarMarkup(profile, size='h-10 w-10') {
@@ -953,9 +968,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const inner = st.photoURL ? `<img src="${storyEscape(st.photoURL)}" alt="" class="h-full w-full rounded-full object-cover"/>` : `<span>${storyEscape((st.displayName || 'П')[0])}</span>`;
             return `<span class="story-avatar-ring ${ringState}">${inner}</span>`;
         }
-        // Stories media uses Cloudinary (not Firebase Storage). Keep this preset separate
-        // from the avatar preset so it can accept image, video and audio files.
-        const CLOUDINARY_STORIES_UPLOAD_PRESET = 'voicevibe_stories';
+        // Stories use the same existing unsigned Cloudinary preset as other uploads.
+        const CLOUDINARY_STORIES_UPLOAD_PRESET = CLOUDINARY_UPLOAD_PRESET;
         async function uploadStoryMedia(file, kind) {
             if (!file) return '';
             const max = kind === 'video' ? 25 * 1024 * 1024 : 12 * 1024 * 1024;
@@ -971,7 +985,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const result = await response.json().catch(() => ({}));
             if (!response.ok || !result.secure_url) {
                 console.error('Cloudinary story upload failed:', result);
-                throw new Error(result.error?.message || `Не удалось загрузить ${kind === 'image' ? 'фото' : kind === 'video' ? 'видео' : 'музыку'} в Cloudinary (${response.status}). Проверь unsigned preset voicevibe_stories.`);
+                throw new Error(result.error?.message || `Не удалось загрузить ${kind === 'image' ? 'фото' : kind === 'video' ? 'видео' : 'музыку'} в Cloudinary (${response.status}). Проверь unsigned preset voicevibe_upload и разрешённые типы файлов.`);
             }
             return result.secure_url;
         }
@@ -1203,7 +1217,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{const res=await purchasePremiumCall();const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();alert(res.data?.message||'Premium активирован на 30 дней!');}catch(e){alert(e?.message||'Не удалось купить Premium. Убедись, что развернуты Firebase Functions.');}finally{b.disabled=false;}});
         document.getElementById('watchAdCoinsBtn')?.addEventListener('click',async()=>{try{const res=await claimAdCoinsCall();alert(res.data?.message||'Попробуйте позже — реклама пока не подключена.');}catch(e){alert(e?.message||'Попробуйте позже — реклама пока не подключена.');}});
         document.getElementById('profileBannerFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];const n=document.getElementById('profileBannerFileName');if(n)n.textContent=f?.name||'Файл не выбран';});
-        document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const r=storageRef(storage,`profileBanners/${state.user.uid}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`);await uploadBytes(r,f,{contentType:f.type});const url=await getDownloadURL(r);await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert('Не удалось загрузить банер. Проверь Storage Rules.');}finally{b.disabled=false;}});
+        document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const url=await uploadImageToCloudinary(f,'profile-banners');await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert(`Не удалось загрузить банер в Cloudinary: ${e?.message||'ошибка загрузки'}`);}finally{b.disabled=false;}});
 
         // Groups are available only for people already in the user's friend list.
         const groupModal=document.getElementById('createGroupModal');
@@ -1214,9 +1228,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
-        document.getElementById('stickerFileInput')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return alert('Выбери изображение.');if(f.size>2*1024*1024)return alert('Стикер должен быть меньше 2 МБ.');try{const r=storageRef(storage,`stickers/${state.user.uid}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`);await uploadBytes(r,f,{contentType:f.type});const url=await getDownloadURL(r);const stickerRef=doc(collection(db,'users',state.user.uid,'stickers'));await setDoc(stickerRef,{url,name:f.name.slice(0,80),createdAt:Date.now()});e.target.value='';alert('Стикер добавлен в твою коллекцию!');}catch(err){console.error(err);alert('Не удалось загрузить стикер. Проверь Storage/Firestore Rules.');}});
+        document.getElementById('stickerFileInput')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return alert('Выбери изображение.');if(f.size>2*1024*1024)return alert('Стикер должен быть меньше 2 МБ.');try{const url=await uploadImageToCloudinary(f,'stickers');const stickerRef=doc(collection(db,'users',state.user.uid,'stickers'));await setDoc(stickerRef,{url,name:f.name.slice(0,80),createdAt:Date.now()});e.target.value='';alert('Стикер добавлен в твою коллекцию!');}catch(err){console.error(err);alert(`Не удалось загрузить стикер: ${err?.message||'ошибка Cloudinary/Firestore'}`);}});
         document.getElementById('openStickersBtn')?.addEventListener('click',async()=>{const panel=document.getElementById('stickersPanel');panel.classList.toggle('hidden');if(panel.classList.contains('hidden'))return;const grid=document.getElementById('stickersGrid');const hint=document.getElementById('stickersPanelHint');grid.innerHTML='<span class="text-xs text-slate-400">Загружаем стикеры…</span>';try{const owners=[state.user.uid,...(activeGroupId?[]:(activeFriend?[activeFriend]:[]))];const all=[];for(const owner of owners){const snap=await getDocs(query(collection(db,'users',owner,'stickers'),orderBy('createdAt','desc'),limit(50)));snap.docs.forEach(d=>all.push({id:d.id,owner,...d.data()}));}grid.innerHTML=all.length?all.map(st=>`<button data-send-sticker="${escapeHTML(st.url)}" data-sticker-owner="${escapeHTML(st.owner)}" class="rounded-xl border border-slate-700 p-1"><img src="${escapeHTML(st.url)}" alt="Стикер" class="h-14 w-14 rounded-lg object-contain"></button>`).join(''):'<span class="text-xs text-slate-400">Пока нет стикеров. Premium позволяет загрузить свои.</span>';hint.textContent=Number(state.userProfile?.premiumUntil||0)>Date.now()?'Нажми на стикер, чтобы отправить его.':'Ты можешь просматривать стикеры, но отправка доступна только Premium.';grid.querySelectorAll('[data-send-sticker]').forEach(b=>b.addEventListener('click',async()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Отправка стикеров доступна только Premium.');try{const url=b.dataset.sendSticker;const payload={senderUid:state.user.uid,text:url,type:'sticker',createdAt:Date.now()};if(activeGroupId){await addDoc(collection(db,'groups',activeGroupId,'messages'),payload);await updateDoc(doc(db,'groups',activeGroupId),{updatedAt:Date.now(),lastMessage:'✨ Стикер'});}else if(activeConversationId){await addDoc(collection(db,'conversations',activeConversationId,'messages'),payload);}else return;panel.classList.add('hidden');}catch(err){console.error(err);alert('Не удалось отправить стикер. Проверь Rules.');}}));}catch(err){console.error(err);grid.innerHTML='<span class="text-xs text-rose-300">Не удалось загрузить стикеры. Проверь Firestore Rules.</span>';}});
-        document.getElementById('chatWallpaperFile')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Обои в чате доступны только Premium.');if(!activeConversationId&&!activeGroupId)return alert('Сначала открой чат.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');try{const r=storageRef(storage,`chatWallpapers/${state.user.uid}/${Date.now()}_${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`);await uploadBytes(r,f,{contentType:f.type});const url=await getDownloadURL(r);if(activeGroupId)await updateDoc(doc(db,'groups',activeGroupId),{wallpaperURL:url,updatedAt:Date.now()});else await updateDoc(doc(db,'conversations',activeConversationId),{wallpaperURL:url});document.getElementById('messagesList').style.backgroundImage=`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${url}")`;document.getElementById('messagesList').style.backgroundSize='cover';alert('Обои установлены!');}catch(err){console.error(err);alert('Не удалось установить обои. Проверь Rules.');}finally{e.target.value='';}});
+        document.getElementById('chatWallpaperFile')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Обои в чате доступны только Premium.');if(!activeConversationId&&!activeGroupId)return alert('Сначала открой чат.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');try{const url=await uploadImageToCloudinary(f,'chat-wallpapers');if(activeGroupId)await updateDoc(doc(db,'groups',activeGroupId),{wallpaperURL:url,updatedAt:Date.now()});else await updateDoc(doc(db,'conversations',activeConversationId),{wallpaperURL:url});document.getElementById('messagesList').style.backgroundImage=`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${url}")`;document.getElementById('messagesList').style.backgroundSize='cover';alert('Обои установлены!');}catch(err){console.error(err);alert(`Не удалось установить обои: ${err?.message||'ошибка Cloudinary/Firestore'}`);}finally{e.target.value='';}});
 
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
 
