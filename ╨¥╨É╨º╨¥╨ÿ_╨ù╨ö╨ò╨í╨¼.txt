@@ -1,0 +1,23 @@
+VOICEVIBE — ИСТОРИИ ЧЕРЕЗ CLOUDINARY
+
+Настройки уже указаны в app.js и public/app.js:
+- Cloud name: yvoqyrj8
+- Upload preset для историй: voicevibe_stories (Unsigned)
+- Для аватаров сохранён отдельный preset: voicevibe_upload
+
+Установка:
+1. Распакуйте архив.
+2. Замените файлы проекта на GitHub файлами из архива (если репозиторий использует корневые index.html и app.js — берите файлы из корня архива, а не из папки public).
+3. Опубликуйте firestore.rules в Firebase Console → Firestore Database → Rules.
+4. В Cloudinary preset voicevibe_stories должен быть Unsigned и разрешать загрузку image и video. Аудио Cloudinary принимает через video resource type, если настройки аккаунта/пресета это допускают.
+5. Сохраните изменения GitHub и обновите сайт Ctrl+F5.
+
+Не добавляйте Cloudinary API Secret в код сайта. Firebase Storage для медиа историй не используется.
+Проверены синтаксис app.js и целостность ZIP; live-проверка сайта и загрузки в реальный Cloudinary не выполнялась.
+
+НОВЫЕ ФУНКЦИИ Vibecoin / Premium / ГРУППЫ:
+Перед публикацией обязательно прочитай файл НАСТРОЙКА_VIBECOIN_PREMIUM.md и разверни Firebase Functions и обновлённые Firestore/Storage Rules:
+  npm --prefix functions install
+  firebase deploy --only functions,firestore:rules,storage
+  firebase deploy --only hosting
+Cloud Functions могут требовать тариф Firebase Blaze. Реклама намеренно не начисляет монеты — кнопка пока сообщает «Попробуйте позже».
