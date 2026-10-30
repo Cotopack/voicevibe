@@ -1,0 +1,34 @@
+VOICEVIBE — ПЕРЕНОС ПОКУПКИ PREMIUM НА CLOUDFLARE WORKER
+
+Что изменено
+- worker.js: проверяет Firebase ID token, читает users/{uid}, списывает ровно 50 Vibecoin и добавляет 30 дней к premiumUntil.
+- app.js: кнопка buyPremiumBtn вызывает Cloudflare Worker вместо Firebase purchasePremium callable.
+- Реферальные функции, чаты и прочие обработчики не переписывались.
+- Покупка защищена Firestore updateTime precondition: если баланс изменился между чтением и записью, операция не перезапишет чужое обновление.
+
+ВАЖНО: секрет не публиковать и не вставлять в app.js.
+
+1. Cloudflare Dashboard → Workers & Pages → ваш Worker → Edit code.
+2. Вставьте содержимое worker.js целиком и сохраните (Deploy пока не нажимайте, если сначала хотите проверить настройки).
+3. Settings → Variables and Secrets → Add → Secret.
+   Name: FIREBASE_SERVICE_ACCOUNT
+   Value: полное содержимое JSON-файла service account, скачанного из Firebase/Google Cloud (весь JSON, включая client_email, private_key, project_id).
+   Это именно JSON целиком, не одна строка private_key. Если уже созданный Secret имеет другое имя или содержит только private_key, создайте/исправьте секрет с указанным именем и полным JSON.
+4. Убедитесь, что service account относится к проекту voicevibe-1b8c0 и имеет роль, позволяющую читать/изменять документы Firestore (например, Cloud Datastore User). Не публикуйте JSON и не присылайте его в чат.
+5. После проверки сохраните Worker и выполните Deploy в Cloudflare. Адрес будет вида https://ИМЯ.ВАШ-SUBDOMAIN.workers.dev.
+6. Откройте app.js и найдите PREMIUM_WORKER_URL. Замените только URL внутри кавычек на адрес Worker с путём /buy-premium, например:
+   const PREMIUM_WORKER_URL = 'https://voicevibe-premium.example.workers.dev/buy-premium';
+   Не оставляйте примерный домен из шаблона.
+7. Опубликуйте обновлённый сайт обычным способом.
+
+Проверка
+- Войдите в VoiceVibe.
+- При балансе меньше 50 покупка должна отказать без изменений.
+- При балансе 50 или больше должно списаться ровно 50, а premiumUntil увеличиться на 30 дней (оставшийся срок добавляется).
+- Повторно проверьте баланс и premiumUntil в Firestore.
+
+Примечания
+- CORS разрешает только https://cotopack.github.io. Если сайт размещён на другом домене, добавьте его в ALLOWED_ORIGINS в worker.js.
+- Firebase Functions всё ещё используются другими функциями проекта (например, рефералами и группами). Этот Worker заменяет только покупку Premium. Перенос остальных функций не выполнялся.
+- В этом окружении выполнена статическая проверка синтаксиса JavaScript. Реальный запрос к вашему Firebase/Cloudflare и покупка не выполнялись.
+- Если Worker уже был развёрнут, после изменения worker.js нужно снова Deploy. Само создание Secret не публикует код.
