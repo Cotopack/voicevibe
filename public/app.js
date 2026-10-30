@@ -801,7 +801,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function avatarMarkup(profile, size='h-10 w-10') {
             const label = escapeHTML((profile?.displayName || profile?.username || '?').slice(0,1).toUpperCase());
             const src = profile?.photoURL;
-            return src ? `<img src="${escapeHTML(src)}" alt="" loading="lazy" class="${size} rounded-full object-cover">` : `<span class="${size} flex items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 font-bold text-white">${label}</span>`;
+            const uid = profile?.uid || profile?.fromUid || profile?.id || '';
+            const inner = src ? `<img src="${escapeHTML(src)}" alt="" loading="lazy" class="${size} rounded-full object-cover">` : `<span class="${size} flex items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 font-bold text-white">${label}</span>`;
+            if (!uid) return inner;
+            const storyState = getStoryRingState(uid);
+            return `<span class="vv-avatar-story-wrap ${storyState ? `has-story ${storyState}` : ''}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="${storyState ? 'Открыть историю' : 'Аватар'}">${inner}</span>`;
         }
         function renderSocialProfile() {
             if (!state.user) return;
@@ -811,7 +815,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (roleToggle) roleToggle.classList.toggle('hidden', !isDeveloper);
             if (rolePanel && !isDeveloper) rolePanel.classList.add('hidden');
             const p = state.userProfile || {};
-            document.getElementById('socialAvatar').innerHTML = avatarMarkup(p, 'h-20 w-20');
+            document.getElementById('socialAvatar').innerHTML = avatarMarkup({ ...p, uid: state.user.uid }, 'h-20 w-20');
             const socialName = document.getElementById('socialName');
             const ownUid = state.user.uid;
             socialName.innerHTML = `${escapeHTML(p.displayName || 'Настрой профиль')} ${roleBadgeMarkup(ownUid)}`;
@@ -859,10 +863,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const storyPublishBtn = document.getElementById('storyPublishBtn');
         let activeStoryItems = [];
         let activeStoryIndex = 0;
+        function getStoryRingState(uid) {
+            const items = activeStoryItems.filter(st => st.uid === uid && Number(st.expiresAt) > Date.now());
+            if (!items.length) return '';
+            const viewed = items.every(st => (st.views || []).some(v => (typeof v === 'string' ? v : v?.uid) === state.user?.uid));
+            return viewed ? 'story-viewed' : 'story-unviewed';
+        }
+        function refreshAvatarStoryRings() {
+            document.querySelectorAll('[data-story-avatar]').forEach(el => {
+                const uid = el.dataset.storyAvatar;
+                const ring = getStoryRingState(uid);
+                el.classList.toggle('has-story', !!ring);
+                el.classList.toggle('story-unviewed', ring === 'story-unviewed');
+                el.classList.toggle('story-viewed', ring === 'story-viewed');
+            });
+        }
         function storyEscape(value) { return escapeHTML(String(value || '')); }
-        function storyAvatar(st) {
+        function storyAvatar(st, ringState = 'story-unviewed') {
             const inner = st.photoURL ? `<img src="${storyEscape(st.photoURL)}" alt="" class="h-full w-full rounded-full object-cover"/>` : `<span>${storyEscape((st.displayName || 'П')[0])}</span>`;
-            return `<span class="story-avatar-ring">${inner}</span>`;
+            return `<span class="story-avatar-ring ${ringState}">${inner}</span>`;
         }
         // Stories media uses Cloudinary (not Firebase Storage). Keep this preset separate
         // from the avatar preset so it can accept image, video and audio files.
@@ -897,12 +916,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" class="absolute inset-0 h-full w-full object-contain"/>` : '';
             const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
             const views = Array.isArray(st.views) ? st.views : [];
+            const isOwnStory = st.uid === state.user?.uid;
             const viewNames = views.map(v => typeof v === 'string' ? v : (v.displayName || v.username || 'Пользователь'));
             const music = st.musicURL ? `<audio src="${storyEscape(st.musicURL)}" autoplay loop controls class="mx-auto mt-2 max-w-full"></audio>` : '';
+            const ownerStats = isOwnStory ? `<button id="storyViewersBtn" class="rounded-full bg-white/15 px-3 py-2 text-xs"><i class="fa-regular fa-eye mr-1"></i>${views.length} просмотров</button>` : '';
+            const likeCount = isOwnStory ? `<span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span>` : '';
+            const viewersList = isOwnStory ? `<div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div>` : '';
             viewer.innerHTML = `<div class="relative flex h-full min-h-[70dvh] w-full flex-col overflow-hidden rounded-3xl bg-black text-white">
                 ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-10 p-4"><div class="mb-3 h-1 overflow-hidden rounded-full bg-white/25"><div class="h-full w-full bg-white/90"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><b class="block truncate text-sm">${storyEscape(st.displayName || 'Пользователь')}</b><small class="text-white/70">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full bg-black/30 px-3 py-2" aria-label="Закрыть">✕</button></div></div>
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
-                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-10 p-4">${st.text ? `<p class="mb-2 whitespace-pre-wrap break-words text-sm">${storyEscape(st.text)}</p>` : ''}${music}<div class="mt-3 flex items-center justify-between gap-3"><button id="storyViewersBtn" class="rounded-full bg-white/15 px-3 py-2 text-xs"><i class="fa-regular fa-eye mr-1"></i>${views.length} просмотров</button><button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> <span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span></button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form><div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div></div></div>`;
+                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-10 p-4">${st.text ? `<p class="mb-2 whitespace-pre-wrap break-words text-sm">${storyEscape(st.text)}</p>` : ''}${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
             viewer.classList.remove('hidden');
             if (st.mediaType !== 'video') storyAdvanceTimer = setTimeout(() => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } else viewer.classList.add('hidden'); }, 10000);
             document.getElementById('storyViewerClose')?.addEventListener('click', () => { clearTimeout(storyAdvanceTimer); viewer.classList.add('hidden'); });
@@ -913,9 +936,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('storyReplyForm')?.addEventListener('submit', async ev => { ev.preventDefault(); const input=document.getElementById('storyReplyInput'); const reply=(input?.value||'').trim(); if(!reply) return; try { await updateDoc(doc(db,'stories',st.id), { replies: arrayUnion({uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',text:reply.slice(0,300),createdAt:Date.now()}) }); if(st.uid!==state.user.uid) await addDoc(collection(db,'users',st.uid,'storyReplies'), {fromUid:state.user.uid,fromName:state.userProfile?.displayName||state.user.displayName||'Пользователь',storyId:st.id,text:reply.slice(0,300),createdAt:Date.now()}); input.value=''; input.placeholder='Ответ отправлен'; } catch(e) { console.error(e); alert('Не удалось отправить ответ. Проверь Firestore Rules.'); } });
         }
         async function markStoryViewed(st) {
-            if (!st || st.uid === state.user?.uid || (st.views || []).some(v => (typeof v === 'string' ? v : v.uid) === state.user?.uid)) return;
+            if (!st || (st.views || []).some(v => (typeof v === 'string' ? v : v.uid) === state.user?.uid)) return;
             const viewer = {uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||''};
-            try { await updateDoc(doc(db,'stories',st.id), { views: arrayUnion(viewer) }); st.views = [...(st.views||[]),viewer]; } catch(e) { console.warn('Could not record story view:',e); }
+            try { await updateDoc(doc(db,'stories',st.id), { views: arrayUnion(viewer) }); st.views = [...(st.views||[]),viewer]; refreshAvatarStoryRings(); } catch(e) { console.warn('Could not record story view:',e); }
         }
         async function refreshStories() {
             if (!storiesList) return;
@@ -925,9 +948,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const snap = await getDocs(collection(db, 'stories'));
                 const now = Date.now();
                 activeStoryItems = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(st => Number(st.expiresAt) > now).sort((a,b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+                refreshAvatarStoryRings();
                 if (!activeStoryItems.length) { storiesList.innerHTML = '<p class="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Пока нет историй. Нажми «+» и опубликуй первую.</p>'; return; }
                 const groups = new Map(); activeStoryItems.forEach(st => { if(!groups.has(st.uid)) groups.set(st.uid,[]); groups.get(st.uid).push(st); });
-                storiesList.innerHTML = `<div class="mb-3 flex gap-4 overflow-x-auto pb-3">${[...groups.entries()].map(([uid,items]) => { const st=items[0]; return `<button data-open-story-user="${storyEscape(uid)}" class="flex w-16 shrink-0 flex-col items-center gap-1 text-center text-xs">${storyAvatar(st)}<span class="w-16 truncate">${uid===state.user.uid?'Ваша история':storyEscape(st.displayName||'Пользователь')}</span></button>`; }).join('')}</div><p class="text-center text-xs text-slate-500">Нажми на аватарку, чтобы открыть историю</p><div class="mt-4 space-y-2">${activeStoryItems.filter(st=>st.uid===state.user.uid).map(st=>`<div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs"><span>Моя история · ${Math.max(1,Math.ceil((Number(st.expiresAt)-now)/3600000))} ч. осталось</span><button data-delete-story="${storyEscape(st.id)}" class="rounded-lg px-3 py-2 text-rose-300 hover:bg-rose-500/10">Удалить</button></div>`).join('')}</div>`;
+                storiesList.innerHTML = `<div class="mb-4 rounded-2xl border border-violet-400/20 bg-gradient-to-r from-violet-500/10 via-slate-900 to-emerald-500/10 p-3 text-center"><p class="text-sm font-semibold text-white">Истории рядом</p><p class="mt-1 text-xs leading-relaxed text-slate-300">Нажми на любой аватар с ободком — история откроется сразу. <span class="font-semibold text-emerald-300">Зелёный</span> — ещё не смотрел(а), <span class="font-semibold text-slate-400">серый</span> — уже просмотрено.</p></div><div class="mb-3 flex gap-4 overflow-x-auto pb-3">${[...groups.entries()].map(([uid,items]) => { const st=items[0]; const seen=items.every(item=>(item.views||[]).some(v=>(typeof v==='string'?v:v?.uid)===state.user.uid)); return `<button data-open-story-user="${storyEscape(uid)}" class="flex w-16 shrink-0 flex-col items-center gap-1 text-center text-xs">${storyAvatar(st, seen?'story-viewed':'story-unviewed')}<span class="w-16 truncate">${uid===state.user.uid?'Ваша история':storyEscape(st.displayName||'Пользователь')}</span></button>`; }).join('')}</div><div class="mt-4 space-y-2">${activeStoryItems.filter(st=>st.uid===state.user.uid).map(st=>`<div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs"><span>Моя история · ${Math.max(1,Math.ceil((Number(st.expiresAt)-now)/3600000))} ч. осталось</span><button data-delete-story="${storyEscape(st.id)}" class="rounded-lg px-3 py-2 text-rose-300 hover:bg-rose-500/10">Удалить</button></div>`).join('')}</div>`;
                 storiesList.querySelectorAll('[data-open-story-user]').forEach(btn=>btn.addEventListener('click',()=>openStoryByUser(btn.dataset.openStoryUser)));
                 storiesList.querySelectorAll('[data-open-story]').forEach(btn=>btn.addEventListener('click',()=>openStory(btn.dataset.openStory)));
                 storiesList.querySelectorAll('[data-delete-story]').forEach(btn=>btn.addEventListener('click',async()=>{try{await deleteDoc(doc(db,'stories',btn.dataset.deleteStory));await refreshStories();}catch(e){console.error(e);alert('Не удалось удалить историю.');}}));
@@ -936,9 +960,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
         function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
         document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); document.getElementById('storyViewer')?.classList.add('hidden'); await refreshStories(); });
+        document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user) return; const uid=avatar.dataset.storyAvatar; if(!activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now())) { storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); storiesList?.classList.remove('hidden'); await refreshStories(); } if(activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now())) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.(); storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); storiesList?.classList.remove('hidden'); openStoryByUser(uid); } }, true);
+        document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
         document.getElementById('storiesClose')?.addEventListener('click', () => storiesModal?.classList.add('hidden'));
         storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) storiesModal.classList.add('hidden'); });
-        document.getElementById('storyCreateToggle')?.addEventListener('click', () => { storyCreateForm?.classList.toggle('hidden'); storyStatus?.classList.add('hidden'); if (!storyCreateForm?.classList.contains('hidden')) storyTextInput?.focus({preventScroll:true}); });
+        document.getElementById('storyCreateToggle')?.addEventListener('click', () => { const opening=storyCreateForm?.classList.contains('hidden'); storyCreateForm?.classList.toggle('hidden'); storyStatus?.classList.add('hidden'); if (storiesList) storiesList.classList.toggle('hidden', !!opening); const btn=document.getElementById('storyCreateToggle'); if(btn) btn.innerHTML=opening ? '<i class="fa-solid fa-arrow-left"></i> Назад к историям' : '<i class="fa-solid fa-plus"></i> Добавить фото или видео'; if (opening) { storiesList?.classList.add('hidden'); storyTextInput?.focus({preventScroll:true}); } });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
             const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=storyMusicInput?.files?.[0]||null;
@@ -954,7 +980,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(music) { musicURL=await uploadStoryMedia(music,'audio'); const start=Math.max(0,Number(document.getElementById('storyMusicStart')?.value)||0); const end=Number(document.getElementById('storyMusicEnd')?.value)||0; if(start>0 || end>0){ const trimParts=[]; if(start>0) trimParts.push(`so_${start}`); if(end>start) trimParts.push(`eo_${end}`); if(trimParts.length) musicURL=musicURL.replace('/video/upload/','/video/upload/'+trimParts.join(',')+'/'); } }
                 const now=Date.now();
                 await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';document.getElementById('storyMusicStart').value='0';document.getElementById('storyMusicEnd').value='';storyCreateForm.classList.add('hidden');await refreshStories();
+                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';document.getElementById('storyMusicStart').value='0';document.getElementById('storyMusicEnd').value='';storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{storyPublishBtn.disabled=false;storyPublishBtn.textContent='Опубликовать';}
         });
@@ -973,6 +999,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             stopSocialListeners();
             if (!state.user) return;
             const uid = state.user.uid;
+            refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             const presenceRef = doc(db, 'presence', uid);
             const publishPresence = () => setDoc(presenceRef, { uid, online: !document.hidden, lastSeen: Date.now() }, { merge:true }).catch(err => console.warn('Presence update:', err));
             publishPresence();
