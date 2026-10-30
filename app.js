@@ -806,7 +806,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function renderSocialProfile() {
             if (!state.user) return;
             const rolePanel = document.getElementById('roleManagementPanel');
-            if (rolePanel) rolePanel.classList.toggle('hidden', state.user.uid !== DEVELOPER_UID);
+            const roleToggle = document.getElementById('roleManagementToggle');
+            const isDeveloper = state.user.uid === DEVELOPER_UID;
+            if (roleToggle) roleToggle.classList.toggle('hidden', !isDeveloper);
+            if (rolePanel && !isDeveloper) rolePanel.classList.add('hidden');
             const p = state.userProfile || {};
             document.getElementById('socialAvatar').innerHTML = avatarMarkup(p, 'h-20 w-20');
             const socialName = document.getElementById('socialName');
@@ -1098,6 +1101,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     : (error.message || 'Не удалось изменить роль.'), true);
             }
         }
+        document.getElementById('roleManagementToggle')?.addEventListener('click', () => {
+            if (state.user?.uid !== DEVELOPER_UID) return;
+            const panel = document.getElementById('roleManagementPanel');
+            if (!panel) return;
+            panel.classList.toggle('hidden');
+            if (!panel.classList.contains('hidden')) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
         roleUserSearchBtn?.addEventListener('click', searchRoleUsers);
         roleUserSearch?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchRoleUsers(); } });
         roleUserSearch?.addEventListener('input', () => {
