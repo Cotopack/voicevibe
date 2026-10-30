@@ -1182,6 +1182,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         async function copyField(id){const el=document.getElementById(id);if(!el?.value)return;try{await navigator.clipboard.writeText(el.value);const s=document.getElementById('referralStatus');if(s)s.textContent='Скопировано! Отправь ссылку другу.';}catch(_){el.select();document.execCommand('copy');}}
         document.getElementById('copyReferralCode')?.addEventListener('click',()=>copyField('myReferralCode'));
         document.getElementById('copyReferralLink')?.addEventListener('click',()=>copyField('myReferralLink'));
+        document.getElementById('shareReferralLink')?.addEventListener('click', async () => {
+            const link = document.getElementById('myReferralLink')?.value;
+            if (!link) { const status=document.getElementById('referralStatus'); if(status) status.textContent='Сначала дождись загрузки реферальной ссылки.'; return; }
+            const shareData = { title: 'Присоединяйся к VoiceVibe!', text: 'Регистрируйся в VoiceVibe по моей ссылке — я получу 10 Vibecoin за нового пользователя!', url: link };
+            const status=document.getElementById('referralStatus');
+            try {
+                if (navigator.share) { await navigator.share(shareData); if(status) status.textContent='Ссылка готова к отправке другу!'; }
+                else { await navigator.clipboard.writeText(link); if(status) status.textContent='Ссылка скопирована — отправь её другу!'; }
+            } catch (err) {
+                if (err?.name === 'AbortError') return;
+                try { const field=document.getElementById('myReferralLink'); field?.select(); document.execCommand('copy'); if(status) status.textContent='Ссылка скопирована — отправь её другу!'; }
+                catch (_) { if(status) status.textContent='Не удалось поделиться автоматически. Скопируй ссылку вручную.'; }
+            }
+        });
         document.getElementById('claimReferralBtn')?.addEventListener('click',async()=>{const code=(document.getElementById('claimReferralCode')?.value||'').trim();const status=document.getElementById('referralStatus');if(!code)return;if(status)status.textContent='Проверяем код…';try{const res=await claimReferralCall({code});if(status)status.textContent=res.data?.message||'Код применён!';const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();}catch(e){if(status)status.textContent=e?.message||'Не удалось применить код.';}});
         document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{const res=await purchasePremiumCall();const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();alert(res.data?.message||'Premium активирован на 30 дней!');}catch(e){alert(e?.message||'Не удалось купить Premium. Убедись, что развернуты Firebase Functions.');}finally{b.disabled=false;}});
         document.getElementById('watchAdCoinsBtn')?.addEventListener('click',async()=>{try{const res=await claimAdCoinsCall();alert(res.data?.message||'Попробуйте позже — реклама пока не подключена.');}catch(e){alert(e?.message||'Попробуйте позже — реклама пока не подключена.');}});
