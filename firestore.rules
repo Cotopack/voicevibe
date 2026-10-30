@@ -4,6 +4,18 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function isMe(uid) { return signedIn() && request.auth.uid == uid; }
 
+    // Roles can be changed only by the developer UID configured in app.js.
+    // Owner UID is hardcoded here and in app.js.
+    match /roles/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.auth.uid == 'NL0ho7jXHmSswotGoe5H5wpA5X43'
+        && request.resource.data.keys().hasOnly(['role'])
+        && request.resource.data.role == 'admin';
+      allow delete: if signedIn()
+        && request.auth.uid == 'NL0ho7jXHmSswotGoe5H5wpA5X43';
+    }
+
     // Publicly readable only to signed-in members; edits remain owner-only.
     match /users/{userId} {
       allow read: if signedIn();
@@ -105,7 +117,15 @@ service cloud.firestore {
         return exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUid))
           || exists(/databases/$(database)/documents/users/$(otherUid)/friends/$(request.auth.uid));
       }
-      allow read: if signedIn() && resource.data.participants is list
+      // Allow a signed-in user to check whether a deterministic chat document
+      // exists; this is needed before creating a new conversation. Existing chats
+      // remain readable only by their participants.
+      allow get: if signedIn() && (
+        !exists(/databases/$(database)/documents/conversations/$(chatId)) ||
+        (resource.data.participants is list
+          && resource.data.participants.hasAny([request.auth.uid]))
+      );
+      allow list: if signedIn() && resource.data.participants is list
         && resource.data.participants.hasAny([request.auth.uid]);
       allow create: if signedIn()
         && request.resource.data.participants is list

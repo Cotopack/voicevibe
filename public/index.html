@@ -37,13 +37,15 @@
       @media(max-width:767px){#chatFriendsList{overflow:auto;overscroll-behavior:contain}}
       #profileModal>div{max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain}
       .profile-avatar-preview{box-shadow:0 0 0 4px rgba(139,92,246,.12),0 12px 32px rgba(0,0,0,.25)}
+    
+        .vv-role-star { display:inline-block; vertical-align:-2px; margin-left:2px; flex:none; }
     </style></head>
 <body class="h-full flex flex-col justify-between overflow-hidden bg-slate-950 text-slate-100">
 
     <!-- Audio Element for Remote Voice -->
     <audio id="remoteAudio" autoplay></audio>
 
-    <!-- Sign-in gate: enable Google and Phone providers in Firebase Console first. -->
+    <!-- Sign-in gate: Google and email/password authentication. -->
     <section id="authOverlay" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md">
       <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
         <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-2xl"><i class="fa-solid fa-microphone-lines"></i></div>
@@ -54,12 +56,6 @@
         <input id="emailInput" type="email" autocomplete="email" placeholder="Электронная почта" class="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-violet-500" />
         <input id="emailPassword" type="password" autocomplete="current-password" placeholder="Пароль (минимум 6 символов)" class="mb-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-violet-500" />
         <div class="grid grid-cols-2 gap-2"><button id="btnEmailLogin" class="rounded-xl border border-violet-500/50 bg-violet-500/15 px-3 py-3 text-sm font-semibold text-violet-200">Войти</button><button id="btnEmailRegister" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold text-white">Создать аккаунт</button></div>
-        <div class="my-4 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-700"></span>ИЛИ ПО НОМЕРУ ТЕЛЕФОНА<span class="h-px flex-1 bg-slate-700"></span></div>
-        <label class="mb-1 block text-xs text-slate-400" for="phoneNumber">Номер телефона с кодом страны</label>
-        <input id="phoneNumber" type="tel" autocomplete="tel" placeholder="+380XXXXXXXXX" class="mb-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-violet-500" />
-        <div id="recaptcha-container" class="mb-3"></div>
-        <button id="btnSendCode" class="w-full rounded-xl border border-violet-500/50 bg-violet-500/15 px-4 py-3 font-semibold text-violet-200 hover:bg-violet-500/25">Отправить SMS-код</button>
-        <div id="phoneCodeArea" class="hidden mt-3 space-y-2"><input id="phoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Код из SMS" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"/><button id="btnVerifyCode" class="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 font-semibold text-white">Подтвердить код</button></div>
         <p id="authMessage" class="hidden mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200" role="status"></p>
         <p class="mt-4 text-center text-xs text-slate-500">Продолжая, ты соглашаешься соблюдать правила сообщества VoiceVibe.</p>
       </div>
@@ -223,9 +219,16 @@
         <div class="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
           <div class="flex items-center gap-4"><div id="socialAvatar" class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-2xl font-bold">V</div><div class="min-w-0 flex-1"><h2 id="socialName" class="truncate text-xl font-bold">Мой профиль</h2><p id="socialHandle" class="text-sm text-violet-300">@nickname</p><p id="socialBio" class="mt-1 break-words text-sm text-slate-400"></p><p class="mt-2 text-xs text-slate-400"><i class="fa-solid fa-user-group mr-1 text-violet-300"></i><span id="socialFriendCount">0 друзей</span></p></div><button id="socialEditProfile" class="rounded-xl border border-slate-700 px-3 py-2 text-sm">Изменить</button></div>
         </div>
-        <button id="socialSignOut" class="w-full rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm font-semibold text-rose-200 hover:bg-rose-500/10"><i class="fa-solid fa-arrow-right-from-bracket mr-2"></i>Выйти из аккаунта</button>
+        <section id="roleManagementPanel" class="hidden rounded-3xl border border-amber-400/30 bg-slate-900/90 p-4 shadow-lg shadow-amber-950/10">
+          <div class="mb-3 flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300"><i class="fa-solid fa-star"></i></span><div><h3 class="font-bold text-white">Управление звёздами</h3><p class="text-xs text-slate-400">Панель разработчика · доступна только владельцу</p></div></div>
+          <label for="roleUserSearch" class="mb-2 block text-sm text-slate-300">Найти пользователя по @нику</label>
+          <div class="flex gap-2"><input id="roleUserSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Например, tania" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-amber-400"/><button id="roleUserSearchBtn" type="button" class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950">Найти</button></div>
+          <p class="mt-2 text-xs text-slate-500">Назначай администратора или снимай звезду. Золотая звезда разработчика закреплена за владельцем проекта.</p>
+          <div id="roleUserSearchResults" class="mt-3 space-y-2"><p class="text-sm text-slate-500">Введи ник, чтобы найти пользователя.</p></div>
+          <p id="roleManagementStatus" class="mt-3 hidden rounded-xl p-3 text-xs"></p>
+        </section>
+                <button id="socialSignOut" class="w-full rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm font-semibold text-rose-200 hover:bg-rose-500/10"><i class="fa-solid fa-arrow-right-from-bracket mr-2"></i>Выйти из аккаунта</button>
         <div class="rounded-3xl border border-slate-800 bg-slate-900/80 p-4"><div class="mb-3 flex items-center justify-between"><h3 class="font-bold">Заявки в друзья</h3><span id="requestCount" class="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs text-violet-200">0</span></div><div id="friendRequestsList" class="space-y-2"><p class="text-sm text-slate-500">Пока нет заявок.</p></div></div>
-        <div class="flex items-center justify-between rounded-3xl border border-slate-800 bg-slate-900/80 p-4"><div><h3 class="font-bold">Мои друзья</h3><p class="mt-1 text-xs text-slate-500">Твои контакты VoiceVibe</p></div><span id="socialFriendCountBadge" class="rounded-full bg-violet-500/20 px-3 py-1 text-sm font-semibold text-violet-200">0</span></div>
         <div class="rounded-3xl border border-slate-800 bg-slate-900/80 p-4"><div id="friendsList" class="space-y-2"><p class="text-sm text-slate-500">Пока нет друзей.</p></div></div>
       </div>
       <div id="socialChatsPanel" class="hidden mx-auto w-full max-w-3xl">

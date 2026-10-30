@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, RecaptchaVerifier, signInWithPhoneNumber, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             collection, 
@@ -11,6 +11,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         const appId = 'voicevibe-1b8c0';
+        // Owner UID: only this account can manage admin stars.
+        const DEVELOPER_UID = 'NL0ho7jXHmSswotGoe5H5wpA5X43';
 
         const firebaseConfig = {
             apiKey: "AIzaSyDFQ4ffsLf857irvY0pTtduk35XeZCM8Ko",
@@ -44,8 +46,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             isPaused: false,
             user: null,
             userProfile: null,
-            confirmationResult: null,
-            recaptchaVerifier: null,
             queueUnsub: null,
             connectingTo: null,
             isHandlingDisconnect: false,
@@ -181,32 +181,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             catch (err) { console.error('Email registration failed:', err); showAuthMessage(authErrorMessage(err)); }
         });
 
-        document.getElementById('btnSendCode')?.addEventListener('click', async () => {
-            const phone = document.getElementById('phoneNumber').value.trim();
-            if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
-                showAuthMessage('Введи номер в международном формате, например +380XXXXXXXXX.'); return;
-            }
-            try {
-                showAuthMessage('');
-                if (!state.recaptchaVerifier) {
-                    state.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'normal' });
-                }
-                const appVerifier = state.recaptchaVerifier;
-                state.confirmationResult = await signInWithPhoneNumber(auth, phone, appVerifier);
-                document.getElementById('phoneCodeArea').classList.remove('hidden');
-                showAuthMessage('SMS-код отправлен. Проверь телефон.');
-            } catch (err) {
-                console.error('Phone sign-in failed:', err);
-                showAuthMessage(authErrorMessage(err));
-                try { await state.recaptchaVerifier?.render(); } catch (_) {}
-            }
-        });
-        document.getElementById('btnVerifyCode')?.addEventListener('click', async () => {
-            const code = document.getElementById('phoneCode').value.trim();
-            if (!state.confirmationResult || !code) { showAuthMessage('Сначала запроси SMS-код.'); return; }
-            try { await state.confirmationResult.confirm(code); }
-            catch (err) { console.error('SMS verification failed:', err); showAuthMessage(authErrorMessage(err)); }
-        });
         function authErrorMessage(err) {
             const messages = {
                 'auth/unauthorized-domain': 'Добавь cotopack.github.io в Firebase Authentication → Settings → Authorized domains.',
@@ -234,7 +208,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (preview) preview.innerHTML = avatarMarkup(p, 'h-14 w-14');
             const removeAvatarButton = document.getElementById('btnRemoveAvatar');
             if (removeAvatarButton) { removeAvatarButton.dataset.remove = 'false'; removeAvatarButton.innerHTML = '<i class="fa-regular fa-trash-can mr-1"></i> Удалить аватар'; removeAvatarButton.classList.remove('border-rose-500/50','text-rose-200'); }
-            document.getElementById('profileEmailText').textContent = state.user?.email || state.user?.phoneNumber || 'Аккаунт VoiceVibe';
+            document.getElementById('profileEmailText').textContent = state.user?.email || 'Аккаунт VoiceVibe';
             const changedAt = Number(p.usernameChangedAt || 0);
             const remaining = Math.max(0, 14*24*60*60*1000 - (Date.now()-changedAt));
             const hint = document.getElementById('usernameChangeHint');
@@ -762,6 +736,35 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let activeConversationId = null;
         let friendRequestsCache = [];
         let friendsCache = [];
+        // Roles are read from a protected Firestore collection, never from editable user profiles.
+        const roleCache = new Map();
+        async function loadRole(uid) {
+            uid = String(uid || '');
+            if (!uid) return 'user';
+            if (uid === DEVELOPER_UID) { roleCache.set(uid, 'developer'); return 'developer'; }
+            if (roleCache.has(uid)) return roleCache.get(uid);
+            let role = 'user';
+            try {
+                const snap = await getDoc(doc(db, 'roles', uid));
+                const value = snap.exists() ? snap.data().role : '';
+                if (value === 'developer' || value === 'admin') role = value;
+            } catch (error) {
+                console.warn('Role lookup failed:', error);
+            }
+            roleCache.set(uid, role);
+            return role;
+        }
+        function roleBadgeMarkup(uid) {
+            const role = roleCache.get(String(uid || '')) || 'user';
+            if (role !== 'developer' && role !== 'admin') return '';
+            const color = role === 'developer' ? '#fbbf24' : '#60a5fa';
+            const label = role === 'developer' ? 'Разработчик' : 'Администратор';
+            // Inline SVG, deliberately not an emoji.
+            return `<svg class="vv-role-star" viewBox="0 0 24 24" width="15" height="15" aria-label="${label}" title="${label}" role="img" style="color:${color};filter:drop-shadow(0 0 3px ${color}55)"><path fill="currentColor" d="M12 1.8l2.95 6 6.62.96-4.79 4.67 1.13 6.59L12 16.91l-5.91 3.11 1.13-6.59-4.79-4.67 6.62-.96L12 1.8z"/></svg>`;
+        }
+        async function preloadRoles(items, key = 'uid') {
+            await Promise.all((items || []).map(item => loadRole(item?.[key] || item?.uid || item?.id || item?.fromUid)));
+        }
 
         async function compressAvatar(file) {
             const bitmap = await createImageBitmap(file);
@@ -804,13 +807,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!state.user) return;
             const p = state.userProfile || {};
             document.getElementById('socialAvatar').innerHTML = avatarMarkup(p, 'h-20 w-20');
-            document.getElementById('socialName').textContent = p.displayName || 'Настрой профиль';
+            const socialName = document.getElementById('socialName');
+            const ownUid = state.user.uid;
+            socialName.innerHTML = `${escapeHTML(p.displayName || 'Настрой профиль')} ${roleBadgeMarkup(ownUid)}`;
+            if (!roleCache.has(ownUid)) loadRole(ownUid).then(() => {
+                if (state.user?.uid === ownUid) renderSocialProfile();
+            });
             document.getElementById('socialHandle').textContent = p.username ? '@' + p.username : 'Выбери уникальный никнейм';
             document.getElementById('socialBio').textContent = p.bio || 'Добавь короткое описание о себе.';
             const count = friendsCache.length;
             const countText = count === 1 ? '1 друг' : (count >= 2 && count <= 4 ? `${count} друга` : `${count} друзей`);
             const countEl = document.getElementById('socialFriendCount'); if (countEl) countEl.textContent = countText;
-            const badge = document.getElementById('socialFriendCountBadge'); if (badge) badge.textContent = String(count);
         }
         function showTab(tab) {
             currentTab = tab;
@@ -824,7 +831,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             socialChatsPanel.classList.toggle('hidden', !chatsTab);
             socialSearchPanel?.classList.toggle('hidden', tab !== 'search');
             if (tab !== 'chats') { socialChatsPanel.classList.remove('chat-open'); }
-            if (tab === 'search') { setTimeout(() => document.getElementById('socialSearchInput')?.focus(), 100); }
             document.querySelectorAll('.nav-tab').forEach(b => {
                 const selected = b.dataset.tab === tab;
                 b.classList.toggle('text-violet-300', selected);
@@ -879,11 +885,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderFriends(); renderChatFriends();
             }, err => console.warn('Friends listener:', err)));
         }
-        function renderFriendRequests() {
+        async function renderFriendRequests() {
             const host = document.getElementById('friendRequestsList');
             document.getElementById('requestCount').textContent = String(friendRequestsCache.length);
             if (!friendRequestsCache.length) { host.innerHTML = '<p class="text-sm text-slate-500">Пока нет заявок.</p>'; return; }
-            host.innerHTML = friendRequestsCache.map(r => `<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-slate-950/80 p-3">${avatarMarkup(r,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(r.displayName || 'Пользователь')} <span class="ml-1 text-xs font-normal text-violet-300">хочет добавить вас</span></p><p class="text-xs text-slate-400">@${escapeHTML(r.username || 'user')}</p></div><button data-accept="${escapeHTML(r.fromUid)}" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold">Принять</button><button data-reject="${escapeHTML(r.fromUid)}" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs">Отклонить</button></div>`).join('');
+            await preloadRoles(friendRequestsCache, 'fromUid');
+            host.innerHTML = friendRequestsCache.map(r => `<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-slate-950/80 p-3">${avatarMarkup(r,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(r.displayName || 'Пользователь')} ${roleBadgeMarkup(r.fromUid)} <span class="ml-1 text-xs font-normal text-violet-300">хочет добавить вас</span></p><p class="text-xs text-slate-400">@${escapeHTML(r.username || 'user')}</p></div><button data-accept="${escapeHTML(r.fromUid)}" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold">Принять</button><button data-reject="${escapeHTML(r.fromUid)}" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs">Отклонить</button></div>`).join('');
             host.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => acceptFriend(b.dataset.accept)));
             host.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => rejectFriend(b.dataset.reject)));
         }
@@ -897,7 +904,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function updateConversationPresence(uid) {
             const f = friendsCache.find(x => x.uid === uid) || {};
             const header = document.getElementById('conversationHeader');
-            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100">${escapeHTML(f.displayName || 'Друг')}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button></div>`;
+            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button></div>`;
             document.getElementById('conversationBack')?.addEventListener('click', closeConversation);
             document.getElementById('conversationFriendProfile')?.addEventListener('click', () => openFriendProfile(uid));
         }
@@ -913,29 +920,32 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const game = document.getElementById('snakeChallengeBtn'); if (game) game.disabled = true;
             renderChatFriends();
         }
-        function openFriendProfile(uid) {
+        async function openFriendProfile(uid) {
             const f = friendsCache.find(x => String(x.uid || x.id) === String(uid)); if (!f) return;
+            await loadRole(uid);
             const name = escapeHTML(f.displayName || 'Друг'); const nick = escapeHTML(f.username || 'user');
             const photo = f.photoURL ? `<img src="${escapeHTML(f.photoURL)}" alt="Аватар ${name}" class="h-28 w-28 rounded-full object-cover">` : avatarMarkup(f,'h-28 w-28');
             let modal = document.getElementById('friendProfileModal');
             if (!modal) { modal=document.createElement('div'); modal.id='friendProfileModal'; modal.className='fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/90 p-5 backdrop-blur'; modal.innerHTML='<div class="relative w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl"><button id="friendProfileClose" class="absolute right-3 top-3 rounded-xl p-2 text-slate-400" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button><div id="friendProfileContent" class="flex flex-col items-center gap-3"></div></div>'; document.body.appendChild(modal); modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();}); modal.querySelector('#friendProfileClose').addEventListener('click',()=>modal.remove()); }
-            modal.querySelector('#friendProfileContent').innerHTML = `${photo}<h2 class="text-xl font-bold">${name}</h2><p class="text-violet-300">@${nick}</p><p class="text-sm text-slate-400">${escapeHTML(f.bio || '')}</p>`;
+            modal.querySelector('#friendProfileContent').innerHTML = `${photo}<h2 class="text-xl font-bold">${name} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${nick}</p><p class="text-sm text-slate-400">${escapeHTML(f.bio || '')}</p>`;
         }
-        function renderFriends() {
+        async function renderFriends() {
             const host = document.getElementById('friendsList');
             if (!friendsCache.length) { host.innerHTML = '<p class="text-sm text-slate-500">Пока нет друзей. Добавить можно во время разговора в рулетке.</p>'; return; }
+            await preloadRoles(friendsCache);
             host.innerHTML = friendsCache.map(f => {
                 const uid=f.uid || f.id;
-                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')}</p><p class="text-xs text-slate-500">@${escapeHTML(f.username || 'user')}</p>${presenceLabel(uid)}</div><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
+                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</p><p class="text-xs text-slate-500">@${escapeHTML(f.username || 'user')}</p>${presenceLabel(uid)}</div><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
             }).join('');
             host.querySelectorAll('[data-chatfriend]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.chatfriend)));
         }
-        function renderChatFriends() {
+        async function renderChatFriends() {
             const host = document.getElementById('chatFriendsList');
             if (!friendsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">У тебя пока нет друзей.</p>'; return; }
+            await preloadRoles(friendsCache);
             host.innerHTML = friendsCache.map(f => {
                 const uid=f.uid || f.id;
-                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')}</span>${presenceLabel(uid)}</span><span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(f.displayName || 'Друг')} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span class="text-xs text-slate-500">›</span></button>`;
             }).join('');
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
         }
@@ -944,18 +954,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const socialSearchInput = document.getElementById('socialSearchInput');
         const socialSearchResults = document.getElementById('socialSearchResults');
 
-        function renderSearchUsers(users, host) {
+        async function renderSearchUsers(users, host, generation = null) {
             if (!users.length) {
                 host.innerHTML = '<p class="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">Пользователь с таким @nickname не найден.</p>';
                 return;
             }
+            await preloadRoles(users);
+            if (generation !== null && generation !== searchGeneration) return;
             host.innerHTML = users.map(u => {
                 const uid = String(u.uid || u.id);
                 const isFriend = friendsCache.some(f => String(f.uid || f.id) === uid);
                 const pending = !!u.requestPending;
                 return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
                     <div class="shrink-0">${avatarMarkup(u,'h-12 w-12')}</div>
-                    <div class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold text-white">${escapeHTML(u.displayName || 'Пользователь')}</span><span class="text-xs text-violet-300">@${escapeHTML(u.username || '')}</span></div>
+                    <div class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold text-white">${escapeHTML(u.displayName || 'Пользователь')} ${roleBadgeMarkup(uid)}</span><span class="text-xs text-violet-300">@${escapeHTML(u.username || '')}</span></div>
                     ${isFriend ? '<span class="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">Друг</span>' :
                     pending ? '<span class="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">Заявка отправлена</span>' :
                     `<button type="button" data-addfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500">Добавить</button>`}
@@ -1020,6 +1032,77 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return users.slice(0, 12);
         }
 
+        // Developer-only role management panel. Server-side Firestore Rules enforce ownership.
+        const roleUserSearch = document.getElementById('roleUserSearch');
+        const roleUserSearchBtn = document.getElementById('roleUserSearchBtn');
+        const roleUserSearchResults = document.getElementById('roleUserSearchResults');
+        const roleManagementStatus = document.getElementById('roleManagementStatus');
+        let roleSearchTimer = null;
+        let roleSearchGeneration = 0;
+        function setRoleManagementStatus(message, isError = false) {
+            if (!roleManagementStatus) return;
+            roleManagementStatus.textContent = message;
+            roleManagementStatus.classList.remove('hidden', 'bg-rose-500/10', 'text-rose-200', 'bg-emerald-500/10', 'text-emerald-200');
+            roleManagementStatus.classList.add(isError ? 'bg-rose-500/10' : 'bg-emerald-500/10', isError ? 'text-rose-200' : 'text-emerald-200');
+        }
+        async function searchRoleUsers() {
+            if (!state.user || state.user.uid !== DEVELOPER_UID) return;
+            const value = roleUserSearch?.value?.trim() || '';
+            if (value.replace(/^@/, '').length < 2) {
+                roleUserSearchResults.innerHTML = '<p class="text-sm text-slate-500">Введи минимум 2 символа ника.</p>';
+                return;
+            }
+            const generation = ++roleSearchGeneration;
+            roleUserSearchResults.innerHTML = '<p class="text-sm text-slate-400">Ищем пользователей…</p>';
+            try {
+                const users = await findUsersByUsername(value);
+                if (generation !== roleSearchGeneration) return;
+                if (!users.length) {
+                    roleUserSearchResults.innerHTML = '<p class="text-sm text-slate-500">Пользователи не найдены. Проверь @ник.</p>';
+                    return;
+                }
+                await Promise.all(users.map(u => loadRole(u.uid)));
+                roleUserSearchResults.innerHTML = users.map(u => {
+                    const role = roleCache.get(u.uid) || 'user';
+                    const status = role === 'admin' ? '<span class="text-xs font-semibold text-sky-300">Синяя звезда · администратор</span>' : '<span class="text-xs text-slate-500">Без звезды</span>';
+                    const action = role === 'admin'
+                        ? `<button type="button" data-role-remove="${escapeHTML(u.uid)}" class="rounded-xl border border-rose-400/30 px-3 py-2 text-xs font-semibold text-rose-200">Снять звезду</button>`
+                        : `<button type="button" data-role-admin="${escapeHTML(u.uid)}" class="rounded-xl bg-sky-500 px-3 py-2 text-xs font-bold text-slate-950">Назначить админом</button>`;
+                    return `<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3"><div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-700 font-bold">${avatarMarkup(u,'h-10 w-10')}</div><div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-white">${escapeHTML(u.displayName || 'Пользователь')} ${roleBadgeMarkup(u.uid)}</p><p class="truncate text-xs text-violet-300">@${escapeHTML(u.username || '')}</p><div class="mt-1">${status}</div></div>${action}</div>`;
+                }).join('');
+                roleUserSearchResults.querySelectorAll('[data-role-admin]').forEach(btn => btn.addEventListener('click', () => changeUserRole(btn.dataset.roleAdmin, 'admin')));
+                roleUserSearchResults.querySelectorAll('[data-role-remove]').forEach(btn => btn.addEventListener('click', () => changeUserRole(btn.dataset.roleRemove, 'user')));
+            } catch (error) {
+                console.error('Role search failed:', error);
+                roleUserSearchResults.innerHTML = '<p class="text-sm text-rose-200">Не удалось найти пользователей. Проверь Firestore Rules и индекс/поле username.</p>';
+            }
+        }
+        async function changeUserRole(uid, role) {
+            if (!state.user || state.user.uid !== DEVELOPER_UID) {
+                setRoleManagementStatus('Нет доступа к панели управления.', true);
+                return;
+            }
+            try {
+                if (role === 'admin') await setDoc(doc(db, 'roles', uid), { role: 'admin' });
+                else await deleteDoc(doc(db, 'roles', uid));
+                roleCache.delete(uid);
+                await loadRole(uid);
+                setRoleManagementStatus(role === 'admin' ? 'Синяя звезда администратора назначена.' : 'Звезда снята.');
+                await searchRoleUsers();
+            } catch (error) {
+                console.error('Role update failed:', error);
+                setRoleManagementStatus(error?.code === 'permission-denied'
+                    ? 'Firebase запретил изменение роли. Проверь, что UID разработчика одинаковый в app.js и firestore.rules, затем опубликуй Rules.'
+                    : (error.message || 'Не удалось изменить роль.'), true);
+            }
+        }
+        roleUserSearchBtn?.addEventListener('click', searchRoleUsers);
+        roleUserSearch?.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchRoleUsers(); } });
+        roleUserSearch?.addEventListener('input', () => {
+            clearTimeout(roleSearchTimer);
+            roleSearchTimer = setTimeout(searchRoleUsers, 350);
+        });
+
         socialSearchInput?.addEventListener('input', event => {
             clearTimeout(friendSearchTimer);
             const value = event.target.value.trim();
@@ -1038,7 +1121,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 try {
                     const users = await findUsersByUsername(value);
                     if (generation !== searchGeneration) return;
-                    renderSearchUsers(users, socialSearchResults);
+                    renderSearchUsers(users, socialSearchResults, generation);
                 } catch (error) {
                     if (generation !== searchGeneration) return;
                     console.error('User search failed:', error);
