@@ -30,3 +30,12 @@ button[aria-busy="true"]{cursor:progress}
 @media(prefers-reduced-motion:reduce){.vv-spinner,.vv-loading-state,#storyViewer video,#storyViewer img,.vv-avatar-story-wrap{animation:none!important;transition:none!important}#messagesList{scroll-behavior:auto}}
 .vv-premium-name{color:#c4b5fd!important;text-shadow:0 0 12px rgba(167,139,250,.45);}
 #stickersGrid img{transition:transform .15s ease}#stickersGrid button:hover img{transform:scale(1.06)}
+
+/* Dark stories and centered Premium card */
+#storiesModal{color:#e2e8f0}
+#storiesModal .story-upload-card{color:#f1f5f9}
+#storiesModal .music-waveform{border-radius:12px}
+#premiumCenterCard{margin-inline:auto;isolation:isolate}
+#premiumCenterCard button{transition:transform .15s ease,filter .15s ease}
+#premiumCenterCard button:hover{filter:brightness(1.08)}
+#premiumCenterCard button:active{transform:scale(.985)}
