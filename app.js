@@ -719,6 +719,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const socialScreen = document.getElementById('socialScreen');
         const socialProfilePanel = document.getElementById('socialProfilePanel');
         const socialChatsPanel = document.getElementById('socialChatsPanel');
+        const socialSearchPanel = document.getElementById('socialSearchPanel');
         let currentTab = 'roulette';
         let activeFriend = null;
         let activeConversationId = null;
@@ -773,14 +774,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function showTab(tab) {
             currentTab = tab;
             const roulette = tab === 'roulette';
-            const chatsTab = tab === 'chats' || tab === 'search';
+            const chatsTab = tab === 'chats';
             screenAgeSelect.classList.toggle('hidden', !roulette || !!state.selectedAge);
             screenChat.classList.toggle('hidden', !roulette || !state.selectedAge);
             socialScreen.classList.toggle('hidden', roulette);
             socialProfilePanel.classList.toggle('hidden', tab !== 'profile');
             socialChatsPanel.classList.toggle('hidden', !chatsTab);
+            socialSearchPanel?.classList.toggle('hidden', tab !== 'search');
             if (tab !== 'chats') { socialChatsPanel.classList.remove('chat-open'); }
-            if (tab === 'search') { setTimeout(() => document.getElementById('friendSearchInput')?.focus(), 80); }
+            if (tab === 'search') { setTimeout(() => document.getElementById('socialSearchInput')?.focus(), 100); }
             document.querySelectorAll('.nav-tab').forEach(b => {
                 const selected = b.dataset.tab === tab;
                 b.classList.toggle('text-violet-300', selected);
@@ -896,31 +898,116 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
         }
         let friendSearchTimer = null;
-        document.getElementById('friendSearchInput')?.addEventListener('input', event => {
+        let searchGeneration = 0;
+        const socialSearchInput = document.getElementById('socialSearchInput');
+        const socialSearchResults = document.getElementById('socialSearchResults');
+
+        function renderSearchUsers(users, host) {
+            if (!users.length) {
+                host.innerHTML = '<p class="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">Пользователь с таким @nickname не найден.</p>';
+                return;
+            }
+            host.innerHTML = users.map(u => {
+                const uid = String(u.uid || u.id);
+                const isFriend = friendsCache.some(f => String(f.uid || f.id) === uid);
+                const pending = !!u.requestPending;
+                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+                    <div class="shrink-0">${avatarMarkup(u,'h-12 w-12')}</div>
+                    <div class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold text-white">${escapeHTML(u.displayName || 'Пользователь')}</span><span class="text-xs text-violet-300">@${escapeHTML(u.username || '')}</span></div>
+                    ${isFriend ? '<span class="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">Друг</span>' :
+                    pending ? '<span class="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">Заявка отправлена</span>' :
+                    `<button type="button" data-addfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500">Добавить</button>`}
+                </div>`;
+            }).join('');
+            host.querySelectorAll('[data-addfriend]').forEach(button => button.addEventListener('click', async () => {
+                button.disabled = true; button.textContent = 'Отправляем…';
+                try {
+                    await sendFriendRequest(button.dataset.addfriend);
+                    button.outerHTML = '<span class="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">Заявка отправлена</span>';
+                } catch (error) {
+                    console.error('Friend request failed:', error);
+                    button.disabled = false; button.textContent = 'Повторить';
+                    const msg = error.code === 'permission-denied'
+                        ? 'Firebase запретил отправку заявки. Проверь правила Firestore.'
+                        : (error.message || 'Не удалось отправить заявку.');
+                    host.insertAdjacentHTML('afterbegin', `<p class="rounded-xl bg-rose-500/10 p-3 text-xs text-rose-200">${escapeHTML(msg)}</p>`);
+                }
+            }));
+        }
+
+        async function findUsersByUsername(raw) {
+            const value = normalizeUsername(String(raw || '').trim().replace(/^@/, ''));
+            if (value.length < 2) return [];
+            const found = new Map();
+            // The username reservation document is the most reliable exact lookup.
+            try {
+                const reservation = await getDoc(doc(db, 'usernames', value));
+                if (reservation.exists()) {
+                    const ownerUid = reservation.data().uid;
+                    if (ownerUid && ownerUid !== state.user?.uid) {
+                        const profile = await getDoc(doc(db, 'users', ownerUid));
+                        if (profile.exists()) found.set(ownerUid, { uid: ownerUid, ...profile.data() });
+                    }
+                }
+            } catch (error) { console.warn('Exact username lookup:', error); }
+            // Prefix query also supports users created before username reservations were added.
+            try {
+                const q = query(collection(db, 'users'),
+                    where('username', '>=', value),
+                    where('username', '<=', value + '\uf8ff'),
+                    limit(12));
+                const snap = await getDocs(q);
+                snap.docs.forEach(d => {
+                    if (d.id !== state.user?.uid) found.set(d.id, { uid: d.id, ...d.data() });
+                });
+            } catch (error) {
+                if (!found.size) throw error;
+                console.warn('Username prefix lookup:', error);
+            }
+            const users = [...found.values()].filter(u =>
+                normalizeUsername(u.username || '').startsWith(value));
+            for (const user of users) {
+                const uid = user.uid;
+                if (!friendsCache.some(f => String(f.uid || f.id) === uid)) {
+                    try {
+                        const pending = await getDoc(doc(db, 'users', uid, 'friendRequests', state.user.uid));
+                        user.requestPending = pending.exists() && pending.data().status === 'pending';
+                    } catch (_) { user.requestPending = false; }
+                }
+            }
+            return users.slice(0, 12);
+        }
+
+        socialSearchInput?.addEventListener('input', event => {
             clearTimeout(friendSearchTimer);
-            const value = normalizeUsername(event.target.value.replace(/^@/,''));
-            const host = document.getElementById('friendSearchResults');
-            if (!value) { host.innerHTML = ''; return; }
-            if (value.length < 2) { host.innerHTML = '<p class="px-2 text-xs text-slate-500">Введи минимум 2 символа.</p>'; return; }
-            host.innerHTML = '<p class="px-2 text-xs text-slate-400">Ищем пользователей…</p>';
+            const value = event.target.value.trim();
+            const generation = ++searchGeneration;
+            if (!value || value === '@') {
+                socialSearchResults.innerHTML = '<p class="text-sm text-slate-500">Введи ник пользователя, например tania.</p>';
+                return;
+            }
+            const normalized = normalizeUsername(value.replace(/^@/, ''));
+            if (normalized.length < 2) {
+                socialSearchResults.innerHTML = '<p class="text-sm text-slate-500">Введи минимум 2 символа ника.</p>';
+                return;
+            }
+            socialSearchResults.innerHTML = '<p class="text-sm text-slate-400">Ищем пользователей…</p>';
             friendSearchTimer = setTimeout(async () => {
                 try {
-                    const q = query(collection(db,'users'), where('username','>=',value), where('username','<=',value+'\\uf8ff'), limit(8));
-                    const snap = await getDocs(q);
-                    const users = snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>u.uid!==state.user?.uid);
-                    if (!users.length) { host.innerHTML = '<p class="px-2 text-xs text-slate-500">Никого не нашли. Проверь @nickname.</p>'; return; }
-                    host.innerHTML = users.map(u => {
-                        const isFriend = friendsCache.some(f=>(f.uid||f.id)===u.uid);
-                        return `<div class="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-2">${avatarMarkup(u,'h-9 w-9')}<div class="min-w-0 flex-1"><p class="truncate text-xs font-semibold">${escapeHTML(u.displayName||'Пользователь')}</p><p class="text-[11px] text-slate-500">@${escapeHTML(u.username||'')}</p></div>${isFriend?'<span class="text-[11px] text-emerald-400">Друг</span>':`<button data-addfriend="${escapeHTML(u.uid)}" class="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-semibold">Добавить</button>`}</div>`;
-                    }).join('');
-                    host.querySelectorAll('[data-addfriend]').forEach(b=>b.addEventListener('click',async()=>{
-                        b.disabled=true; b.textContent='Отправляем…';
-                        try { await sendFriendRequest(b.dataset.addfriend); b.textContent='✓ Заявка отправлена'; b.classList.remove('bg-violet-600'); b.classList.add('bg-slate-700','text-emerald-300'); }
-                        catch(err) { console.error('Friend request failed',err); b.disabled=false; b.textContent='Повторить'; alert(err.code==='permission-denied'?'Firebase запретил отправку заявки. Проверь Firestore Rules.':'Не удалось отправить заявку.'); }
-                    }));
-                } catch(err) { console.error('User search failed:',err); host.innerHTML='<p class="px-2 text-xs text-rose-300">Не удалось выполнить поиск. Проверь доступ Firestore.</p>'; }
-            },300);
+                    const users = await findUsersByUsername(value);
+                    if (generation !== searchGeneration) return;
+                    renderSearchUsers(users, socialSearchResults);
+                } catch (error) {
+                    if (generation !== searchGeneration) return;
+                    console.error('User search failed:', error);
+                    const detail = error.code === 'permission-denied'
+                        ? 'Нет доступа к профилям. Проверь Firestore Rules: чтение users и usernames для авторизованных пользователей.'
+                        : 'Не удалось выполнить поиск. Проверь подключение и Firestore.';
+                    socialSearchResults.innerHTML = `<p class="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-200">${detail}</p>`;
+                }
+            }, 250);
         });
+
         async function sendFriendRequest(targetUid) {
             if (!state.user || !targetUid || targetUid === state.user.uid) return;
             const existing = await getDoc(doc(db,'users',state.user.uid,'friends',targetUid));

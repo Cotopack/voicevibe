@@ -226,8 +226,15 @@
       </div>
       <div id="socialChatsPanel" class="hidden mx-auto w-full max-w-3xl">
         <div class="grid min-h-[65vh] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/80 md:grid-cols-[240px_1fr]">
-          <aside class="border-b border-slate-800 p-3 md:border-b-0 md:border-r"><h2 class="mb-3 px-2 text-lg font-bold">Чаты</h2><label class="mb-2 block px-2 text-xs text-slate-400">Найти пользователя</label><input id="friendSearchInput" type="search" autocomplete="off" placeholder="@nickname" class="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"/><div id="friendSearchResults" class="mb-3 space-y-2"></div><div id="chatFriendsList" class="space-y-1"><p class="p-2 text-sm text-slate-500">Добавь друга, чтобы начать переписку.</p></div></aside>
+          <aside class="border-b border-slate-800 p-3 md:border-b-0 md:border-r"><h2 class="mb-3 px-2 text-lg font-bold">Чаты</h2><div id="chatFriendsList" class="space-y-1"><p class="p-2 text-sm text-slate-500">Добавь друга, чтобы начать переписку.</p></div></aside>
           <section id="conversationPane" class="hidden flex min-h-[55vh] flex-col"><div id="conversationHeader" class="border-b border-slate-800 p-4 text-sm text-slate-400">Выбери друга</div><div id="messagesList" class="flex-1 space-y-2 overflow-y-auto p-4"></div><form id="messageForm" class="flex gap-2 border-t border-slate-800 p-3"><input id="messageInput" maxlength="1000" placeholder="Написать сообщение…" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none focus:border-violet-500" disabled/><button id="sendMessageBtn" class="rounded-xl bg-violet-600 px-4 text-white disabled:opacity-40" disabled aria-label="Отправить"><i class="fa-solid fa-paper-plane"></i></button></form><div class="flex justify-end px-3 pb-3"><button id="snakeChallengeBtn" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 disabled:opacity-40" disabled><i class="fa-solid fa-gamepad mr-1"></i> Доступные игры</button></div></section>
+        </div>
+      </div>
+      <div id="socialSearchPanel" class="hidden mx-auto w-full max-w-2xl">
+        <div class="rounded-3xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+          <div class="mb-4"><h2 class="text-xl font-bold">Найти людей</h2><p class="mt-1 text-sm text-slate-400">Ищи по уникальному @nickname и отправляй заявку в друзья.</p></div>
+          <div class="flex gap-2"><span class="flex items-center rounded-xl border border-slate-700 bg-slate-950 px-3 text-violet-300">@</span><input id="socialSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="nickname" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-violet-500"/></div>
+          <div id="socialSearchResults" class="mt-4 space-y-3"><p class="text-sm text-slate-500">Введи ник пользователя, например tania.</p></div>
         </div>
       </div>
     </section>
