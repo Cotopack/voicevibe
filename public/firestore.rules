@@ -29,9 +29,6 @@ service cloud.firestore {
       allow update: if isMe(userId)
         && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt','bannerURL','referralCode','vibecoinBalance','premiumUntil','referredBy','referredAt'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','username','photoURL','bio','updatedAt','usernameChangedAt','bannerURL'])
-        // Changing/removing a profile banner requires an active Premium subscription.
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['bannerURL'])
-            || (resource.data.premiumUntil is int && resource.data.premiumUntil > request.time.toMillis()))
         && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 30
         && request.resource.data.username is string && request.resource.data.username.size() <= 24
         && request.resource.data.photoURL is string
