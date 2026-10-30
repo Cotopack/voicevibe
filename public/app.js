@@ -1033,45 +1033,110 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const wave=document.getElementById('storyMusicWave'); if(!wave)return;
             wave.innerHTML=Array.from({length:56},(_,i)=>`<span style="height:${8+Math.abs(Math.sin(i*1.71)*Math.cos(i*.37))*31}px"></span>`).join('');
         }
+        let sourceMusicDuration = 30;
         function updateMusicTrimLabel() {
-            const start=Math.max(0,Number(musicStartInput?.value)||0), length=Math.max(3,Number(musicLengthInput?.value)||10);
-            const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`От ${start} до ${start+length} сек. · ${length} сек.`;
+            const maxStart = Math.max(0, Math.floor(sourceMusicDuration - 3));
+            if (musicStartInput) { musicStartInput.max = String(maxStart); if (Number(musicStartInput.value) > maxStart) musicStartInput.value = String(maxStart); }
+            const start=Math.max(0,Number(musicStartInput?.value)||0);
+            const maxLength=Math.max(3,Math.min(10,Math.floor(sourceMusicDuration-start)));
+            if(musicLengthInput){musicLengthInput.max=String(maxLength);if(Number(musicLengthInput.value)>maxLength)musicLengthInput.value=String(maxLength);}
+            const length=Math.max(3,Math.min(maxLength,Number(musicLengthInput?.value)||10));
+            const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`Обрезка: ${start}–${start+length} сек. · в историю попадёт только этот фрагмент`;
         }
         function makeRoyaltyFreeTrack(key) {
             const track=musicTracks[key]; if(!track) return null;
-            const rate=22050, duration=30, total=Math.floor(rate*duration), data=new Float32Array(total), step=duration/track.notes.length;
-            track.notes.forEach((freq,i)=>{ if(!freq)return; const from=Math.floor(i*step*rate), to=Math.min(total,Math.floor((i+1)*step*rate)); for(let n=from;n<to;n++){const t=(n-from)/rate, fade=Math.min(1,t*18,((to-n)/rate)*12); data[n]+=Math.sin(2*Math.PI*freq*t)*0.16*fade + Math.sin(2*Math.PI*(freq/2)*t)*0.035*fade; }});
-            const buffer=new ArrayBuffer(44+total*2), view=new DataView(buffer);
+            const rate=44100, duration=30, total=Math.floor(rate*duration), data=new Float32Array(total), step=duration/track.notes.length;
+            track.notes.forEach((freq,i)=>{
+                const from=Math.floor(i*step*rate), to=Math.min(total,Math.floor((i+1)*step*rate));
+                for(let n=from;n<to;n++){
+                    const t=(n-from)/rate, local=(n-from)/(Math.max(1,to-from));
+                    const fade=Math.min(1,t*16,(1-local)*14);
+                    if(freq){
+                        const beat=key==='pulse'||key==='lofi' ? (1+0.12*Math.sin(2*Math.PI*4*t)) : 1;
+                        data[n]+=(Math.sin(2*Math.PI*freq*t)+0.28*Math.sin(2*Math.PI*freq*2*t))*0.13*fade*beat;
+                    } else if(key==='pulse' && local<0.12) {
+                        data[n]+=Math.sin(2*Math.PI*55*t)*0.12*Math.max(0,1-local/0.12);
+                    }
+                }
+            });
+            return audioBufferToWavFile(data,rate,`voicevibe-${key}.wav`);
+        }
+        function audioBufferToWavFile(samples, sampleRate, filename='voicevibe-trimmed.wav') {
+            const total=samples.length, buffer=new ArrayBuffer(44+total*2), view=new DataView(buffer);
             const write=(o,str)=>{for(let i=0;i<str.length;i++)view.setUint8(o+i,str.charCodeAt(i));};
-            write(0,'RIFF');view.setUint32(4,36+total*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,total*2,true);
-            for(let i=0;i<total;i++)view.setInt16(44+i*2,Math.max(-1,Math.min(1,data[i]))*32767,true);
-            return new File([buffer],`voicevibe-${key}.wav`,{type:'audio/wav'});
+            write(0,'RIFF');view.setUint32(4,36+total*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,sampleRate,true);view.setUint32(28,sampleRate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,total*2,true);
+            for(let i=0;i<total;i++)view.setInt16(44+i*2,Math.max(-1,Math.min(1,samples[i]))*32767,true);
+            return new File([buffer],filename,{type:'audio/wav'});
+        }
+        async function decodeAudioFile(file) {
+            const Ctx=window.AudioContext||window.webkitAudioContext;
+            if(!Ctx) throw new Error('Этот браузер не поддерживает обработку аудио. Попробуй Chrome или Edge.');
+            const ctx=new Ctx();
+            try { const buffer=await ctx.decodeAudioData(await file.arrayBuffer()); return {buffer,ctx}; }
+            catch(e){await ctx.close().catch(()=>{});throw new Error('Не удалось прочитать аудио. Попробуй MP3, WAV, M4A или OGG.');}
+        }
+        async function trimMusicFile(file,start,length) {
+            const {buffer,ctx}=await decodeAudioFile(file);
+            try {
+                const actualStart=Math.min(Math.max(0,start),Math.max(0,buffer.duration-0.1));
+                const actualLength=Math.max(0.1,Math.min(length,buffer.duration-actualStart));
+                const rate=buffer.sampleRate, count=Math.max(1,Math.floor(actualLength*rate)), mono=new Float32Array(count);
+                for(let ch=0;ch<buffer.numberOfChannels;ch++){
+                    const channel=buffer.getChannelData(ch);
+                    for(let i=0;i<count;i++) mono[i]+=(channel[Math.floor(actualStart*rate)+i]||0)/buffer.numberOfChannels;
+                }
+                // Fade edges to prevent clicks; this is a real audio cut, not just playback metadata.
+                const fade=Math.min(Math.floor(rate*0.025),Math.floor(count/2));
+                for(let i=0;i<fade;i++){const gain=i/Math.max(1,fade);mono[i]*=gain;mono[count-1-i]*=gain;}
+                return audioBufferToWavFile(mono,rate,`voicevibe-cut-${Math.round(actualStart)}-${Math.round(actualStart+actualLength)}.wav`);
+            } finally { await ctx.close().catch(()=>{}); }
         }
         function setMusicPreviewFile(file) {
             const preview=document.getElementById('storyMusicPreview'); if(!preview)return;
             if(storyMusicPreviewURL) URL.revokeObjectURL(storyMusicPreviewURL);
             storyMusicPreviewURL=file?URL.createObjectURL(file):null; preview.pause(); preview.src=storyMusicPreviewURL||''; preview.load();
-            if(musicStartInput) musicStartInput.max='180'; updateMusicTrimLabel();
+            sourceMusicDuration=30;
+            if(file){
+                preview.onloadedmetadata=()=>{if(Number.isFinite(preview.duration)&&preview.duration>0){sourceMusicDuration=preview.duration;updateMusicTrimLabel();}};
+                preview.onerror=()=>{storyStatus.textContent='Этот аудиофайл не удалось предварительно прослушать. Попробуй другой формат.';storyStatus.classList.remove('hidden');};
+            }
+            updateMusicTrimLabel();
         }
         drawMusicWave(); updateMusicTrimLabel();
         musicStartInput?.addEventListener('input', updateMusicTrimLabel);
         musicLengthInput?.addEventListener('input', updateMusicTrimLabel);
         storyMusicInput?.addEventListener('change', () => {
-            if(storyMusicInput.files?.[0]) { generatedMusicFile=null; if(musicLibrarySelect)musicLibrarySelect.value=''; setMusicPreviewFile(storyMusicInput.files[0]); }
+            const file=storyMusicInput.files?.[0];
+            if(file) { generatedMusicFile=null; if(musicLibrarySelect)musicLibrarySelect.value=''; setMusicPreviewFile(file); }
+            const name=document.getElementById('storyMusicName');if(name)name.textContent=file?.name||'Файл не выбран';
         });
         musicLibrarySelect?.addEventListener('change', () => {
             const key=musicLibrarySelect.value; generatedMusicFile=key?makeRoyaltyFreeTrack(key):null;
-            if(generatedMusicFile){ if(storyMusicInput)storyMusicInput.value=''; setMusicPreviewFile(generatedMusicFile); }
-            else setMusicPreviewFile(storyMusicInput?.files?.[0]||null);
+            if(generatedMusicFile){ if(storyMusicInput)storyMusicInput.value=''; const name=document.getElementById('storyMusicName');if(name)name.textContent=`Оригинальная мелодия: ${musicTracks[key].name}`; setMusicPreviewFile(generatedMusicFile); }
+            else {setMusicPreviewFile(storyMusicInput?.files?.[0]||null);const name=document.getElementById('storyMusicName');if(name)name.textContent=storyMusicInput?.files?.[0]?.name||'Файл не выбран';}
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
-            const preview=document.getElementById('storyMusicPreview'); if(!preview?.src){storyStatus.textContent='Сначала загрузи аудио или выбери мелодию из коллекции.';storyStatus.classList.remove('hidden');return;}
-            const start=Math.max(0,Number(musicStartInput?.value)||0), length=Math.max(3,Number(musicLengthInput?.value)||10);
-            const end=Math.min(start+length,Number.isFinite(preview.duration)?preview.duration:start+length);
-            if(end<=start){storyStatus.textContent='Не удалось прочитать выбранный аудиофайл.';storyStatus.classList.remove('hidden');return;}
-            preview.pause(); preview.currentTime=Math.min(start,Math.max(0,(preview.duration||start)-.1));
-            try{await preview.play();}catch(err){console.warn('Music preview playback:',err);return;}
-            preview.ontimeupdate=()=>{if(preview.currentTime>=end){preview.pause();preview.currentTime=start;}};
+            const source=generatedMusicFile || storyMusicInput?.files?.[0];
+            if(!source){storyStatus.textContent='Сначала выбери аудиофайл на устройстве или мелодию VoiceVibe.';storyStatus.classList.remove('hidden');return;}
+            const btn=document.getElementById('storyMusicPreviewPlay');
+            try {
+                btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin mr-1"></i>Готовим фрагмент…';
+                const start=Math.max(0,Number(musicStartInput?.value)||0), length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10));
+                const cut=await trimMusicFile(source,start,length); const url=URL.createObjectURL(cut); const player=new Audio(url); player.volume=0.9;
+                await player.play();
+                player.onended=()=>URL.revokeObjectURL(url);
+                setTimeout(()=>{player.pause();player.src='';URL.revokeObjectURL(url);},Math.min(10000,length*1000));
+                storyStatus.textContent=`Прослушивается обрезанный фрагмент ${start}–${start+length} сек.`;storyStatus.classList.remove('hidden');
+            } catch(err){console.error('Preview trim failed:',err);storyStatus.textContent=err?.message||'Не удалось воспроизвести фрагмент.';storyStatus.classList.remove('hidden');}
+            finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-play mr-1"></i>Прослушать фрагмент';}
+        });
+        // Replace the browser's grey native file controls with consistent bright device-picker buttons.
+        document.querySelectorAll('input[type="file"]').forEach(input=>{
+            if(!input.classList.contains('vv-native-file')) input.classList.add('vv-native-file');
+            input.addEventListener('change',()=>{
+                const name=document.getElementById(input.id+'Name');
+                if(name)name.textContent=input.files?.[0]?.name||'Файл не выбран';
+            });
         });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
@@ -1087,10 +1152,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 let mediaURL='', musicURL='', mediaType='text';
                 if(image){ mediaURL=await uploadStoryMedia(image,'image'); mediaType='image'; }
                 if(video){ mediaURL=await uploadStoryMedia(video,'video'); mediaType='video'; }
-                if(music) { musicURL=await uploadStoryMedia(music,'audio'); const start=Math.max(0,Math.floor(Number(musicStartInput?.value)||0)); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const end=start+length; const trimParts=[]; if(start>0) trimParts.push(`so_${start}`); trimParts.push(`eo_${end}`); musicURL=musicURL.replace('/video/upload/','/video/upload/'+trimParts.join(',')+'/'); }
+                if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
                 await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';if(musicLibrarySelect)musicLibrarySelect.value='';generatedMusicFile=null;if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';['storyImageName','storyVideoName','storyMusicName'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Файл не выбран';});if(musicLibrarySelect)musicLibrarySelect.value='';generatedMusicFile=null;if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
