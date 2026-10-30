@@ -805,6 +805,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function renderSocialProfile() {
             if (!state.user) return;
+            const rolePanel = document.getElementById('roleManagementPanel');
+            if (rolePanel) rolePanel.classList.toggle('hidden', state.user.uid !== DEVELOPER_UID);
             const p = state.userProfile || {};
             document.getElementById('socialAvatar').innerHTML = avatarMarkup(p, 'h-20 w-20');
             const socialName = document.getElementById('socialName');
