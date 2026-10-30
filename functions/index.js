@@ -65,9 +65,9 @@ exports.purchasePremium = onCall(async request => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('failed-precondition', 'Профиль не найден.');
     const balance = money(snap.data().vibecoinBalance);
-    if (balance < 100) throw new HttpsError('failed-precondition', 'Нужно 100 Vibecoin для покупки Premium.');
+    if (balance < 50) throw new HttpsError('failed-precondition', 'Нужно 50 Vibecoin для покупки Premium.');
     const premiumUntil = Math.max(now, Number(snap.data().premiumUntil || 0)) + 30 * 24 * 60 * 60 * 1000;
-    tx.update(ref, { vibecoinBalance: balance - 100, premiumUntil, updatedAt: now });
+    tx.update(ref, { vibecoinBalance: balance - 50, premiumUntil, updatedAt: now });
     return premiumUntil;
   });
   return { ok: true, premiumUntil: until, message: 'Premium активирован на 30 дней!' };
