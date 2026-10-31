@@ -171,6 +171,35 @@ async function createGroup(accessToken, uid, body) {
   return {id,name};
 }
 
+const DEVELOPER_UID='NL0ho7jXHmSswotGoe5H5wpA5X43';
+async function manageGroup(token,uid,body){
+ const id=String(body.groupId||'');if(!/^[a-zA-Z0-9_-]{1,100}$/.test(id))throw Error('Неверный ID группы');
+ const path=`groups/${id}`,g=await getDocument(token,path);if(!g)throw Error('Группа не найдена');
+ const members=(g.fields?.members?.arrayValue?.values||[]).map(x=>x.stringValue);
+ if(!members.includes(uid))throw Error('Нет доступа к группе');
+ const owner=stringField(g.fields,'createdBy')===uid;
+ if(body.action==='rename'&&owner){const name=String(body.name||'').trim();if(name.length<1||name.length>40)throw Error('Название: 1–40 символов');await commit(token,[updateWrite(path,{name:{stringValue:name},updatedAt:{integerValue:String(Date.now())}},['name','updatedAt'],g.updateTime)]);return {ok:true};}
+ if(body.action==='delete'&&owner){await commit(token,[{delete:docName(path),currentDocument:{updateTime:g.updateTime}}]);return {ok:true};}
+ if(body.action==='leave'&&!owner){await commit(token,[updateWrite(path,{members:{arrayValue:{values:members.filter(x=>x!==uid).map(x=>({stringValue:x}))}},updatedAt:{integerValue:String(Date.now())}},['members','updatedAt'],g.updateTime)]);return {ok:true};}
+ throw Error('Недостаточно прав для управления группой');
+}
+async function developerGrant(token,uid,body){
+ if(uid!==DEVELOPER_UID)throw Error('Только разработчик может выдавать награды');
+ const username=String(body.username||'').trim().replace(/^@/,'').toLowerCase();
+ if(!/^[a-z0-9_.]{2,24}$/.test(username))throw Error('Некорректный @ник');
+ const userRef=await getDocument(token,`usernames/${username}`);
+ let targetUid=stringField(userRef?.fields,'uid');
+ if(!targetUid)throw Error('Пользователь не найден в usernames');
+ const path=`users/${targetUid}`,user=await getDocument(token,path);if(!user)throw Error('Профиль не найден');
+ const now=Date.now();let fields,paths,message;
+ if(body.type==='coins'){
+   const amount=Number(body.amount);if(!Number.isSafeInteger(amount)||amount<1||amount>100000)throw Error('Разрешено от 1 до 100000 монет');
+   fields={vibecoinBalance:{integerValue:String(numberField(user.fields,'vibecoinBalance')+amount)},updatedAt:{integerValue:String(now)}};paths=['vibecoinBalance','updatedAt'];message=`Начислено ${amount} VibeCoins`;
+ }else if(body.type==='premium'){
+   fields={premiumUntil:{integerValue:String(Math.max(now,numberField(user.fields,'premiumUntil'))+30*86400000)},updatedAt:{integerValue:String(now)}};paths=['premiumUntil','updatedAt'];message='Premium продлён на 30 дней';
+ }else throw Error('Неизвестный тип награды');
+ await commit(token,[updateWrite(path,fields,paths,user.updateTime)]);return {ok:true,message};
+}
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -188,7 +217,7 @@ export default {
     const url = new URL(request.url);
     if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405, origin);
     const route = url.pathname.replace(/\/$/, '');
-    if (!['/buy-premium', '/referral/ensure', '/referral/claim', '/create-group', '/claim-ad-coins'].includes(route)) return response({ error: 'Not found' }, 404, origin);
+    if (!['/buy-premium', '/referral/ensure', '/referral/claim', '/create-group', '/claim-ad-coins', '/developer/grant', '/group/manage'].includes(route)) return response({ error: 'Not found' }, 404, origin);
 
     try {
       const auth = request.headers.get('Authorization') || '';
@@ -211,6 +240,14 @@ export default {
         return response(data, 200, origin);
       }
 
+      if (route === '/developer/grant') {
+        const body = await request.json().catch(() => ({}));
+        return response(await developerGrant(accessToken, uid, body), 200, origin);
+      }
+      if (route === '/group/manage') {
+        const body = await request.json().catch(() => ({}));
+        return response(await manageGroup(accessToken, uid, body), 200, origin);
+      }
       if (route === '/claim-ad-coins') return response({error:'Реклама пока не подключена. Монеты не начислены.'}, 400, origin);
       if (route === '/create-group') {
         const body = await request.json().catch(() => ({}));
