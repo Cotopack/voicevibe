@@ -135,7 +135,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         state.userProfile = { ...(state.userProfile || {}), ...(walletResult.data || {}) };
                         const referralToClaim = pendingReferralCode.trim();
                         if (referralToClaim && referralToClaim.toUpperCase() !== String(walletResult.data?.referralCode || '').toUpperCase() && !walletResult.data?.referredBy) {
-                            try { await claimReferralCall({ code: referralToClaim }); localStorage.removeItem('vv_pending_referral'); }
+                            try { const claimResult = await claimReferralCall({ code: referralToClaim }); state.userProfile = { ...(state.userProfile || {}), vibecoinBalance: claimResult.data?.vibecoinBalance ?? state.userProfile?.vibecoinBalance, referredBy: true }; localStorage.removeItem('vv_pending_referral'); }
                             catch (claimErr) { console.warn('Automatic referral claim:', claimErr); }
                         }
                     } catch (walletErr) { console.warn('Vibecoin backend is not deployed/configured yet:', walletErr); }
@@ -1202,7 +1202,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         async function showReferralPanel() {
             referralPanel?.classList.remove('hidden');
             const status = document.getElementById('referralStatus'); if(status) status.textContent='Загружаем реферальную ссылку…';
-            try { const res=await ensureReferralAccount(); const d=res.data||{}; state.userProfile={...(state.userProfile||{}),...d}; renderSocialProfile(); const codeEl=document.getElementById('myReferralCode'); const linkEl=document.getElementById('myReferralLink'); if(codeEl) codeEl.value=d.referralCode||''; if(linkEl) linkEl.value=`${location.origin}${location.pathname}?ref=${encodeURIComponent(d.referralCode||'')}`; if(status) status.textContent=`Баланс: ${Number(d.vibecoinBalance||0)} Vibecoin. За каждого нового приглашённого — 10 монет.`; }
+            try { const res=await ensureReferralAccount(); const d=res.data||{}; state.userProfile={...(state.userProfile||{}),...d}; renderSocialProfile(); const codeEl=document.getElementById('myReferralCode'); const linkEl=document.getElementById('myReferralLink'); if(codeEl) codeEl.value=d.referralCode||''; if(linkEl) linkEl.value=`${location.origin}${location.pathname}?ref=${encodeURIComponent(d.referralCode||'')}`; if(status) status.textContent=`Баланс: ${Number(d.vibecoinBalance||0)} Vibecoin. За каждого приглашённого оба получают по 10 монет.`; }
             catch(e){ if(status) status.textContent='Не удалось загрузить рефералы. Проверь адрес Cloudflare Worker и его секрет FIREBASE_SERVICE_ACCOUNT.'; console.warn(e); }
         }
         document.getElementById('openReferralPanel')?.addEventListener('click', showReferralPanel);

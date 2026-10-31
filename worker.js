@@ -54,7 +54,7 @@ async function verifyFirebaseUser(idToken) {
 function response(data, status, origin) {
   return new Response(JSON.stringify(data), { status, headers: {
     'content-type': 'application/json; charset=utf-8',
-    'access-control-allow-origin': origin || ALLOWED_ORIGINS[0],
+    ...(ALLOWED_ORIGINS.includes(origin) ? { 'access-control-allow-origin': origin } : {}),
     'access-control-allow-methods': 'POST, OPTIONS',
     'access-control-allow-headers': 'Content-Type, Authorization',
     'vary': 'Origin', 'cache-control': 'no-store'
@@ -135,19 +135,21 @@ async function claimReferral(accessToken, uid, authUser, rawCode) {
 
   const now = Date.now();
   const newBalance = numberField(referrer.fields, 'vibecoinBalance') + REFERRAL_REWARD;
+  const invitedBalance = numberField(newUser.fields, 'vibecoinBalance') + REFERRAL_REWARD;
   await commit(accessToken, [
     { update: { name: docName(`referralClaims/${uid}`), fields: {
       referredUid: { stringValue: uid }, referrerUid: { stringValue: referrerUid },
       code: { stringValue: code }, claimedAt: { integerValue: String(now) }
     }}, currentDocument: { exists: false } },
     updateWrite(`users/${uid}`, {
-      referredBy: { stringValue: referrerUid }, referredAt: { integerValue: String(now) }
-    }, ['referredBy', 'referredAt'], newUser.updateTime),
+      referredBy: { stringValue: referrerUid }, referredAt: { integerValue: String(now) },
+      vibecoinBalance: { integerValue: String(invitedBalance) }, updatedAt: { integerValue: String(now) }
+    }, ['referredBy', 'referredAt', 'vibecoinBalance', 'updatedAt'], newUser.updateTime),
     updateWrite(`users/${referrerUid}`, {
       vibecoinBalance: { integerValue: String(newBalance) }, updatedAt: { integerValue: String(now) }
     }, ['vibecoinBalance', 'updatedAt'], referrer.updateTime)
   ]);
-  return { ok: true, message: 'Код принят! Пригласивший друг получил 10 Vibecoin.' };
+  return { ok: true, vibecoinBalance: invitedBalance, message: 'Вы и пригласивший получили по 10 VibeCoins!' };
 }
 
 
@@ -174,7 +176,13 @@ export default {
     const origin = request.headers.get('Origin') || '';
     if (request.method === 'OPTIONS') {
       if (!ALLOWED_ORIGINS.includes(origin)) return new Response(null, { status: 403 });
-      return response({}, 204, origin);
+      return new Response(null, { status: 204, headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin'
+      }});
     }
     if (!ALLOWED_ORIGINS.includes(origin)) return response({ error: 'Недопустимый источник запроса.' }, 403, ALLOWED_ORIGINS[0]);
     const url = new URL(request.url);
