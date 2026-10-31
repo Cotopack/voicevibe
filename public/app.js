@@ -1008,7 +1008,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const count = friendsCache.length;
             const countText = count === 1 ? '1 друг' : (count >= 2 && count <= 4 ? `${count} друга` : `${count} друзей`);
             const countEl = document.getElementById('socialFriendCount'); if (countEl) countEl.textContent = countText;
-            const balanceEl = document.getElementById('vibecoinBalance'); if (balanceEl) balanceEl.textContent = String(Math.max(0, Number(p.vibecoinBalance || 0)));
+            const balanceEl = document.getElementById('vibecoinBalance'); if (balanceEl) balanceEl.textContent = String(Math.max(0, Number(p.vibecoinBalance || 0))); const topCoins=document.getElementById('vvTopCoinBalance'); if(topCoins) topCoins.textContent=String(Math.max(0,Number(p.vibecoinBalance||0)));
             const premiumBadge = document.getElementById('premiumStatusBadge'); const premium = Number(p.premiumUntil || 0) > Date.now(); if (premiumBadge) premiumBadge.classList.toggle('hidden', !premium);
             // Hide Premium-only controls from non-Premium accounts; keep the purchase button visible.
             ['profileBannerFile','uploadProfileBannerBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('[data-premium-only]') || el; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
@@ -1432,9 +1432,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function updateConversationPresence(uid) {
             const f = friendsCache.find(x => x.uid === uid) || {};
             const header = document.getElementById('conversationHeader');
-            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button></div>`;
+            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button><button type="button" id="vvChatCallButton" class="vv-friend-call-button ml-auto" aria-label="Позвонить другу" title="Позвонить другу"><i class="fa-solid fa-phone"></i><span class="hidden sm:inline">Позвонить</span></button></div>`;
             document.getElementById('conversationBack')?.addEventListener('click', closeConversation);
-            document.getElementById('conversationFriendProfile')?.addEventListener('click', () => openFriendProfile(uid));
+            document.getElementById('conversationFriendProfile')?.addEventListener('click', () => openFriendProfile(uid)); document.getElementById('vvChatCallButton')?.addEventListener('click',()=>startFriendCall(uid));
         }
         function closeConversation() {
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
@@ -1617,7 +1617,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return users.slice(0, 12);
         }
 
-        document.getElementById('vvMenuToggle')?.addEventListener('click', () => { const m=document.getElementById('vvProfileMenu');m.classList.toggle('hidden');document.getElementById('vvMenuToggle').setAttribute('aria-expanded',String(!m.classList.contains('hidden'))); });
+        const vvMenu=document.getElementById('vvProfileMenu');
+        function setVVMenuOpen(open){if(!vvMenu)return;vvMenu.classList.toggle('hidden',!open);document.getElementById('vvMenuToggle')?.setAttribute('aria-expanded',String(open));document.body.classList.toggle('vv-menu-open',open);if(open)document.getElementById('vvMenuClose')?.focus();else document.getElementById('vvMenuToggle')?.focus();}
+        document.getElementById('vvMenuToggle')?.addEventListener('click',()=>setVVMenuOpen(true));
+        document.getElementById('vvMenuClose')?.addEventListener('click',()=>setVVMenuOpen(false));
+        vvMenu?.addEventListener('click',e=>{if(e.target===vvMenu)setVVMenuOpen(false)});
+        document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!vvMenu?.classList.contains('hidden'))setVVMenuOpen(false)});
         async function developerGrant(type) {
           const status=document.getElementById('devGrantStatus');
           const username=document.getElementById('devGrantUsername').value.trim();

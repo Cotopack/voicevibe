@@ -69,3 +69,20 @@ button[aria-busy="true"]{cursor:progress}
   filter:blur(10px);transform:rotate(-3deg);
 }
 .vv-role-star{vertical-align:-2px!important;margin-left:4px!important;filter:drop-shadow(0 0 5px currentColor)!important}
+
+/* Profile top-right coin counter + menu, without hiding the full name */
+#socialProfilePanel > div:first-child{padding-top:70px!important}
+.vv-profile-top-actions{position:absolute;right:15px;top:13px;display:flex;align-items:center;gap:8px;z-index:6}
+.vv-profile-top-actions .vv-profile-menu-button{position:static;flex:none}
+.vv-top-coins{display:inline-flex;align-items:center;gap:6px;padding:9px 12px;min-height:42px;border-radius:13px;border:1px solid rgba(251,191,36,.35);background:rgba(39,28,47,.93);color:#fde68a;font-size:13px;font-weight:800;white-space:nowrap}
+#socialName{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere;padding-right:0!important}
+.vv-fullscreen-menu{position:fixed!important;inset:0!important;z-index:105!important;overflow-y:auto!important;overscroll-behavior:contain;background:linear-gradient(145deg,#07091a,#1a1037 60%,#10091f)!important;padding:18px max(16px,env(safe-area-inset-right)) 36px max(16px,env(safe-area-inset-left));}
+.vv-fullscreen-menu.hidden{display:none!important}
+.vv-fullscreen-menu-inner{max-width:780px;margin:auto;padding-top:8px}
+.vv-fullscreen-menu-header{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 2px 20px;background:linear-gradient(#0e0c24 78%,transparent)}
+.vv-fullscreen-menu-header h2{font-size:clamp(20px,4vw,27px);font-weight:800;color:#f5edff}
+#vvMenuClose{display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;border-radius:14px;border:1px solid rgba(196,181,253,.4);background:#251741;color:#fff;font-size:21px}
+body.vv-menu-open{overflow:hidden!important}
+#conversationHeader .vv-friend-call-button{white-space:nowrap}
+#conversationHeader>div{width:100%;min-width:0}
+#conversationFriendProfile{flex:1;min-width:0;overflow-wrap:anywhere}
