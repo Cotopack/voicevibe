@@ -897,17 +897,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         // Original soft two-tone call sound, synthesized locally (no copyrighted audio).
         let vvRingContext=null, vvRingTimer=null, vvRingIncoming=false;
+        let vvCallVolumeMode='loud';
+        function vvSetCallVolume(mode){
+            vvCallVolumeMode=mode==='quiet'?'quiet':'loud';
+            const audio=vvCallUI().audio;
+            if(audio){audio.muted=false;audio.volume=vvCallVolumeMode==='quiet'?0.28:1;}
+            document.querySelectorAll('[data-vv-call-volume]').forEach(button=>{
+                const selected=button.dataset.vvCallVolume===vvCallVolumeMode;
+                button.setAttribute('aria-pressed',String(selected));
+                button.classList.toggle('bg-violet-600',selected);
+                button.classList.toggle('border-violet-400',selected);
+            });
+        }
+        document.querySelectorAll('[data-vv-call-volume]').forEach(button=>button.addEventListener('click',()=>{
+            vvSetCallVolume(button.dataset.vvCallVolume);
+            vvUnlockCallAudio();
+        }));
+        vvSetCallVolume('loud');
+        // Original ringtone: gentle ascending chimes for incoming calls,
+        // lower repeating pulses for outgoing calls. No external sound files.
         function vvRingBeep(){
             if(!vvRingContext || vvRingContext.state!=='running')return;
             const now=vvRingContext.currentTime;
-            for(const [offset,freq] of [[0,523.25],[0.19,659.25]]){
+            const notes=vvRingIncoming
+                ? [[0,587.33],[0.20,739.99],[0.42,880],[0.68,739.99]]
+                : [[0,440],[0.25,554.37]];
+            for(const [offset,freq] of notes){
                 const osc=vvRingContext.createOscillator(), gain=vvRingContext.createGain();
-                osc.type='sine';osc.frequency.value=freq;
+                osc.type='sine';osc.frequency.setValueAtTime(freq,now+offset);
                 gain.gain.setValueAtTime(0.0001,now+offset);
-                gain.gain.exponentialRampToValueAtTime(0.055,now+offset+0.025);
-                gain.gain.exponentialRampToValueAtTime(0.0001,now+offset+0.17);
+                gain.gain.exponentialRampToValueAtTime(0.075,now+offset+0.025);
+                gain.gain.exponentialRampToValueAtTime(0.0001,now+offset+0.19);
                 osc.connect(gain);gain.connect(vvRingContext.destination);
-                osc.start(now+offset);osc.stop(now+offset+0.18);
+                osc.start(now+offset);osc.stop(now+offset+0.20);
             }
         }
         function vvRingStop(){
@@ -925,7 +947,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function vvUnlockCallAudio(){
             try{vvRingContext?.resume().catch(()=>{});}catch(_){}
             const audio=vvCallUI().audio;
-            if(audio?.srcObject){audio.muted=false;audio.volume=1;audio.play().catch(()=>{});}
+            if(audio?.srcObject){audio.muted=false;audio.volume=vvCallVolumeMode==='quiet'?0.28:1;audio.play().catch(()=>{});}
         }
         document.addEventListener('pointerdown',()=>{
             if(vvFriendCallUid)vvUnlockCallAudio();
@@ -956,7 +978,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             call.on('stream',stream=>{
                 if(vvFriendCall!==call)return;
                 vvRingStop();
-                const u=vvCallUI();if(u.audio){u.audio.autoplay=true;u.audio.setAttribute('playsinline','');u.audio.muted=false;u.audio.volume=1;u.audio.srcObject=stream;u.audio.play().catch(err=>{console.warn('Remote audio autoplay blocked:',err);if(u.status)u.status.textContent='Нажми на экран звонка, чтобы разрешить звук';});}
+                const u=vvCallUI();if(u.audio){u.audio.autoplay=true;u.audio.setAttribute('playsinline','');u.audio.muted=false;u.audio.volume=vvCallVolumeMode==='quiet'?0.28:1;u.audio.srcObject=stream;u.audio.play().catch(err=>{console.warn('Remote audio autoplay blocked:',err);if(u.status)u.status.textContent='Нажми на экран звонка, чтобы разрешить звук';});}
                 vvCallStatus('Разговор идёт',true);
             });
             call.on('close',()=>{if(vvFriendCall===call)vvCallEnd()});
