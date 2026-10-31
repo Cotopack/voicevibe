@@ -179,3 +179,12 @@ header, #appHeader, .app-header {isolation:isolate}
 #friendProfileModal .vv-visitor-cover{background-position:center center!important}
 #friendProfileModal .vv-visitor-card{background:#0e1227!important}
 #friendProfileModal .vv-visitor-actions button{border-radius:13px!important}
+
+/* Mobile chat scrolling and touch gesture repair */
+@media(max-width:767px){
+ #socialChatsPanel:not(.chat-open)>div{display:flex!important;flex-direction:column!important;min-height:0!important;height:100%!important;overflow:hidden!important}
+ #socialChatsPanel:not(.chat-open) aside{display:flex!important;flex-direction:column!important;flex:1 1 0%!important;min-height:0!important;height:100%!important;max-height:100%!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;overscroll-behavior-y:contain!important}
+ #chatFriendsList{flex:0 0 auto!important;overflow:visible!important;touch-action:pan-y!important;padding-bottom:24px!important}
+ #socialChatsPanel.chat-open #messagesList{overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;overscroll-behavior-y:contain!important}
+ #socialChatsPanel.chat-open #conversationPane{min-height:0!important;overflow:hidden!important}
+}
