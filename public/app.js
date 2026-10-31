@@ -1474,13 +1474,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             content.querySelector('#profileAddUser')?.addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='Отправляем…';try{await sendFriendRequest(uid);b.textContent='Заявка отправлена';}catch(err){b.disabled=false;b.textContent='Повторить';alert(err.message||'Не удалось отправить заявку.');}});
         }
         async function openFriendProfile(uid) {
-            const f = friendsCache.find(x => String(x.uid || x.id) === String(uid)); if (!f) return;
-            await loadRole(uid);
-            const name = escapeHTML(f.displayName || 'Друг'); const nick = escapeHTML(f.username || 'user');
-            const photo = f.photoURL ? `<img src="${escapeHTML(f.photoURL)}" alt="Аватар ${name}" class="h-28 w-28 rounded-full object-cover">` : avatarMarkup(f,'h-28 w-28');
-            let modal = document.getElementById('friendProfileModal');
-            if (!modal) { modal=document.createElement('div'); modal.id='friendProfileModal'; modal.className='fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/90 p-5 backdrop-blur'; modal.innerHTML='<div class="relative w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 text-center shadow-2xl"><button id="friendProfileClose" class="absolute right-3 top-3 rounded-xl p-2 text-slate-400" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button><div id="friendProfileContent" class="flex flex-col items-center gap-3"></div></div>'; document.body.appendChild(modal); modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();}); modal.querySelector('#friendProfileClose').addEventListener('click',()=>modal.remove()); }
-            modal.querySelector('#friendProfileContent').innerHTML = `${photo}<h2 class="text-xl font-bold">${name} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${nick}</p><p class="text-sm text-slate-400">${escapeHTML(f.bio || '')}</p>`;
+            // Always open the same cover-first profile used in search and friends.
+            return openAnyUserProfile(uid);
         }
         async function renderFriends() {
             const host = document.getElementById('friendsList');
@@ -2017,3 +2012,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         btnToggleMic.addEventListener('click', toggleMicrophone);
         btnExitMenu.addEventListener('click', exitToMenu);
         btnExitMenuBottom.addEventListener('click', exitToMenu);
+
+// Mobile viewport: reserve the actual bottom navigation height for chats.
+(function vvSyncMobileNavHeight(){
+  const nav=document.getElementById('bottomNav');
+  if(!nav)return;
+  const sync=()=>{
+    const h=nav.classList.contains('hidden')?82:Math.ceil(nav.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--vv-nav-height',Math.max(60,h)+'px');
+  };
+  sync();
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(sync).observe(nav);
+  window.addEventListener('resize',sync,{passive:true});
+  window.visualViewport?.addEventListener('resize',sync,{passive:true});
+})();

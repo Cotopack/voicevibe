@@ -142,3 +142,31 @@ header, #appHeader, .app-header {isolation:isolate}
 #friendProfileModal .vv-visitor-close{position:absolute;top:14px;right:14px;z-index:2;width:42px;height:42px;border-radius:14px;background:rgba(9,8,25,.75);color:white;backdrop-filter:blur(12px)}
 #friendProfileModal .vv-visitor-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}
 #friendProfileModal .vv-visitor-actions button{flex:1;min-width:110px}
+
+
+/* 2026-10-31: mobile chats are a separate full-screen view without the VoiceVibe masthead. */
+@media(max-width:767px){
+ body:has(#socialScreen.chat-tab-active) > header,
+ body:has(#socialScreen.chat-tab-active) header.h-16{display:none!important}
+ #socialScreen.chat-tab-active{position:fixed!important;top:0!important;left:0!important;right:0!important;bottom:var(--vv-nav-height,82px)!important;inset:0 0 var(--vv-nav-height,82px) 0!important;padding:0!important;margin:0!important;height:auto!important;max-height:none!important;overflow:hidden!important;z-index:24!important;background:#080b1c!important}
+ #socialChatsPanel{height:100%!important;min-height:0!important;margin:0!important;padding:0!important;max-width:none!important}
+ #socialChatsPanel>div{height:100%!important;min-height:0!important;border-radius:0!important;overflow:hidden!important}
+ #socialChatsPanel.chat-open{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;padding:0!important;z-index:auto!important;max-height:100%!important}
+ #socialChatsPanel.chat-open>div{height:100%!important}
+ #socialChatsPanel.chat-open #conversationPane{height:100%!important;min-height:0!important;padding-bottom:0!important}
+ #conversationHeader{min-height:56px!important;padding:9px 12px!important}
+ #messagesList{min-height:0!important;flex:1 1 0%!important;padding-bottom:12px!important}
+ #messageForm{flex-shrink:0!important;margin-bottom:0!important;padding-bottom:8px!important}
+ #bottomNav{z-index:40!important;box-sizing:border-box!important;bottom:0!important;padding-bottom:max(8px,env(safe-area-inset-bottom))!important}
+ #friendProfileModal{padding:10px!important;align-items:center!important}
+ #friendProfileModal .vv-visitor-card{max-height:calc(100dvh - 20px);overflow-y:auto!important;border-radius:22px}
+ #friendProfileModal .vv-visitor-cover{height:clamp(175px,45vw,225px)!important}
+ #friendProfileModal .vv-visitor-info{margin-top:0!important;padding:18px 18px 24px!important}
+ #friendProfileModal .vv-visitor-identity{align-items:center!important}
+}
+/* Visitor profile matches the user's cover-first full profile card. */
+#friendProfileModal .vv-visitor-info{margin-top:0!important;padding:20px 22px 26px!important}
+#friendProfileModal .vv-visitor-identity{align-items:center!important}
+#friendProfileModal .vv-visitor-cover{background-position:center center!important}
+#friendProfileModal .vv-visitor-card{background:#0e1227!important}
+#friendProfileModal .vv-visitor-actions button{border-radius:13px!important}
