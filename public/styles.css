@@ -34,3 +34,14 @@ button[aria-busy="true"]{cursor:progress}
 /* VoiceVibe Premium 2026 */
 .vv-premium-name{color:#e9d5ff!important;text-shadow:0 0 5px #a855f7,0 0 14px #9333ea,0 0 28px rgba(168,85,247,.7)!important;}
 [data-premium-only].hidden{display:none!important;}
+
+/* Rich asymmetric violet premium glow, including chat headers and messages */
+.vv-premium-name{color:#f3d9ff!important;font-weight:800!important;letter-spacing:.015em;text-shadow:-2px 0 5px #a21caf,2px 1px 9px #7c3aed,0 -2px 15px #c026d3,3px 4px 24px rgba(147,51,234,.95),-4px 2px 32px rgba(217,70,239,.65)!important;filter:drop-shadow(1px 2px 3px rgba(168,85,247,.45))}
+.vv-role-star{display:inline-block!important;opacity:1!important;visibility:visible!important;position:relative;z-index:1;filter:drop-shadow(0 0 5px currentColor)!important}
+#storiesModal,#storiesModal>div{background:linear-gradient(145deg,#0b1024 0%,#1b1237 52%,#100c25 100%)!important;color:#f5f3ff!important}
+#storiesModal .bg-white\/85,#storiesModal .bg-white\/80,#storiesModal .story-upload-card,#storiesModal .vv-file-picker{background:rgba(35,25,65,.92)!important;color:#f5f3ff!important;border-color:rgba(167,139,250,.35)!important}
+#storiesModal textarea,#storiesModal input:not([type=range]){background:#17132d!important;color:#f5f3ff!important;border-color:#5b418c!important}
+#storiesModal .text-slate-400,#storiesModal .text-slate-500{color:#c4b5fd!important}
+#storiesModal .vv-file-name{color:#ddd6fe!important}
+#storiesModal .border-violet-100{border-color:rgba(167,139,250,.35)!important}
+#storyViewer{background:linear-gradient(140deg,#080d1d,#21133f,#0e1027)!important}
