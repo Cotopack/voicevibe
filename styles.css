@@ -109,3 +109,16 @@ body.vv-menu-open{overflow:hidden!important}
   #conversationFriendProfile .font-semibold{font-size:13px;line-height:1.3}
   #vvChatCallButton{min-width:42px;min-height:42px;flex-shrink:0;margin-left:auto!important}
 }
+
+/* VoiceVibe: fullscreen chats and VibeCoin icon */
+.vv-coin-image{width:25px;height:25px;object-fit:contain;display:inline-block;vertical-align:middle;filter:drop-shadow(0 0 6px rgba(183,74,255,.5))}
+.vv-audio-attention{animation:vvAudioPulse 1.1s infinite alternate;box-shadow:0 0 16px #a855f7}
+@keyframes vvAudioPulse{to{box-shadow:0 0 28px #d946ef}}
+#socialChatsPanel.chat-open{position:fixed!important;inset:0!important;width:100vw!important;max-width:none!important;height:100dvh!important;z-index:85!important;background:#07071a!important;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)!important;margin:0!important;overflow:hidden!important}
+#socialChatsPanel.chat-open>div{height:100%!important;min-height:0!important;display:flex!important;flex-direction:column!important;border-radius:0!important;border:0!important;overflow:hidden!important}
+#socialChatsPanel.chat-open aside{display:none!important}
+#socialChatsPanel.chat-open #conversationPane{display:flex!important;flex:1 1 0%!important;min-height:0!important;height:100%!important;max-height:100%!important;overflow:hidden!important}
+#socialChatsPanel.chat-open #conversationHeader{flex-shrink:0!important;background:#101025!important;border-color:#302052!important;padding-top:14px!important}
+#socialChatsPanel.chat-open #messagesList{flex:1 1 0%!important;height:0!important;min-height:0!important;overflow-y:auto!important}
+#socialChatsPanel.chat-open #conversationBack{display:inline-flex!important}
+body:has(#socialChatsPanel.chat-open){overflow:hidden!important}
