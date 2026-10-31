@@ -1104,9 +1104,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const storiesList = document.getElementById('storiesList');
         const storyCreateForm = document.getElementById('storyCreateForm');
         const storyTextInput = document.getElementById('storyText');
-        const storyImageInput = document.getElementById('storyImage');
-        const storyVideoInput = document.getElementById('storyVideo');
-        const storyMusicInput = document.getElementById('storyMusic');
+        const storyGalleryInput = document.getElementById('storyGallery');
+        const storyImageInput = null;
+        const storyVideoInput = null;
+        const storyMusicInput = null;
         const storyStatus = document.getElementById('storyCreateStatus');
         const storyPublishBtn = document.getElementById('storyPublishBtn');
         let activeStoryItems = [];
@@ -1292,8 +1293,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const btn=e.target.closest('[data-music-id]');if(!btn)return;
             vvSelectedTrack=vvCatalogTracks.find(t=>t.id===btn.dataset.musicId)||null;
             if(!vvSelectedTrack)return;
-            if(storyMusicInput){storyMusicInput.value='';setMusicPreviewFile(null);}
-            document.getElementById('storyMusicName').textContent='Песня из каталога';
+            setMusicPreviewFile(null);
+            
             sourceMusicDuration=Number(vvSelectedTrack.duration)||30;
             if(musicStartInput)musicStartInput.value='0';
             updateMusicTrimLabel();
@@ -1309,9 +1310,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const musicLengthInput=document.getElementById('storyMusicLength');
         let storyMusicPreviewURL = null;
         function drawMusicWave() {
-            const wave=document.getElementById('storyMusicWave'); if(!wave)return;
-            wave.innerHTML=Array.from({length:56},(_,i)=>`<span style="height:${8+Math.abs(Math.sin(i*1.71)*Math.cos(i*.37))*31}px"></span>`).join('');
+            const bars=document.getElementById('storyMusicWaveBars');
+            if(!bars)return;
+            bars.innerHTML=Array.from({length:84},(_,i)=>`<span style="height:${12+Math.abs(Math.sin(i*1.71)*Math.cos(i*.37))*72}%"></span>`).join('');
         }
+        function updateWaveSelection() {
+            const selection=document.getElementById('storyMusicWaveSelection');
+            const wave=document.getElementById('storyMusicWave');
+            const time=document.getElementById('storyMusicWaveTime');
+            if(!selection||!wave)return;
+            const duration=Math.max(3,sourceMusicDuration);
+            const start=Math.max(0,Number(musicStartInput?.value)||0);
+            const length=Math.max(3,Number(musicLengthInput?.value)||10);
+            selection.style.left=`${start/duration*100}%`;
+            selection.style.width=`${Math.min(100-start/duration*100,length/duration*100)}%`;
+            wave.setAttribute('aria-valuemax',String(Math.max(0,duration-length)));
+            wave.setAttribute('aria-valuenow',String(start));
+            if(time)time.textContent=`${Math.floor(start/60)}:${String(Math.floor(start%60)).padStart(2,'0')} — ${Math.floor((start+length)/60)}:${String(Math.floor((start+length)%60)).padStart(2,'0')}`;
+        }
+        const waveEditor=document.getElementById('storyMusicWave');
+        let waveDragging=false;
+        function setWavePosition(event){
+            if(!waveEditor||!vvSelectedTrack)return;
+            const rect=waveEditor.getBoundingClientRect();
+            const length=Math.max(3,Number(musicLengthInput?.value)||10);
+            const maxStart=Math.max(0,sourceMusicDuration-length);
+            const ratio=Math.min(1,Math.max(0,(event.clientX-rect.left)/rect.width));
+            const start=Math.round(Math.min(maxStart,Math.max(0,ratio*sourceMusicDuration-length/2))*10)/10;
+            musicStartInput.value=String(start);
+            updateMusicTrimLabel();
+        }
+        waveEditor?.addEventListener('pointerdown',event=>{if(!vvSelectedTrack)return;waveDragging=true;waveEditor.setPointerCapture(event.pointerId);setWavePosition(event);});
+        waveEditor?.addEventListener('pointermove',event=>{if(waveDragging)setWavePosition(event);});
+        waveEditor?.addEventListener('pointerup',()=>{waveDragging=false;});
+        waveEditor?.addEventListener('pointercancel',()=>{waveDragging=false;});
+        waveEditor?.addEventListener('keydown',event=>{if(!vvSelectedTrack||!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();musicStartInput.value=String(Math.max(0,Math.min(Number(musicStartInput.max),Number(musicStartInput.value)+(event.key==='ArrowRight'?1:-1))));updateMusicTrimLabel();});
         let sourceMusicDuration = 30;
         function updateMusicTrimLabel() {
             const maxStart = Math.max(0, Math.floor(sourceMusicDuration - 3));
@@ -1320,7 +1353,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const maxLength=Math.max(3,Math.min(10,Math.floor(sourceMusicDuration-start)));
             if(musicLengthInput){musicLengthInput.max=String(maxLength);if(Number(musicLengthInput.value)>maxLength)musicLengthInput.value=String(maxLength);}
             const length=Math.max(3,Math.min(maxLength,Number(musicLengthInput?.value)||10));
-            const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`Обрезка: ${start}–${start+length} сек. · в историю попадёт только этот фрагмент`;
+            const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`Обрезка: ${start}–${start+length} сек. · в историю попадёт только этот фрагмент`; updateWaveSelection();
         }
         function audioBufferToWavFile(samples, sampleRate, filename='voicevibe-trimmed.wav') {
             const total=samples.length, buffer=new ArrayBuffer(44+total*2), view=new DataView(buffer);
@@ -1366,13 +1399,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         drawMusicWave(); updateMusicTrimLabel();
         musicStartInput?.addEventListener('input', updateMusicTrimLabel);
         musicLengthInput?.addEventListener('input', updateMusicTrimLabel);
-        storyMusicInput?.addEventListener('change', () => {
-            const file=storyMusicInput.files?.[0];
-            if(file) { vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();setMusicPreviewFile(file); }
-            const name=document.getElementById('storyMusicName');if(name)name.textContent=file?.name||'Файл не выбран';
+        storyGalleryInput?.addEventListener('change',()=>{
+            const file=storyGalleryInput.files?.[0];
+            const label=document.getElementById('storyGalleryName');
+            const preview=document.getElementById('storyGalleryPreview');
+            if(label)label.textContent=file?.name||'Ничего не выбрано';
+            if(preview){
+                if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
+                preview.replaceChildren();preview.classList.toggle('hidden',!file);
+                if(file){const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=true;media.muted=true;}preview.appendChild(media);}
+            }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
-            const source=storyMusicInput?.files?.[0];
+            const source=null;
             if(vvSelectedTrack&&!source){
                 const player=document.getElementById('storyMusicPreview');
                 clearInterval(vvPreviewTimer);player.pause();player.src=vvSelectedTrack.url;
@@ -1404,8 +1443,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
-            const text=(storyTextInput?.value||'').trim(); const image=storyImageInput?.files?.[0]||null; const video=storyVideoInput?.files?.[0]||null; const music=storyMusicInput?.files?.[0] || null;
-            if(image&&video){storyStatus.textContent='Выбери фото или видео, не оба сразу.';storyStatus.classList.remove('hidden');return;}
+            const text=(storyTextInput?.value||'').trim(); const gallery=storyGalleryInput?.files?.[0]||null; const image=gallery?.type.startsWith('image/')?gallery:null; const video=gallery?.type.startsWith('video/')?gallery:null; const music=null;
+            if(gallery&&!image&&!video){storyStatus.textContent='Выбери фото или видео из галереи.';storyStatus.classList.remove('hidden');return;}
             if(!text&&!image&&!video){storyStatus.textContent='Добавь текст, фото или видео.';storyStatus.classList.remove('hidden');return;}
             if(video&&!video.type.startsWith('video/')){storyStatus.textContent='Выбери видеофайл.';storyStatus.classList.remove('hidden');return;}
             if(music&&!music.type.startsWith('audio/')){storyStatus.textContent='Музыка должна быть аудиофайлом.';storyStatus.classList.remove('hidden');return;}
@@ -1420,7 +1459,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
                 await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyImageInput.value='';storyVideoInput.value='';storyMusicInput.value='';['storyImageName','storyVideoName','storyMusicName'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Файл не выбран';});if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Ничего не выбрано';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
