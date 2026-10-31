@@ -30,3 +30,7 @@ button[aria-busy="true"]{cursor:progress}
 @media(prefers-reduced-motion:reduce){.vv-spinner,.vv-loading-state,#storyViewer video,#storyViewer img,.vv-avatar-story-wrap{animation:none!important;transition:none!important}#messagesList{scroll-behavior:auto}}
 .vv-premium-name{color:#c4b5fd!important;text-shadow:0 0 12px rgba(167,139,250,.45);}
 #stickersGrid img{transition:transform .15s ease}#stickersGrid button:hover img{transform:scale(1.06)}
+
+/* VoiceVibe Premium 2026 */
+.vv-premium-name{color:#e9d5ff!important;text-shadow:0 0 5px #a855f7,0 0 14px #9333ea,0 0 28px rgba(168,85,247,.7)!important;}
+[data-premium-only].hidden{display:none!important;}

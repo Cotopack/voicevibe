@@ -914,7 +914,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const balanceEl = document.getElementById('vibecoinBalance'); if (balanceEl) balanceEl.textContent = String(Math.max(0, Number(p.vibecoinBalance || 0)));
             const premiumBadge = document.getElementById('premiumStatusBadge'); const premium = Number(p.premiumUntil || 0) > Date.now(); if (premiumBadge) premiumBadge.classList.toggle('hidden', !premium);
             // Hide Premium-only controls from non-Premium accounts; keep the purchase button visible.
-            ['profileBannerFile','uploadProfileBannerBtn','chatWallpaperFile','stickerUploadInput','stickerUploadBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('.vv-premium-feature') || el.closest('section') || el.parentElement; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
+            ['profileBannerFile','uploadProfileBannerBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('[data-premium-only]') || el; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
             document.querySelectorAll('[data-premium-only]').forEach(el => el.classList.toggle('hidden', !premium));
             const banner = document.getElementById('socialProfileBanner'); if (banner) { banner.style.backgroundImage = p.bannerURL ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(p.bannerURL).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !p.bannerURL); }
         }
@@ -1214,11 +1214,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('shareReferralLink')?.addEventListener('click', async () => {
             const link = document.getElementById('myReferralLink')?.value;
             if (!link) { const status=document.getElementById('referralStatus'); if(status) status.textContent='Сначала дождись загрузки реферальной ссылки.'; return; }
-            const shareData = { title: 'Присоединяйся к VoiceVibe!', text: 'Регистрируйся в VoiceVibe по моей ссылке — я получу 10 Vibecoin за нового пользователя!', url: link };
+            const shareText = `🎁 VoiceVibe — получи 10 VibeCoins!\n\nПрисоединяйся к VoiceVibe! Общайся, знакомься и находи новых друзей. По моей ссылке мы оба получим по 10 VibeCoins!\n\n🔗 ${link}`;
+            const shareData = { title: '🎁 VoiceVibe — получи 10 VibeCoins!', text: shareText };
             const status=document.getElementById('referralStatus');
             try {
                 if (navigator.share) { await navigator.share(shareData); if(status) status.textContent='Ссылка готова к отправке другу!'; }
-                else { await navigator.clipboard.writeText(link); if(status) status.textContent='Ссылка скопирована — отправь её другу!'; }
+                else { await navigator.clipboard.writeText(shareText); if(status) status.textContent='Приглашение скопировано — отправь его другу!'; }
             } catch (err) {
                 if (err?.name === 'AbortError') return;
                 try { const field=document.getElementById('myReferralLink'); field?.select(); document.execCommand('copy'); if(status) status.textContent='Ссылка скопирована — отправь её другу!'; }
@@ -1242,6 +1243,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
         document.getElementById('stickerFileInput')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return alert('Выбери изображение.');if(f.size>2*1024*1024)return alert('Стикер должен быть меньше 2 МБ.');try{const url=await uploadImageToCloudinary(f,'stickers');const stickerRef=doc(collection(db,'users',state.user.uid,'stickers'));await setDoc(stickerRef,{url,name:f.name.slice(0,80),createdAt:Date.now()});e.target.value='';alert('Стикер добавлен в твою коллекцию!');}catch(err){console.error(err);alert(`Не удалось загрузить стикер: ${err?.message||'ошибка Cloudinary/Firestore'}`);}});
         document.getElementById('openStickersBtn')?.addEventListener('click',async()=>{const panel=document.getElementById('stickersPanel');panel.classList.toggle('hidden');if(panel.classList.contains('hidden'))return;const grid=document.getElementById('stickersGrid');const hint=document.getElementById('stickersPanelHint');grid.innerHTML='<span class="text-xs text-slate-400">Загружаем стикеры…</span>';try{const owners=[state.user.uid,...(activeGroupId?[]:(activeFriend?[activeFriend]:[]))];const all=[];for(const owner of owners){const snap=await getDocs(query(collection(db,'users',owner,'stickers'),orderBy('createdAt','desc'),limit(50)));snap.docs.forEach(d=>all.push({id:d.id,owner,...d.data()}));}grid.innerHTML=all.length?all.map(st=>`<button data-send-sticker="${escapeHTML(st.url)}" data-sticker-owner="${escapeHTML(st.owner)}" class="rounded-xl border border-slate-700 p-1"><img src="${escapeHTML(st.url)}" alt="Стикер" class="h-14 w-14 rounded-lg object-contain"></button>`).join(''):'<span class="text-xs text-slate-400">Пока нет стикеров. Premium позволяет загрузить свои.</span>';hint.textContent=Number(state.userProfile?.premiumUntil||0)>Date.now()?'Нажми на стикер, чтобы отправить его.':'Ты можешь просматривать стикеры, но отправка доступна только Premium.';grid.querySelectorAll('[data-send-sticker]').forEach(b=>b.addEventListener('click',async()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Отправка стикеров доступна только Premium.');try{const url=b.dataset.sendSticker;const payload={senderUid:state.user.uid,text:url,type:'sticker',createdAt:Date.now()};if(activeGroupId){await addDoc(collection(db,'groups',activeGroupId,'messages'),payload);await updateDoc(doc(db,'groups',activeGroupId),{updatedAt:Date.now(),lastMessage:'✨ Стикер'});}else if(activeConversationId){await addDoc(collection(db,'conversations',activeConversationId,'messages'),payload);}else return;panel.classList.add('hidden');}catch(err){console.error(err);alert('Не удалось отправить стикер. Проверь Rules.');}}));}catch(err){console.error(err);grid.innerHTML='<span class="text-xs text-rose-300">Не удалось загрузить стикеры. Проверь Firestore Rules.</span>';}});
+        document.getElementById('recommendedWallpaperBtn')?.addEventListener('click', async () => {
+            if(Number(state.userProfile?.premiumUntil||0)<=Date.now()) return alert('Рекомендуемые обои доступны с Premium.');
+            if(!activeConversationId && !activeGroupId) return alert('Сначала открой чат.');
+            const choices = [
+              {name:'Фиолетовая ночь',url:'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200'},
+              {name:'Звёздное небо',url:'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1200'},
+              {name:'Горы',url:'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200'}
+            ];
+            const choice=prompt(choices.map((c,i)=>`${i+1}. ${c.name}`).join('\n')+'\nВыбери номер (1–3):','1');
+            if(choice===null)return;
+            const selected=choices[Number(choice)-1]; if(!selected)return alert('Выбери номер от 1 до 3.');
+            try {
+              if(activeGroupId) await updateDoc(doc(db,'groups',activeGroupId),{wallpaperURL:selected.url,updatedAt:Date.now()});
+              else await updateDoc(doc(db,'conversations',activeConversationId),{wallpaperURL:selected.url});
+              const host=document.getElementById('messagesList'); host.style.backgroundImage=`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${selected.url}")`; host.style.backgroundSize='cover';
+            }catch(err){console.error(err);alert('Не удалось установить обои. Проверь доступ к чату.');}
+        });
         document.getElementById('chatWallpaperFile')?.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Обои в чате доступны только Premium.');if(!activeConversationId&&!activeGroupId)return alert('Сначала открой чат.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');try{const url=await uploadImageToCloudinary(f,'chat-wallpapers');if(activeGroupId)await updateDoc(doc(db,'groups',activeGroupId),{wallpaperURL:url,updatedAt:Date.now()});else await updateDoc(doc(db,'conversations',activeConversationId),{wallpaperURL:url});document.getElementById('messagesList').style.backgroundImage=`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${url}")`;document.getElementById('messagesList').style.backgroundSize='cover';alert('Обои установлены!');}catch(err){console.error(err);alert(`Не удалось установить обои: ${err?.message||'ошибка Cloudinary/Firestore'}`);}finally{e.target.value='';}});
 
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
@@ -1263,7 +1281,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             stopSocialListeners();
             if (!state.user) return;
             const uid = state.user.uid;
-            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)); renderChatFriends(); }, err => console.warn('Groups listener:',err));
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); });
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
             const presenceRef = doc(db, 'presence', uid);
