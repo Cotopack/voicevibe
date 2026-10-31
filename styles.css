@@ -86,3 +86,26 @@ body.vv-menu-open{overflow:hidden!important}
 #conversationHeader .vv-friend-call-button{white-space:nowrap}
 #conversationHeader>div{width:100%;min-width:0}
 #conversationFriendProfile{flex:1;min-width:0;overflow-wrap:anywhere}
+
+/* VoiceVibe mobile profile: coins + hamburger top-right, no duplicate balance */
+#socialProfilePanel .vv-profile-top-actions{right:14px;top:14px;gap:8px}
+#socialProfilePanel .vv-top-coins{min-width:62px;justify-content:center}
+#socialProfilePanel #socialName,#socialProfilePanel #socialHandle{overflow-wrap:anywhere;word-break:break-word;white-space:normal!important}
+#socialProfilePanel #socialName{line-height:1.35}
+#socialProfilePanel #socialAvatar{flex-shrink:0}
+#socialProfilePanel .vv-profile-top-actions ~ div.flex{min-width:0}
+#socialProfilePanel #premiumStatusBadge{max-width:100%}
+@media(max-width:640px){
+  #socialProfilePanel > div:first-child{padding:76px 14px 18px!important}
+  #socialProfilePanel > div:first-child > div.flex{align-items:flex-start!important;gap:12px!important}
+  #socialProfilePanel #socialAvatar{width:64px!important;height:64px!important;font-size:24px!important}
+  #socialProfilePanel #socialName{font-size:19px!important}
+  #socialProfilePanel #socialEditProfile{margin-left:auto;flex-shrink:0;font-size:12px;padding:8px!important}
+  #socialProfilePanel .vv-top-coins{padding:8px 10px;min-height:40px}
+  #socialProfilePanel .vv-profile-menu-button{width:40px;height:40px}
+  #conversationHeader{padding:10px!important}
+  #conversationHeader>div{gap:7px!important}
+  #conversationFriendProfile{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+  #conversationFriendProfile .font-semibold{font-size:13px;line-height:1.3}
+  #vvChatCallButton{min-width:42px;min-height:42px;flex-shrink:0;margin-left:auto!important}
+}
