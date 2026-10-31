@@ -122,3 +122,12 @@ body.vv-menu-open{overflow:hidden!important}
 #socialChatsPanel.chat-open #messagesList{flex:1 1 0%!important;height:0!important;min-height:0!important;overflow-y:auto!important}
 #socialChatsPanel.chat-open #conversationBack{display:inline-flex!important}
 body:has(#socialChatsPanel.chat-open){overflow:hidden!important}
+
+/* Full-width, edge-to-edge profile cover, preserving legibility and controls */
+#socialProfilePanel > div:first-child{overflow:hidden;padding-top:72px!important;background:linear-gradient(145deg,#11172d,#0d1022)!important}
+#socialProfilePanel #socialProfileBanner.vv-profile-cover{position:relative;display:block;width:calc(100% + 40px);height:clamp(170px,26vw,250px);margin:-72px -20px 22px;border:0;border-radius:0;background-size:cover;background-position:center 45%;background-repeat:no-repeat;box-shadow:inset 0 -48px 50px -26px rgba(10,11,30,.75)}
+#socialProfilePanel #socialProfileBanner.vv-profile-cover::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(9,9,25,.35),transparent 42%,rgba(11,12,31,.6));}
+#socialProfilePanel #socialProfileBanner.vv-profile-cover.hidden{display:none!important}
+#socialProfilePanel .vv-profile-top-actions{z-index:9}
+#socialProfilePanel .vv-profile-top-actions .vv-top-coins,#socialProfilePanel .vv-profile-top-actions .vv-profile-menu-button{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background-color:rgba(20,13,43,.82)}
+@media(max-width:640px){#socialProfilePanel > div:first-child{padding-top:76px!important}#socialProfilePanel #socialProfileBanner.vv-profile-cover{width:calc(100% + 28px);height:190px;margin:-76px -14px 18px}}
