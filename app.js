@@ -45,6 +45,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const claimAdCoinsCall = () => workerPost('/claim-ad-coins');
         const createGroupCall = (payload) => workerPost('/create-group', payload);
         const pendingReferralCode = new URLSearchParams(location.search).get('ref') || localStorage.getItem('vv_pending_referral') || '';
+        // Keep the referral across the registration redirect; the server validates new accounts.
         if (new URLSearchParams(location.search).get('ref')) localStorage.setItem('vv_pending_referral', new URLSearchParams(location.search).get('ref'));
         // Keep the same account signed in across normal browser restarts.
         await setPersistence(auth, browserLocalPersistence).catch(err => console.warn('Auth persistence:', err));
@@ -906,7 +907,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             u.accept?.classList.add('hidden');u.mute?.classList.toggle('hidden',!connected);
         }
         function vvCallEnd(){
-            const call=vvFriendCall;vvFriendCall=null;vvFriendCallPending=null;vvFriendCallUid=null;
+            const call=vvFriendCall, pending=vvFriendCallPending;vvFriendCall=null;vvFriendCallPending=null;vvFriendCallUid=null;
+            if(pending && pending!==call){try{pending.close()}catch(_){}}
             try{call?.close()}catch(_){}
             if(vvFriendStream){vvFriendStream.getTracks().forEach(t=>t.stop());vvFriendStream=null;}
             const u=vvCallUI();if(u.audio){u.audio.pause();u.audio.srcObject=null;}
@@ -917,18 +919,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvFriendCall=call;
             call.on('stream',stream=>{
                 if(vvFriendCall!==call)return;
-                const u=vvCallUI();if(u.audio){u.audio.autoplay=true;u.audio.playsInline=true;u.audio.muted=false;u.audio.volume=1;u.audio.srcObject=stream;u.audio.play().catch(err=>{console.warn('Audio playback needs user action:',err);const btn=document.getElementById('vvFriendCallListen');btn?.classList.add('vv-audio-attention');});}
+                const u=vvCallUI();if(u.audio){u.audio.autoplay=true;u.audio.setAttribute('playsinline','');u.audio.muted=false;u.audio.volume=1;u.audio.srcObject=stream;const playRemote=()=>u.audio.play().then(()=>document.getElementById('vvFriendCallListen')?.classList.remove('vv-audio-attention')).catch(err=>{console.warn('Audio playback needs user action:',err);document.getElementById('vvFriendCallListen')?.classList.add('vv-audio-attention');if(u.status)u.status.textContent='Нажми «Включить звук», чтобы услышать друга';});playRemote();}
                 vvCallStatus('Разговор идёт',true);
             });
             call.on('close',()=>{if(vvFriendCall===call)vvCallEnd()});
-            call.on('error',()=>{if(vvFriendCall===call){alert('Ошибка голосового соединения.');vvCallEnd();}});
+            call.on('error',(err)=>{if(vvFriendCall===call){console.error('Voice call failed',err);alert('Не удалось соединить звонок. Проверь интернет и попробуй другую сеть. Для сложных сетей нужен TURN.');vvCallEnd();}});
         }
         function initializeFriendCalls(uid){
             if(vvFriendPeerUid===uid && vvFriendPeer && !vvFriendPeer.destroyed)return;
             cleanupFriendCalls();vvFriendPeerUid=uid;
             if(typeof Peer==='undefined'){console.warn('PeerJS не загружен: звонки недоступны');return;}
             // A deterministic peer ID makes it possible to call a friend without a new database collection.
-            const peer=new Peer('vv-friend-'+uid,{debug:0});vvFriendPeer=peer;
+            const peer=new Peer('vv-friend-'+uid,{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});vvFriendPeer=peer;
             peer.on('call',async call=>{
                 const fromUid=String(call.peer||'').replace(/^vv-friend-/,'');
                 // Validate friendship against Firestore, not just a cached UI list.
