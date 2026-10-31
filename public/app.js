@@ -894,6 +894,41 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             mute:document.getElementById('vvFriendCallMute'),
             audio:document.getElementById('vvFriendCallAudio')
         });
+        // Original soft two-tone call sound, synthesized locally (no copyrighted audio).
+        let vvRingContext=null, vvRingTimer=null, vvRingIncoming=false;
+        function vvRingBeep(){
+            if(!vvRingContext || vvRingContext.state!=='running')return;
+            const now=vvRingContext.currentTime;
+            for(const [offset,freq] of [[0,523.25],[0.19,659.25]]){
+                const osc=vvRingContext.createOscillator(), gain=vvRingContext.createGain();
+                osc.type='sine';osc.frequency.value=freq;
+                gain.gain.setValueAtTime(0.0001,now+offset);
+                gain.gain.exponentialRampToValueAtTime(0.055,now+offset+0.025);
+                gain.gain.exponentialRampToValueAtTime(0.0001,now+offset+0.17);
+                osc.connect(gain);gain.connect(vvRingContext.destination);
+                osc.start(now+offset);osc.stop(now+offset+0.18);
+            }
+        }
+        function vvRingStop(){
+            if(vvRingTimer!==null){clearInterval(vvRingTimer);vvRingTimer=null;}
+            vvRingIncoming=false;
+        }
+        function vvRingStart(incoming=false){
+            vvRingStop();vvRingIncoming=incoming;
+            try{
+                vvRingContext ||= new (window.AudioContext||window.webkitAudioContext)();
+                vvRingContext.resume().then(()=>{if(vvRingIncoming===incoming && vvFriendCallUid)vvRingBeep()}).catch(()=>{});
+                vvRingTimer=setInterval(vvRingBeep,2600);
+            }catch(e){console.warn('Call ringtone unavailable:',e)}
+        }
+        function vvUnlockCallAudio(){
+            try{vvRingContext?.resume().catch(()=>{});}catch(_){}
+            const audio=vvCallUI().audio;
+            if(audio?.srcObject){audio.muted=false;audio.volume=1;audio.play().catch(()=>{});}
+        }
+        document.addEventListener('pointerdown',()=>{
+            if(vvFriendCallUid)vvUnlockCallAudio();
+        },{passive:true});
         function vvCallShow(name,status,incoming=false){
             const u=vvCallUI();u.panel?.classList.remove('hidden');
             if(u.name)u.name.textContent=name;
@@ -939,7 +974,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }catch(e){console.warn('Friend call authorization:',e);call.close();return;}
                 vvFriendCallPending=call;vvFriendCallUid=fromUid;
                 const friend=friendsCache.find(f=>(f.uid||f.id)===fromUid);
-                vvCallShow(friend?.displayName||'Друг','Входящий голосовой звонок',true);
+                vvCallShow(friend?.displayName||'Друг','Входящий голосовой звонок',true);vvRingStart(true);
                 call.on('close',()=>{if(vvFriendCallPending===call)vvCallEnd()});
             });
             peer.on('error',err=>{console.warn('Friend call peer:',err?.type||err);if(vvFriendCallUid && !vvFriendCallPending){vvCallStatus('Друг недоступен или занят');setTimeout(()=>{if(vvFriendCallUid)vvCallEnd()},2200);}});
@@ -956,13 +991,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(vvFriendCallUid!==friendUid){vvFriendStream.getTracks().forEach(t=>t.stop());vvFriendStream=null;return;}
                 const call=vvFriendPeer.call('vv-friend-'+friendUid,vvFriendStream);
                 if(!call)throw new Error('Не удалось начать звонок');
-                vvCallBind(call);vvCallStatus('Звоним другу…');
+                vvCallBind(call);vvCallStatus('Звоним другу…');vvRingStart(false);
                 setTimeout(()=>{if(vvFriendCall===call && !vvCallUI().audio?.srcObject){vvCallStatus('Нет ответа. Друг должен быть онлайн.');setTimeout(()=>{if(vvFriendCall===call && !vvCallUI().audio?.srcObject)vvCallEnd()},3000);}},30000);
             }catch(e){console.warn('Friend call start:',e);alert('Не удалось начать звонок. Проверь доступ к микрофону.');vvCallEnd();}
         }
         document.getElementById('vvFriendCallAccept')?.addEventListener('click',async()=>{
             const call=vvFriendCallPending;if(!call)return;
-            vvCallStatus('Подключаем микрофон…');
+            vvRingStop();vvUnlockCallAudio();vvCallStatus('Подключаем микрофон…');
             try{
                 const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
                 if(vvFriendCallPending!==call){stream.getTracks().forEach(t=>t.stop());return;}
@@ -970,7 +1005,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }catch(e){alert('Нет доступа к микрофону.');vvCallEnd();}
         });
         document.getElementById('vvFriendCallHangup')?.addEventListener('click',vvCallEnd);
-        document.getElementById('vvFriendCallListen')?.addEventListener('click',async()=>{const audio=vvCallUI().audio;if(!audio?.srcObject)return alert('Звук появится после соединения с другом.');try{audio.muted=false;audio.volume=1;await audio.play();document.getElementById('vvFriendCallListen')?.classList.remove('vv-audio-attention');}catch(e){alert('Браузер блокирует звук. Проверь громкость и разрешения сайта.');}});
         document.getElementById('vvFriendCallMute')?.addEventListener('click',()=>{
             if(!vvFriendStream)return;
             const tracks=vvFriendStream.getAudioTracks();if(!tracks.length)return;
