@@ -131,3 +131,23 @@ body:has(#socialChatsPanel.chat-open){overflow:hidden!important}
 #socialProfilePanel .vv-profile-top-actions{z-index:9}
 #socialProfilePanel .vv-profile-top-actions .vv-top-coins,#socialProfilePanel .vv-profile-top-actions .vv-profile-menu-button{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background-color:rgba(20,13,43,.82)}
 @media(max-width:640px){#socialProfilePanel > div:first-child{padding-top:76px!important}#socialProfilePanel #socialProfileBanner.vv-profile-cover{width:calc(100% + 28px);height:190px;margin:-76px -14px 18px}}
+
+/* Dynamic mobile header: never overlap page content or user details */
+header, #appHeader, .app-header {isolation:isolate}
+@media(max-width:640px){
+  #socialScreen{scroll-padding-top:16px}
+  #socialProfilePanel{min-width:0}
+  #socialProfilePanel > div:first-child{min-width:0}
+  #socialProfilePanel .vv-profile-top-actions{top:12px;right:12px}
+}
+/* Full profile presentation for another user's profile */
+#friendProfileModal{z-index:120!important;overflow-y:auto;align-items:flex-start!important;padding:clamp(12px,4vw,28px)!important}
+#friendProfileModal .vv-visitor-card{position:relative;width:100%;max-width:560px;margin:auto;overflow:hidden;border-radius:24px;border:1px solid rgba(167,139,250,.3);background:#10152b;text-align:left;box-shadow:0 24px 75px rgba(0,0,0,.65)}
+#friendProfileModal .vv-visitor-cover{height:clamp(175px,32vw,245px);width:100%;background-size:cover;background-position:center;position:relative;background-color:#20153e}
+#friendProfileModal .vv-visitor-cover:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 48%,rgba(16,21,43,.85))}
+#friendProfileModal .vv-visitor-info{padding:0 20px 24px;position:relative;margin-top:-32px}
+#friendProfileModal .vv-visitor-identity{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+#friendProfileModal .vv-visitor-identity>div:first-child{border:3px solid #10152b;border-radius:50%;overflow:hidden;flex-shrink:0}
+#friendProfileModal .vv-visitor-close{position:absolute;top:14px;right:14px;z-index:2;width:42px;height:42px;border-radius:14px;background:rgba(9,8,25,.75);color:white;backdrop-filter:blur(12px)}
+#friendProfileModal .vv-visitor-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}
+#friendProfileModal .vv-visitor-actions button{flex:1;min-width:110px}
