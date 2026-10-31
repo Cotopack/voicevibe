@@ -117,6 +117,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const authReady = new Promise((resolve) => { resolveAuthReady = resolve; });
         onAuthStateChanged(auth, async (user) => {
             state.user = user || null;
+            if (user) initializeFriendCalls(user.uid); else cleanupFriendCalls();
             if (user) {
                 // Hide the sign-in screen immediately; profile loading happens behind the app.
                 document.getElementById('authOverlay')?.classList.add('hidden');
@@ -880,6 +881,102 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
 
         function normalizeUsername(value) { return value.trim().toLowerCase(); }
+        // Direct friend-to-friend voice calls use a separate PeerJS connection.
+        // The roulette peer and its matchmaking state are not affected.
+        let vvFriendPeer = null, vvFriendCall = null, vvFriendStream = null;
+        let vvFriendCallUid = null, vvFriendCallPending = null;
+        let vvFriendPeerUid = null;
+        const vvCallUI = () => ({
+            panel:document.getElementById('vvFriendCallOverlay'),
+            name:document.getElementById('vvFriendCallName'),
+            status:document.getElementById('vvFriendCallStatus'),
+            accept:document.getElementById('vvFriendCallAccept'),
+            mute:document.getElementById('vvFriendCallMute'),
+            audio:document.getElementById('vvFriendCallAudio')
+        });
+        function vvCallShow(name,status,incoming=false){
+            const u=vvCallUI();u.panel?.classList.remove('hidden');
+            if(u.name)u.name.textContent=name;
+            if(u.status)u.status.textContent=status;
+            u.accept?.classList.toggle('hidden',!incoming);
+            u.mute?.classList.add('hidden');
+        }
+        function vvCallStatus(status,connected=false){
+            const u=vvCallUI();if(u.status)u.status.textContent=status;
+            u.accept?.classList.add('hidden');u.mute?.classList.toggle('hidden',!connected);
+        }
+        function vvCallEnd(){
+            const call=vvFriendCall;vvFriendCall=null;vvFriendCallPending=null;vvFriendCallUid=null;
+            try{call?.close()}catch(_){}
+            if(vvFriendStream){vvFriendStream.getTracks().forEach(t=>t.stop());vvFriendStream=null;}
+            const u=vvCallUI();if(u.audio){u.audio.pause();u.audio.srcObject=null;}
+            u.panel?.classList.add('hidden');u.accept?.classList.add('hidden');u.mute?.classList.add('hidden');
+        }
+        function cleanupFriendCalls(){vvCallEnd();try{vvFriendPeer?.destroy()}catch(_){}vvFriendPeer=null;vvFriendPeerUid=null;}
+        function vvCallBind(call){
+            vvFriendCall=call;
+            call.on('stream',stream=>{
+                if(vvFriendCall!==call)return;
+                const u=vvCallUI();if(u.audio){u.audio.srcObject=stream;u.audio.play().catch(()=>{});}
+                vvCallStatus('Разговор идёт',true);
+            });
+            call.on('close',()=>{if(vvFriendCall===call)vvCallEnd()});
+            call.on('error',()=>{if(vvFriendCall===call){alert('Ошибка голосового соединения.');vvCallEnd();}});
+        }
+        function initializeFriendCalls(uid){
+            if(vvFriendPeerUid===uid && vvFriendPeer && !vvFriendPeer.destroyed)return;
+            cleanupFriendCalls();vvFriendPeerUid=uid;
+            if(typeof Peer==='undefined'){console.warn('PeerJS не загружен: звонки недоступны');return;}
+            // A deterministic peer ID makes it possible to call a friend without a new database collection.
+            const peer=new Peer('vv-friend-'+uid,{debug:0});vvFriendPeer=peer;
+            peer.on('call',async call=>{
+                const fromUid=String(call.peer||'').replace(/^vv-friend-/,'');
+                // Validate friendship against Firestore, not just a cached UI list.
+                if(!state.user || !fromUid || fromUid===uid || vvFriendCall || vvFriendCallPending){call.close();return;}
+                try{
+                    const friendship=await getDoc(doc(db,'users',uid,'friends',fromUid));
+                    if(!friendship.exists()){call.close();return;}
+                }catch(e){console.warn('Friend call authorization:',e);call.close();return;}
+                vvFriendCallPending=call;vvFriendCallUid=fromUid;
+                const friend=friendsCache.find(f=>(f.uid||f.id)===fromUid);
+                vvCallShow(friend?.displayName||'Друг','Входящий голосовой звонок',true);
+                call.on('close',()=>{if(vvFriendCallPending===call)vvCallEnd()});
+            });
+            peer.on('error',err=>{console.warn('Friend call peer:',err?.type||err);if(vvFriendCallUid && !vvFriendCallPending){vvCallStatus('Друг недоступен или занят');setTimeout(()=>{if(vvFriendCallUid)vvCallEnd()},2200);}});
+            peer.on('disconnected',()=>{try{if(!peer.destroyed)peer.reconnect()}catch(_){}});
+        }
+        async function startFriendCall(friendUid){
+            if(!state.user || !friendsCache.some(f=>(f.uid||f.id)===friendUid)){alert('Звонить можно только друзьям.');return;}
+            if(vvFriendCall || vvFriendCallPending || vvFriendCallUid){alert('Сначала заверши текущий звонок.');return;}
+            if(!vvFriendPeer || !vvFriendPeer.open){alert('Подключение звонков ещё не готово. Попробуй через пару секунд.');return;}
+            const friend=friendsCache.find(f=>(f.uid||f.id)===friendUid);
+            vvFriendCallUid=friendUid;vvCallShow(friend?.displayName||'Друг','Запрашиваем микрофон…');
+            try{
+                vvFriendStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+                if(vvFriendCallUid!==friendUid){vvFriendStream.getTracks().forEach(t=>t.stop());vvFriendStream=null;return;}
+                const call=vvFriendPeer.call('vv-friend-'+friendUid,vvFriendStream);
+                if(!call)throw new Error('Не удалось начать звонок');
+                vvCallBind(call);vvCallStatus('Звоним другу…');
+                setTimeout(()=>{if(vvFriendCall===call && !vvCallUI().audio?.srcObject){vvCallStatus('Нет ответа. Друг должен быть онлайн.');setTimeout(()=>{if(vvFriendCall===call && !vvCallUI().audio?.srcObject)vvCallEnd()},3000);}},30000);
+            }catch(e){console.warn('Friend call start:',e);alert('Не удалось начать звонок. Проверь доступ к микрофону.');vvCallEnd();}
+        }
+        document.getElementById('vvFriendCallAccept')?.addEventListener('click',async()=>{
+            const call=vvFriendCallPending;if(!call)return;
+            vvCallStatus('Подключаем микрофон…');
+            try{
+                const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+                if(vvFriendCallPending!==call){stream.getTracks().forEach(t=>t.stop());return;}
+                vvFriendStream=stream;vvFriendCallPending=null;vvCallBind(call);call.answer(stream);vvCallStatus('Соединяем…');
+            }catch(e){alert('Нет доступа к микрофону.');vvCallEnd();}
+        });
+        document.getElementById('vvFriendCallHangup')?.addEventListener('click',vvCallEnd);
+        document.getElementById('vvFriendCallMute')?.addEventListener('click',()=>{
+            if(!vvFriendStream)return;
+            const tracks=vvFriendStream.getAudioTracks();if(!tracks.length)return;
+            const enabled=!tracks[0].enabled;tracks.forEach(t=>t.enabled=enabled);
+            document.getElementById('vvFriendCallMute').innerHTML=enabled?'<i class="fa-solid fa-microphone mr-2"></i>Микрофон':'<i class="fa-solid fa-microphone-slash mr-2"></i>Включить';
+        });
+
         function escapeHTML(value='') { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
         function avatarMarkup(profile, size='h-10 w-10') {
             const label = escapeHTML((profile?.displayName || profile?.username || '?').slice(0,1).toUpperCase());
@@ -1382,8 +1479,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             await preloadRoles(friendsCache);
             host.innerHTML = friendsCache.map(f => {
                 const uid=f.uid || f.id;
-                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><button type="button" data-view-profile="${escapeHTML(uid)}" class="block max-w-full truncate text-left text-sm font-semibold hover:text-violet-300"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</button><button type="button" data-view-profile="${escapeHTML(uid)}" class="block text-left text-xs text-slate-500 hover:text-violet-300">@${escapeHTML(f.username || 'user')}</button>${presenceLabel(uid)}</div><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
+                return `<div class="flex items-center gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">${avatarMarkup(f,'h-11 w-11')}<div class="min-w-0 flex-1"><button type="button" data-view-profile="${escapeHTML(uid)}" class="block max-w-full truncate text-left text-sm font-semibold hover:text-violet-300"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</button><button type="button" data-view-profile="${escapeHTML(uid)}" class="block text-left text-xs text-slate-500 hover:text-violet-300">@${escapeHTML(f.username || 'user')}</button>${presenceLabel(uid)}</div><button data-callfriend="${escapeHTML(uid)}" class="vv-friend-call-button" title="Позвонить" aria-label="Позвонить другу"><i class="fa-solid fa-phone"></i></button><button data-chatfriend="${escapeHTML(uid)}" class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold">Написать</button></div>`;
             }).join('');
+            host.querySelectorAll('[data-callfriend]').forEach(b => b.addEventListener('click', () => startFriendCall(b.dataset.callfriend)));
             host.querySelectorAll('[data-chatfriend]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.chatfriend)));
             host.querySelectorAll('[data-view-profile]').forEach(b => b.addEventListener('click', () => openAnyUserProfile(b.dataset.viewProfile)));
         }
@@ -1427,10 +1525,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const friendsHtml = friendsCache.map(f => {
                 const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0);
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
-                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('');
             const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('');
             host.innerHTML = `${groupsCache.length?'<p class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-violet-300">Группы</p>':''}${groupsHtml}${friendsCache.length?'<p class="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Друзья</p>':''}${friendsHtml}`;
+            host.querySelectorAll('[data-callfriend]').forEach(b => { b.addEventListener('click', e => { e.stopPropagation(); startFriendCall(b.dataset.callfriend); }); b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();startFriendCall(b.dataset.callfriend);}}); });
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
             host.querySelectorAll('[data-opengroup]').forEach(b => b.addEventListener('click', () => openGroupConversation(b.dataset.opengroup)));
         }
@@ -1749,7 +1848,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             const mine = m.senderUid === state.user.uid;
                             if (m.type === 'snake-challenge') return `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm"><b>🎮 Вызов в Змейку</b><p class="mt-1 text-xs text-slate-300">${escapeHTML(m.text || 'Сыграем?')}</p><button data-playchallenge="${escapeHTML(d.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold">Играть</button></div>`;
                             if (m.type === 'snake-result') return `<div class="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 text-sm">🐍 ${escapeHTML(m.text || '')}</div>`;
-                            if(m.type==='sticker') return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[85%] rounded-2xl p-2"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"><p class="mt-1 text-right text-[10px] text-slate-400">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`; const senderName=mine?(state.userProfile?.displayName||'Вы'):(friendDoc?.displayName||'Друг');const senderPremium=mine?Number(state.userProfile?.premiumUntil||0)>Date.now():Number(friendDoc?.premiumUntil||0)>Date.now();return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold ${senderPremium?'vv-premium-name':''}">${escapeHTML(senderName)}${senderPremium?' 👑':''}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
+                            if(m.type==='sticker') return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[85%] rounded-2xl p-2"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"><p class="mt-1 text-right text-[10px] text-slate-400">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`; const senderName=mine?(state.userProfile?.displayName||'Вы'):(friendDoc?.displayName||'Друг');const senderPremium=mine?Number(state.userProfile?.premiumUntil||0)>Date.now():Number(friendDoc?.premiumUntil||0)>Date.now();return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold ${senderPremium?'vv-premium-name':''}">${escapeHTML(senderName)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
                         }).join('');
                         host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
                         host.scrollTop = host.scrollHeight;

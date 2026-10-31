@@ -45,3 +45,27 @@ button[aria-busy="true"]{cursor:progress}
 #storiesModal .vv-file-name{color:#ddd6fe!important}
 #storiesModal .border-violet-100{border-color:rgba(167,139,250,.35)!important}
 #storyViewer{background:linear-gradient(140deg,#080d1d,#21133f,#0e1027)!important}
+
+/* Compact profile menu button, safely away from profile name */
+.vv-profile-menu-button{position:absolute;right:16px;top:14px;z-index:5;display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:13px;border:1px solid rgba(167,139,250,.48);background:linear-gradient(135deg,#261447,#111827);color:#e9d5ff;box-shadow:0 0 14px rgba(139,92,246,.15);cursor:pointer;transition:transform .15s,box-shadow .15s}
+.vv-profile-menu-button:hover,.vv-profile-menu-button:focus-visible{transform:scale(1.05);box-shadow:0 0 18px rgba(168,85,247,.45);outline:none}
+.vv-profile-menu-button i{font-size:19px}
+.vv-friend-call-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;flex-shrink:0;border:1px solid rgba(167,139,250,.4);border-radius:11px;padding:9px 11px;color:#e9d5ff;background:rgba(109,40,217,.2);cursor:pointer}
+.vv-friend-call-button:hover{background:rgba(109,40,217,.4)}
+
+/* Premium: soft elliptical aura around the name, never a rectangular block. */
+.vv-premium-name{
+  display:inline-block!important;position:relative;isolation:isolate;
+  color:#f5d9ff!important;font-weight:800!important;
+  background:transparent!important;border:0!important;border-radius:999px!important;
+  text-shadow:0 0 4px #f0abfc, -3px 0 10px #d946ef, 4px 2px 13px #a855f7,
+    0 0 23px rgba(192,38,211,.9), 0 0 34px rgba(139,92,246,.8)!important;
+  filter:none!important;
+}
+.vv-premium-name::before{
+  content:"";position:absolute;z-index:-1;pointer-events:none;
+  inset:-.42em -.85em; border-radius:50% / 65%;
+  background:radial-gradient(ellipse at 45% 50%,rgba(217,70,239,.42) 0%,rgba(147,51,234,.27) 43%,transparent 76%);
+  filter:blur(10px);transform:rotate(-3deg);
+}
+.vv-role-star{vertical-align:-2px!important;margin-left:4px!important;filter:drop-shadow(0 0 5px currentColor)!important}
