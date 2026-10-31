@@ -1,4 +1,3 @@
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
@@ -28,13 +27,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const functions = getFunctions(app, 'us-central1');
-        const ensureReferralAccount = httpsCallable(functions, 'ensureReferralAccount');
-        const claimReferralCall = httpsCallable(functions, 'claimReferral');
-        // Premium purchase is handled by the Cloudflare Worker (not Firebase Functions).
-        const PREMIUM_WORKER_URL = 'https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev/buy-premium';
-        const claimAdCoinsCall = httpsCallable(functions, 'claimAdCoins');
-        const createGroupCall = httpsCallable(functions, 'createGroup');
+        // Premium and referral rewards are handled by the same Cloudflare Worker.
+        // Replace YOUR-SUBDOMAIN with the workers.dev subdomain shown by Cloudflare.
+        const WORKER_BASE_URL = 'https://vibevoice.smart-nikitos.workers.dev';
+        const PREMIUM_WORKER_URL = `${WORKER_BASE_URL}/buy-premium`;
+        async function workerPost(path, payload = {}) {
+            if (WORKER_BASE_URL.includes('YOUR-SUBDOMAIN')) throw new Error('Укажи свой адрес Cloudflare Worker в WORKER_BASE_URL.');
+            if (!state.user) throw new Error('Сначала войди в аккаунт.');
+            const idToken = await state.user.getIdToken(true);
+            const res = await fetch(`${WORKER_BASE_URL}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Ошибка сервера VoiceVibe.');
+            return { data };
+        }
+        const ensureReferralAccount = () => workerPost('/referral/ensure');
+        const claimReferralCall = (payload) => workerPost('/referral/claim', payload);
+        const claimAdCoinsCall = () => workerPost('/claim-ad-coins');
+        const createGroupCall = (payload) => workerPost('/create-group', payload);
         const pendingReferralCode = new URLSearchParams(location.search).get('ref') || localStorage.getItem('vv_pending_referral') || '';
         if (new URLSearchParams(location.search).get('ref')) localStorage.setItem('vv_pending_referral', new URLSearchParams(location.search).get('ref'));
         // Keep the same account signed in across normal browser restarts.
@@ -1188,13 +1197,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
 
-        // Vibecoin / referrals / Premium: rewards and purchases are handled by trusted Cloud Functions.
+        // Vibecoin / referrals / Premium: rewards and purchases are handled by the trusted Cloudflare Worker.
         const referralPanel = document.getElementById('referralPanel');
         async function showReferralPanel() {
             referralPanel?.classList.remove('hidden');
             const status = document.getElementById('referralStatus'); if(status) status.textContent='Загружаем реферальную ссылку…';
             try { const res=await ensureReferralAccount(); const d=res.data||{}; state.userProfile={...(state.userProfile||{}),...d}; renderSocialProfile(); const codeEl=document.getElementById('myReferralCode'); const linkEl=document.getElementById('myReferralLink'); if(codeEl) codeEl.value=d.referralCode||''; if(linkEl) linkEl.value=`${location.origin}${location.pathname}?ref=${encodeURIComponent(d.referralCode||'')}`; if(status) status.textContent=`Баланс: ${Number(d.vibecoinBalance||0)} Vibecoin. За каждого нового приглашённого — 10 монет.`; }
-            catch(e){ if(status) status.textContent='Реферальный сервер ещё не подключён. Разверни Firebase Functions из папки functions проекта.'; console.warn(e); }
+            catch(e){ if(status) status.textContent='Не удалось загрузить рефералы. Проверь адрес Cloudflare Worker и его секрет FIREBASE_SERVICE_ACCOUNT.'; console.warn(e); }
         }
         document.getElementById('openReferralPanel')?.addEventListener('click', showReferralPanel);
         document.getElementById('profileReferralShortcut')?.addEventListener('click', showReferralPanel);
@@ -1217,7 +1226,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
         });
         document.getElementById('claimReferralBtn')?.addEventListener('click',async()=>{const code=(document.getElementById('claimReferralCode')?.value||'').trim();const status=document.getElementById('referralStatus');if(!code)return;if(status)status.textContent='Проверяем код…';try{const res=await claimReferralCall({code});if(status)status.textContent=res.data?.message||'Код применён!';const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();}catch(e){if(status)status.textContent=e?.message||'Не удалось применить код.';}});
-        document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{if(!state.user)throw new Error('Сначала войди в аккаунт.');if(PREMIUM_WORKER_URL.includes('YOUR-WORKER-NAME'))throw new Error('Сначала укажи адрес своего Cloudflare Worker в PREMIUM_WORKER_URL.');const idToken=await state.user.getIdToken(true);const response=await fetch(PREMIUM_WORKER_URL,{method:'POST',headers:{'Authorization':`Bearer ${idToken}`,'Content-Type':'application/json'},body:JSON.stringify({})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'Не удалось купить Premium.');state.userProfile={...(state.userProfile||{}),vibecoinBalance:result.vibecoinBalance,premiumUntil:result.premiumUntil};renderSocialProfile();alert(result.message||'Premium активирован на 30 дней!');}catch(e){console.error('Premium purchase:',e);alert(e?.message||'Не удалось купить Premium.');}finally{b.disabled=false;}});
+        document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{if(!state.user)throw new Error('Сначала войди в аккаунт.');const result=(await workerPost('/buy-premium')).data;state.userProfile={...(state.userProfile||{}),vibecoinBalance:result.vibecoinBalance,premiumUntil:result.premiumUntil};renderSocialProfile();alert(result.message||'Premium активирован на 30 дней!');}catch(e){console.error('Premium purchase:',e);alert(e?.message||'Не удалось купить Premium.');}finally{b.disabled=false;}});
         document.getElementById('watchAdCoinsBtn')?.addEventListener('click',async()=>{try{const res=await claimAdCoinsCall();alert(res.data?.message||'Попробуйте позже — реклама пока не подключена.');}catch(e){alert(e?.message||'Попробуйте позже — реклама пока не подключена.');}});
         document.getElementById('profileBannerFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];const n=document.getElementById('profileBannerFileName');if(n)n.textContent=f?.name||'Файл не выбран';});
         document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const url=await uploadImageToCloudinary(f,'profile-banners');await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert(`Не удалось загрузить банер в Cloudinary: ${e?.message||'ошибка загрузки'}`);}finally{b.disabled=false;}});

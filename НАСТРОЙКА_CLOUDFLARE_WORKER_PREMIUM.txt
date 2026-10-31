@@ -32,3 +32,12 @@ VOICEVIBE — ПЕРЕНОС ПОКУПКИ PREMIUM НА CLOUDFLARE WORKER
 - Firebase Functions всё ещё используются другими функциями проекта (например, рефералами и группами). Этот Worker заменяет только покупку Premium. Перенос остальных функций не выполнялся.
 - В этом окружении выполнена статическая проверка синтаксиса JavaScript. Реальный запрос к вашему Firebase/Cloudflare и покупка не выполнялись.
 - Если Worker уже был развёрнут, после изменения worker.js нужно снова Deploy. Само создание Secret не публикует код.
+
+РЕФЕРАЛЬНАЯ СИСТЕМА (УЖЕ В ЭТОМ WORKER)
+Worker также обрабатывает:
+- POST /referral/ensure — создаёт/возвращает персональный код и Vibecoin-баланс;
+- POST /referral/claim — применяет код приглашённого пользователя.
+Никакие Firebase Functions для рефералов больше не нужны.
+В app.js укажи один базовый адрес Worker в WORKER_BASE_URL:
+https://voicevibe-premium.ТВОЙ-SUBDOMAIN.workers.dev
+После изменения загрузи обновлённые app.js и worker.js, затем Deploy Worker и обнови сайт.
