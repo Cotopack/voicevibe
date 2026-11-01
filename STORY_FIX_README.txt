@@ -1,7 +1,27 @@
-VoiceVibe STORY FIX 20261101-4
+Исправления редактора историй — версия story-repair-20261101-5
 
-1. Publish whole content of public/ to Firebase Hosting, or root files to GitHub Pages (not both simultaneously).
-2. Firebase Rules: replace with firestore.rules in Firebase console and publish.
-3. Check in browser Network panel app.js?v=multi-fix-20261101-4 to confirm that the latest version loads.
-4. Test: choose image, Aa > type > Done, Aa > second text > Done, publish, start new story > new image.
-No existing Firestore data was changed.
+Исправлено:
+- несколько надписей сохраняются при повторном нажатии добавления текста;
+- при лимите 10 надписей текст не стирается, показывается сообщение;
+- переключение между редактируемыми надписями сохраняет текущий текст;
+- отмена выбора фото не очищает надписи;
+- новое фото и новая история сбрасывают музыку, фильтр и оформление текста;
+- исправлена формула плавного изменения громкости;
+- устаревшие результаты поиска упоминаний отбрасываются при очистке текста;
+- обновлены версии ссылок на JS/CSS и синхронизированы файлы public.
+
+Установка:
+Распакуйте архив и замените файлы проекта, включая папку public.
+Для Firebase Hosting используется именно папка public.
+Для GitHub Pages из корня используются корневые index.html, app.js, styles.css.
+Обновляйте index.html вместе с app.js: в HTML задана новая версия загрузки.
+После публикации перезагрузите страницу (на компьютере Ctrl+F5).
+
+Переменной taggedUsers в этой версии нет. Если сообщение осталось после
+публикации, проверьте, что сайт отдаёт новый index.html и app.js.
+Правила Firestore и Worker в этом обновлении не изменены.
+
+Проверено: синтаксис JS, запуск модуля, встроенные smoke-тесты,
+перемещение/масштабирование текста в имитации DOM, сценарии нескольких
+надписей, лимита, отмены галереи и сброса музыки.
+Публикация в вашем Firebase и жесты на реальном телефоне не проверялись.

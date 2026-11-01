@@ -1330,7 +1330,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         const vvEditor=document.getElementById('storyCreateForm');
         const vvCanvasText=document.getElementById('vvStoryCanvasText');
-        // VoiceVibe story build: 20261101-multi-fix-4.
+        // VoiceVibe story build: 20261101-story-repair-5.
         // Each finished text becomes an independent, editable layer.
         const vvTextLayers=[];
         let vvEditingLayer=-1;
@@ -1389,6 +1389,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function vvEditLayer(i){
             const layer=vvTextLayers[i];if(!layer)return;
+            if(!vvCommitCurrentText())return;
+            i=vvTextLayers.indexOf(layer);if(i<0)return;
             vvTextLayers.splice(i,1);
             vvRenderLayers();vvEditingLayer=i;
             vvCanvasText.textContent=layer.text;
@@ -1402,7 +1404,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function vvCommitCurrentText(){
             const text=(vvCanvasText?.innerText||vvCanvasText?.textContent||'').trim();
-            if(text && vvTextLayers.length<10){vvCanvasText.blur();const layer=vvLayerSnapshot(vvCanvasText,-1);
+            if(text && vvTextLayers.length>=10){
+                storyStatus.textContent='Можно добавить до 10 надписей. Удали одну или отредактируй существующую.';storyStatus.classList.remove('hidden');
+                return false;
+            }
+            if(text){vvCanvasText.blur();const layer=vvLayerSnapshot(vvCanvasText,-1);
                 if(vvEditingLayer>=0)vvTextLayers.splice(Math.min(vvEditingLayer,vvTextLayers.length),0,layer);
                 else vvTextLayers.push(layer);
             }
@@ -1410,7 +1416,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvCanvasText.setAttribute('contenteditable','false');
             vvCanvasText.style.removeProperty('left');vvCanvasText.style.removeProperty('top');
             vvCanvasText.style.removeProperty('transform');
+            storyTextInput.value='';vvMentionSeq++;vvMentionResults?.classList.add('hidden');
             vvRenderLayers();vvStoryPanel('');
+            return true;
         }
         function vvAllStoryText(){return vvTextLayers.map(l=>l.text).concat((vvCanvasText?.innerText||vvCanvasText?.textContent||'').trim()).filter(Boolean).join('\n').slice(0,500);}
         const vvDeleteText=document.getElementById('vvStoryTextDelete');
@@ -1432,7 +1440,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvDeleteText?.classList.remove('hidden');vvDragText?.classList.remove('hidden');
             }
         }
-        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvEditingLayer=-1;vvCanvasText.textContent='';vvCanvasText.style.removeProperty('left');vvCanvasText.style.removeProperty('top');vvCanvasText.style.removeProperty('transform');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{if(!vvCommitCurrentText())return;if(vvTextLayers.length>=10){storyStatus.textContent='Можно добавить до 10 надписей.';storyStatus.classList.remove('hidden');return;}vvEditingLayer=-1;vvCanvasText.textContent='';vvCanvasText.style.removeProperty('left');vvCanvasText.style.removeProperty('top');vvCanvasText.style.removeProperty('transform');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
         document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
         document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-trim')?'':'trim'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
@@ -1460,7 +1468,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         vvCanvasText?.addEventListener('click',e=>{if(vvSuppressTextClick){e.preventDefault();e.stopPropagation();}});
         vvCanvasText?.addEventListener('blur',()=>{if(!vvCanvasText?.innerText.trim()){vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');}});
         vvDeleteText?.addEventListener('click',()=>{
-            vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText.classList.add('hidden');vvDragText.classList.add('hidden');vvMentionResults?.classList.add('hidden');vvStoryPanel('');
+            vvEditingLayer=-1;vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText.classList.add('hidden');vvDragText.classList.add('hidden');vvMentionResults?.classList.add('hidden');vvStoryPanel('');
         });
         function vvTextSettings() {
             const parent = vvCanvasText.offsetParent;
@@ -1610,7 +1618,20 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         vvEditor?.addEventListener('touchcancel',()=>{storyTouch=null;},{passive:false,capture:true});
         document.getElementById('vvTextDone')?.addEventListener('click',()=>{storyTouch=null;vvTextPointers.clear();vvGesture=null;});
         // Each story is a fresh draft: never reuse text from the previous story.
+        function vvResetStoryMusic(){
+            vvMusicApplied=false;vvSelectedTrack=null;clearInterval(vvPreviewTimer);
+            vvMusicPlayer?.pause();if(vvMusicPlayer)vvMusicPlayer.onloadedmetadata=null;
+            setMusicPreviewFile(null);
+            vvEditor?.classList.remove('vv-music-active');
+            document.getElementById('vvStorySongChip').textContent='♫ Музыка';
+            vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');
+            if(musicStartInput)musicStartInput.value='0';
+            if(musicLengthInput)musicLengthInput.value='10';
+            if(vvMusicFade)vvMusicFade.checked=false;
+            vvRenderCatalog();updateMusicTrimLabel();
+        }
         function vvResetStoryDraftText(){
+            vvMentionSeq++;vvTextFont='classic';vvTextBackground=false;
             vvTextLayers.length=0;vvLayerHolder.replaceChildren();vvEditingLayer=-1;
             vvEditor?.classList.remove('vv-panel-text');
             if(storyTextInput)storyTextInput.value='';
@@ -1636,12 +1657,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(align)align.value='center';
             vvTextPointers.clear();
             vvGesture=null;
-            storyTouch=null;
+            storyTouch=null;applyTextSettings();
         }
-        document.getElementById('storyCreateToggle')?.addEventListener('click',()=>{vvResetStoryDraftText();vvStoryScreen('choose');});
+        document.getElementById('storyCreateToggle')?.addEventListener('click',()=>{vvResetStoryDraftText();vvResetStoryMusic();vvStoryFilter='none';storyGalleryInput.value='';vvStoryScreen('choose');});
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>{vvResetStoryDraftText();vvStoryScreen('list');});
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>{vvResetStoryDraftText();vvStoryPanel('');vvStoryScreen('choose');});
-        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{vvResetStoryDraftText();storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');});
+        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{vvResetStoryDraftText();vvResetStoryMusic();vvStoryFilter='none';storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');});
         document.querySelectorAll('[data-vv-filter]').forEach(b=>b.addEventListener('click',()=>{vvStoryFilter=b.dataset.vvFilter;vvApplyStoryFilter();}));
         // Mention autocomplete; prefix search starts after two characters.
         let vvMentionSeq=0;
@@ -1898,19 +1919,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         musicStartInput?.addEventListener('input', updateMusicTrimLabel);
         musicLengthInput?.addEventListener('input', updateMusicTrimLabel);
         storyGalleryInput?.addEventListener('click',()=>{
-            // A new image is a new story canvas: no previous text may leak into it.
-            vvResetStoryDraftText();
-            storyGalleryInput.value='';
+            // Preserve the draft if the device picker is cancelled.
         });
         storyGalleryInput?.addEventListener('change',()=>{
             const file=storyGalleryInput.files?.[0];
+            if(!file)return;
+            if(!file.type.startsWith('image/')&&!file.type.startsWith('video/')){storyGalleryInput.value='';storyStatus.textContent='Выбери фото или видео.';storyStatus.classList.remove('hidden');return;}
             const label=document.getElementById('storyGalleryName');
             const preview=document.getElementById('storyGalleryPreview');
             if(label)label.textContent=file?'Файл загружен':'Файл не загружен';
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
-                if(file){vvResetStoryDraftText();vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
+                if(file){vvResetStoryDraftText();vvResetStoryMusic();vvStoryFilter='none';vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
             }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
@@ -1919,7 +1940,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const player=document.getElementById('storyMusicPreview');
                 clearInterval(vvPreviewTimer);player.pause();player.src=vvSelectedTrack.url;
                 const start=Math.max(0,Number(musicStartInput?.value)||0),length=Math.max(3,Number(musicLengthInput?.value)||10);
-                const begin=()=>{player.currentTime=start;player.volume=vvMusicFade?.checked?0:0.9;player.play().catch(()=>{});const started=Date.now();vvPreviewTimer=setInterval(()=>{const elapsed=(Date.now()-started)/1000;if(elapsed>=length){clearInterval(vvPreviewTimer);player.pause();return;}player.volume=vvMusicFade?.checked?Math.min(0.9,Math.max(0,elapsed/.5*.9,(length-elapsed)/.5*.9 < .9 ? (length-elapsed)/.5*.9 : 0.9)):0.9;},80);};
+                const begin=()=>{player.currentTime=start;player.volume=vvMusicFade?.checked?0:0.9;player.play().catch(()=>{});const started=Date.now();vvPreviewTimer=setInterval(()=>{const elapsed=(Date.now()-started)/1000;if(elapsed>=length){clearInterval(vvPreviewTimer);player.pause();return;}player.volume=vvMusicFade?.checked?0.9*Math.max(0,Math.min(1,elapsed/.5,(length-elapsed)/.5)):0.9;},80);};
                 if(player.readyState>=1)begin();else player.onloadedmetadata=begin;
                 return;
             }
@@ -1946,7 +1967,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
-            if(vvCanvasText?.innerText.trim())vvCommitCurrentText();
+            if(state.storyUploading)return;
+            if(!vvCommitCurrentText())return;
             const text=vvAllStoryText(); const gallery=storyGalleryInput?.files?.[0]||null; const image=gallery?.type.startsWith('image/')?gallery:null; const video=gallery?.type.startsWith('video/')?gallery:null; const music=null;
             if(gallery&&!image&&!video){storyStatus.textContent='Выбери фото или видео из галереи.';storyStatus.classList.remove('hidden');return;}
             if(!text&&!image&&!video){storyStatus.textContent='Добавь текст, фото или видео.';storyStatus.classList.remove('hidden');return;}
@@ -1959,7 +1981,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 let mediaURL='', musicURL='', mediaType='text';
                 if(image){ mediaURL=await uploadStoryMedia(image,'image'); mediaType='image'; }
                 if(video){ mediaURL=await uploadStoryMedia(video,'video'); mediaType='video'; }
-                if(vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
+                if(vvMusicApplied&&vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
                 const mentionTargets=await vvResolveMentionUids(text);
