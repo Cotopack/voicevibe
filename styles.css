@@ -504,10 +504,10 @@ header, #appHeader, .app-header {isolation:isolate}
   background-size: cover !important;
   background-position: center center !important;
   background-repeat: no-repeat !important;
-  filter: blur(9px) !important;
-  -webkit-filter: blur(9px) !important;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 72%, rgba(0,0,0,.2) 80%, rgba(0,0,0,.75) 94%, #000 100%) !important;
-  mask-image: linear-gradient(to bottom, transparent 0%, transparent 72%, rgba(0,0,0,.2) 80%, rgba(0,0,0,.75) 94%, #000 100%) !important;
+  filter: blur(13px) !important;
+  -webkit-filter: blur(13px) !important;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 68%, rgba(0,0,0,.25) 79%, rgba(0,0,0,.85) 94%, #000 100%) !important;
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 68%, rgba(0,0,0,.25) 79%, rgba(0,0,0,.85) 94%, #000 100%) !important;
 }
 #socialProfileBanner:not(.hidden)::after,
 #friendProfileModal .vv-visitor-cover::after {
@@ -516,7 +516,7 @@ header, #appHeader, .app-header {isolation:isolate}
   inset: 0 !important;
   z-index: 2 !important;
   pointer-events: none !important;
-  background: linear-gradient(to bottom, transparent 0%, transparent 76%, rgba(17,16,25,.12) 84%, rgba(17,16,25,.5) 93%, #111019 100%) !important;
+  background: linear-gradient(to bottom, transparent 0%, transparent 73%, rgba(17,16,25,.15) 84%, rgba(17,16,25,.5) 93%, #111019 100%) !important;
 }
 /* Name and avatar remain sharp and in front of the banner. */
 #socialProfilePanel .vv-identity { position: relative; z-index: 3; margin-top: -23px; }
