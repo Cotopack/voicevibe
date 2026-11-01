@@ -123,15 +123,6 @@ body.vv-menu-open{overflow:hidden!important}
 #socialChatsPanel.chat-open #conversationBack{display:inline-flex!important}
 body:has(#socialChatsPanel.chat-open){overflow:hidden!important}
 
-/* Full-width, edge-to-edge profile cover, preserving legibility and controls */
-#socialProfilePanel > div:first-child{overflow:hidden;padding-top:72px!important;background:linear-gradient(145deg,#11172d,#0d1022)!important}
-#socialProfilePanel #socialProfileBanner.vv-profile-cover{position:relative;display:block;width:calc(100% + 40px);height:clamp(170px,26vw,250px);margin:-72px -20px 22px;border:0;border-radius:0;background-size:cover;background-position:center 45%;background-repeat:no-repeat;box-shadow:inset 0 -48px 50px -26px rgba(10,11,30,.75)}
-#socialProfilePanel #socialProfileBanner.vv-profile-cover::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(9,9,25,.35),transparent 42%,rgba(11,12,31,.6));}
-#socialProfilePanel #socialProfileBanner.vv-profile-cover.hidden{display:none!important}
-#socialProfilePanel .vv-profile-top-actions{z-index:9}
-#socialProfilePanel .vv-profile-top-actions .vv-top-coins,#socialProfilePanel .vv-profile-top-actions .vv-profile-menu-button{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background-color:rgba(20,13,43,.82)}
-@media(max-width:640px){#socialProfilePanel > div:first-child{padding-top:76px!important}#socialProfilePanel #socialProfileBanner.vv-profile-cover{width:calc(100% + 28px);height:190px;margin:-76px -14px 18px}}
-
 /* Dynamic mobile header: never overlap page content or user details */
 header, #appHeader, .app-header {isolation:isolate}
 @media(max-width:640px){
@@ -191,3 +182,6 @@ header, #appHeader, .app-header {isolation:isolate}
 
 /* VoiceVibe Cloudinary music catalog */
 .vv-catalog{margin:12px 0;padding:12px;border:1px solid #7253a8;border-radius:16px;background:#17132d;color:#f5f3ff}.vv-catalog-top,.vv-catalog-search{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}.vv-catalog-top span{font-size:12px;color:#c4b5fd}.vv-catalog-search input,.vv-catalog-search select{min-width:0;background:#241b42!important;color:#fff!important;border:1px solid #7053a3!important;border-radius:10px;padding:9px}.vv-catalog-search input{flex:1;width:50%}.vv-catalog-search select{max-width:36%}.vv-catalog-tracks{max-height:225px;overflow-y:auto;overscroll-behavior:contain}.vv-catalog-track{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border-bottom:1px solid #493765;padding:9px 5px;color:#f5f3ff}.vv-catalog-track.selected{background:#55358b;border-radius:9px}.vv-catalog-track span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vv-catalog-track small{color:#c4b5fd}.vv-catalog-selected{padding:9px;border-radius:10px;background:#372456;font-size:12px}.vv-catalog-clear{margin-top:8px;color:#f0abfc;font-size:12px}.vv-fade-toggle{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;color:#ddd6fe}.vv-fade-toggle input{accent-color:#a78bfa}
+
+/* Story gallery and interactive waveform editor */
+.vv-gallery-preview{margin-top:12px;max-height:250px;overflow:hidden;border-radius:14px;background:#101325;display:flex;justify-content:center}.vv-gallery-preview.hidden{display:none}.vv-gallery-preview img,.vv-gallery-preview video{max-height:250px;max-width:100%;object-fit:contain}.vv-wave-editor{height:100px!important;position:relative;touch-action:none;cursor:ew-resize;overflow:hidden;border-radius:14px;background:#141427!important;padding:0!important;display:block!important;outline-offset:3px}.vv-wave-bars{position:absolute;inset:10px 0 19px;display:flex;gap:2px;align-items:center;justify-content:space-around;pointer-events:none}.vv-wave-bars span{display:block;flex:1;min-width:1px;border-radius:4px;background:#e9e7f3;opacity:.85}.vv-wave-selection{position:absolute;top:4px;bottom:15px;left:0;width:30%;background:rgba(40,224,191,.25);border:2px solid #2ce6ca;border-radius:7px;box-shadow:0 0 0 1px rgba(0,0,0,.25);pointer-events:none}.vv-wave-handle{position:absolute;top:25%;bottom:25%;width:4px;border-radius:4px;background:#39f5d3}.vv-wave-handle-left{left:2px}.vv-wave-handle-right{right:2px}.vv-wave-time{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:10px;color:#fff;white-space:nowrap;pointer-events:none}
