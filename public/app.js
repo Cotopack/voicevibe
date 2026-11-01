@@ -1385,7 +1385,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvColorsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=true;document.getElementById('vvColorChoices').hidden=false;});
         document.getElementById('vvAlignCycle')?.addEventListener('click',()=>{const el=document.getElementById('vvTextAlign'),values=['center','left','right'];el.value=values[(values.indexOf(el.value)+1)%3];applyTextSettings();});
         document.getElementById('vvTextBackground')?.addEventListener('click',()=>{vvTextBackground=!vvTextBackground;applyTextSettings();});
-        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());});
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvCanvasText.style.touchAction='none';vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());});
         document.querySelector('.vv-text-settings')?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
         function vvKeyboardPosition(){const v=window.visualViewport;document.documentElement.style.setProperty('--vv-keyboard',v?Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px':'0px');}
         window.visualViewport?.addEventListener('resize',vvKeyboardPosition);
@@ -1408,7 +1408,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvGesture={parent,x:center.x,y:center.y,left:box.left-bounds.left-parent.clientLeft+parent.scrollLeft,top:box.top-bounds.top-parent.clientTop+parent.scrollTop,width:box.width,height:box.height,size:Number(document.getElementById('vvTextSize').value)||28,distance:pts.length>1?Math.max(1,Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y)):0};
         }
         vvCanvasText?.addEventListener('pointerdown',e=>{
-            if(e.button!==0||vvTextPointers.size>=2||vvCanvasText.getAttribute('contenteditable')==='true')return;
+            if(e.pointerType==='touch'||e.button!==0||vvTextPointers.size>=2||vvCanvasText.getAttribute('contenteditable')==='true')return;
             if(!vvTextPointers.size)vvSuppressTextClick=false;
             vvTextPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});vvCanvasText.setPointerCapture(e.pointerId);vvGestureStart();e.preventDefault();
         });

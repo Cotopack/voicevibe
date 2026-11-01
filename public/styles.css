@@ -415,3 +415,9 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor .vv-story-canvas-text[contenteditable="true"]{
  touch-action:manipulation!important;
 }
+
+/* Critical: the dismiss layer must not sit over draggable story text. */
+.vv-immersive-story-editor .vv-story-tap-dismiss{pointer-events:none!important}
+.vv-immersive-story-editor .vv-story-canvas-text[contenteditable="false"]{
+ z-index:55!important;touch-action:none!important;pointer-events:auto!important;
+}
