@@ -1750,7 +1750,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     (data.participants||[]).filter(id=>id!==uid).forEach(id=>recentChatTimes.set(id, Math.max(recentChatTimes.get(id)||0, Number(data.updatedAt?.toMillis?.() || data.updatedAt || 0))));
                 });
                 renderChatFriends();
-            }, err => console.warn('Conversation order listener:',err)));
+            }, err => { console.warn('Conversation order listener:',err); renderChatFriends(); }));
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
             const presenceRef = doc(db, 'presence', uid);

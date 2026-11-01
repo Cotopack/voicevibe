@@ -1,0 +1,5 @@
+1. Firebase Console > Firestore Database > Rules.
+2. Replace ALL existing rules with firestore.rules from this ZIP.
+3. Publish.
+4. Reload VoiceVibe with Ctrl+F5.
+5. Verify groups and chats using two test accounts.

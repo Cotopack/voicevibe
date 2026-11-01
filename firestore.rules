@@ -1,55 +1,177 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
 
-    // Roles can be changed only by the developer UID configured in app.js.
-    // Owner UID is hardcoded here and in app.js.
-    match /roles/{userId} {
-      allow read: if signedIn();
-      allow create, update: if signedIn()
-        && request.auth.uid == 'NL0ho7jXHmSswotGoe5H5wpA5X43'
-        && request.resource.data.keys().hasOnly(['role'])
-        && request.resource.data.role == 'admin';
-      allow delete: if signedIn()
+    // ==============================
+    // ОБЩИЕ ФУНКЦИИ
+    // ==============================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMe(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
         && request.auth.uid == 'NL0ho7jXHmSswotGoe5H5wpA5X43';
     }
 
-    // Publicly readable only to signed-in members; edits remain owner-only.
+    function storyPath(storyId) {
+      return /databases/$(database)/documents/stories/$(storyId);
+    }
+
+    function mentionPath(uid, storyId) {
+      return /databases/$(database)/documents/users/$(uid)/storyMentions/$(storyId);
+    }
+
+    function validStoryRepost() {
+      let data = request.resource.data;
+
+      return !data.keys().hasAny(['repostOf'])
+        || (
+          data.repostOf is string
+          && data.repostOf.size() > 0
+          && exists(storyPath(data.repostOf))
+          && exists(mentionPath(request.auth.uid, data.repostOf))
+          && get(storyPath(data.repostOf)).data.uid
+            == data.repostAuthorUid
+          && get(mentionPath(request.auth.uid, data.repostOf)).data.recipientUid
+            == request.auth.uid
+          && get(mentionPath(request.auth.uid, data.repostOf)).data.fromUid
+            == data.repostAuthorUid
+          && get(storyPath(data.repostOf)).data.expiresAt
+            > request.time.toMillis()
+          && data.expiresAt
+            <= get(storyPath(data.repostOf)).data.expiresAt
+          && data.mediaURL
+            == get(storyPath(data.repostOf)).data.mediaURL
+          && data.mediaType
+            == get(storyPath(data.repostOf)).data.mediaType
+          && data.musicURL
+            == get(storyPath(data.repostOf)).data.musicURL
+          && data.repostUsername is string
+          && data.repostText is string
+        );
+    }
+
+    // ==============================
+    // АДМИНИСТРАТОРЫ
+    // ==============================
+
+    match /roles/{userId} {
+      allow read: if signedIn();
+
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['role'])
+        && request.resource.data.role == 'admin';
+
+      allow delete: if isAdmin();
+    }
+
+    // ==============================
+    // ПРОФИЛИ
+    // ==============================
+
     match /users/{userId} {
       allow read: if signedIn();
-      // Clients may create only public profile fields. Wallet/premium/referral fields are server-owned.
+
       allow create: if isMe(userId)
-        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt'])
-        && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 30
-        && request.resource.data.username is string && request.resource.data.username.size() <= 24
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'username',
+          'photoURL',
+          'bio',
+          'createdAt',
+          'updatedAt',
+          'usernameChangedAt'
+        ])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 30
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 24
         && request.resource.data.photoURL is string
-        && request.resource.data.bio is string && request.resource.data.bio.size() <= 160;
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 160;
+
+      // Монеты, Premium и рефералы изменяет сервер
       allow update: if isMe(userId)
-        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt','bannerURL','referralCode','vibecoinBalance','premiumUntil','referredBy','referredAt'])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','username','photoURL','bio','updatedAt','usernameChangedAt','bannerURL'])
-        && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 30
-        && request.resource.data.username is string && request.resource.data.username.size() <= 24
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'username',
+          'photoURL',
+          'bio',
+          'createdAt',
+          'updatedAt',
+          'usernameChangedAt',
+          'bannerURL',
+          'referralCode',
+          'vibecoinBalance',
+          'premiumUntil',
+          'referredBy',
+          'referredAt'
+        ])
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'displayName',
+            'username',
+            'photoURL',
+            'bio',
+            'updatedAt',
+            'usernameChangedAt',
+            'bannerURL'
+          ])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 30
+        && request.resource.data.username is string
+        && request.resource.data.username.size() <= 24
         && request.resource.data.photoURL is string
-        && request.resource.data.bio is string && request.resource.data.bio.size() <= 160
-        && (!request.resource.data.keys().hasAny(['bannerURL']) || request.resource.data.bannerURL is string);
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 160
+        && (
+          !request.resource.data.keys().hasAny(['bannerURL'])
+          || request.resource.data.bannerURL is string
+        );
+
       allow delete: if false;
+
+      // ==============================
+      // PREMIUM СТИКЕРЫ
+      // ==============================
 
       match /stickers/{stickerId} {
         allow read: if signedIn();
+
         allow create: if isMe(userId)
-          && get(/databases/$(database)/documents/users/$(userId)).data.premiumUntil > request.time.toMillis()
-          && request.resource.data.keys().hasOnly(['url','name','createdAt'])
-          && request.resource.data.url is string && request.resource.data.url.size() <= 2000
-          && request.resource.data.name is string && request.resource.data.name.size() <= 80
+          && get(
+            /databases/$(database)/documents/users/$(userId)
+          ).data.premiumUntil > request.time.toMillis()
+          && request.resource.data.keys().hasOnly([
+            'url',
+            'name',
+            'createdAt'
+          ])
+          && request.resource.data.url is string
+          && request.resource.data.url.size() <= 2000
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 80
           && request.resource.data.createdAt is int;
+
         allow update: if false;
         allow delete: if isMe(userId);
       }
 
+      // ==============================
+      // ЗАЯВКИ В ДРУЗЬЯ
+      // ==============================
+
       match /friendRequests/{fromUid} {
         allow read, delete: if isMe(userId);
+
         allow create: if signedIn()
           && request.auth.uid == fromUid
           && fromUid != userId
@@ -59,205 +181,598 @@ service cloud.firestore {
           && request.resource.data.displayName is string
           && request.resource.data.username is string
           && request.resource.data.photoURL is string;
+
         allow update: if false;
       }
 
+      // ==============================
+      // ДРУЗЬЯ
+      // ==============================
+
       match /friends/{friendUid} {
-        allow read: if signedIn() && (request.auth.uid == userId || request.auth.uid == friendUid);
-        allow create: if signedIn() && (
-          request.auth.uid == userId ||
-          (request.auth.uid == friendUid && exists(/databases/$(database)/documents/users/$(friendUid)/friendRequests/$(userId)))
-        ) && request.resource.data.uid == friendUid;
-        allow update: if signedIn() && (request.auth.uid == userId || request.auth.uid == friendUid)
+        allow read: if signedIn()
+          && (
+            request.auth.uid == userId
+            || request.auth.uid == friendUid
+          );
+
+        allow create: if signedIn()
+          && (
+            request.auth.uid == userId
+            || (
+              request.auth.uid == friendUid
+              && exists(
+                /databases/$(database)/documents/users/$(friendUid)/friendRequests/$(userId)
+              )
+            )
+          )
           && request.resource.data.uid == friendUid;
+
+        allow update: if signedIn()
+          && (
+            request.auth.uid == userId
+            || request.auth.uid == friendUid
+          )
+          && request.resource.data.uid == friendUid;
+
+        allow delete: if isMe(userId);
+      }
+
+      // ==============================
+      // ОТВЕТЫ НА ИСТОРИИ
+      // ==============================
+
+      match /storyReplies/{replyId} {
+        allow read: if isMe(userId);
+
+        allow create: if signedIn()
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.fromName is string
+          && request.resource.data.storyId is string
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 300
+          && request.resource.data.createdAt is int;
+
+        allow update, delete: if isMe(userId);
+      }
+
+      // ==============================
+      // ОТМЕТКИ В ИСТОРИЯХ
+      // ==============================
+
+      match /storyMentions/{storyId} {
+
+        // Отметку видит только получатель
+        allow read: if isMe(userId);
+
+        // Создаёт только автор истории,
+        // который действительно отметил получателя
+        allow create: if signedIn()
+          && userId != request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'storyId',
+            'fromUid',
+            'fromUsername',
+            'recipientUid',
+            'createdAt',
+            'expiresAt'
+          ])
+          && request.resource.data.storyId == storyId
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.recipientUid == userId
+          && request.resource.data.fromUsername is string
+          && request.resource.data.fromUsername.size() <= 24
+          && request.resource.data.createdAt is int
+          && request.resource.data.expiresAt is int
+          && exists(storyPath(storyId))
+          && get(storyPath(storyId)).data.uid
+            == request.auth.uid
+          && get(storyPath(storyId)).data.expiresAt
+            > request.time.toMillis()
+          && get(storyPath(storyId)).data.mentionedUids
+            is list
+          && get(storyPath(storyId)).data.mentionedUids
+            .hasAny([userId])
+          && request.resource.data.expiresAt
+            == get(storyPath(storyId)).data.expiresAt;
+
+        allow update: if false;
         allow delete: if isMe(userId);
       }
     }
 
-    // Private notifications for replies to a user's story.
-    match /users/{userId}/storyReplies/{replyId} {
-      allow read: if signedIn() && request.auth.uid == userId;
-      allow create: if signedIn()
-        && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.fromName is string
-        && request.resource.data.storyId is string
-        && request.resource.data.text is string
-        && request.resource.data.text.size() <= 300
-        && request.resource.data.createdAt is int;
-      allow update, delete: if signedIn() && request.auth.uid == userId;
-    }
+    // ==============================
+    // УНИКАЛЬНЫЕ НИКНЕЙМЫ
+    // ==============================
 
-    // Unique nickname reservations: the document ID is the normalized nickname.
     match /usernames/{username} {
       allow read: if signedIn();
+
       allow create: if signedIn()
-        && !exists(/databases/$(database)/documents/usernames/$(username))
+        && !exists(
+          /databases/$(database)/documents/usernames/$(username)
+        )
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.username == username;
+
       allow update: if signedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.username == username;
-      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
     }
 
-    // Ephemeral peer-to-account mapping used for friend requests after a match.
+    // ==============================
+    // PEER SESSIONS
+    // ==============================
+
     match /peerSessions/{peerId} {
       allow read: if signedIn();
-      allow create, update: if signedIn()
-        && request.resource.data.peerId == peerId
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['peerId','ownerUid','updatedAt']);
-      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
-    }
 
-    // Voice roulette matchmaking queue. Keep profile details out of queue docs.
-    match /artifacts/{appId}/public/data/{queueName}/{peerId} {
-      allow read: if signedIn() && appId == 'voicevibe-1b8c0';
       allow create, update: if signedIn()
-        && appId == 'voicevibe-1b8c0'
-        && request.resource.data.keys().hasAll(['peerId','ownerUid','timestamp'])
-        && request.resource.data.keys().hasOnly(['peerId','ownerUid','timestamp'])
         && request.resource.data.peerId == peerId
         && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.timestamp is int;
-      allow delete: if signedIn() && appId == 'voicevibe-1b8c0'
+        && request.resource.data.keys().hasOnly([
+          'peerId',
+          'ownerUid',
+          'updatedAt'
+        ]);
+
+      allow delete: if signedIn()
         && resource.data.ownerUid == request.auth.uid;
     }
 
+    // ==============================
+    // ГОЛОСОВАЯ РУЛЕТКА
+    // ==============================
 
-    // Lightweight online presence. A member can update only their own status;
-    // friends can read it to see whether the person is currently online.
+    match /artifacts/{appId}/public/data/{queueName}/{peerId} {
+      allow read: if signedIn()
+        && appId == 'voicevibe-1b8c0';
+
+      allow create, update: if signedIn()
+        && appId == 'voicevibe-1b8c0'
+        && request.resource.data.keys().hasAll([
+          'peerId',
+          'ownerUid',
+          'timestamp'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'peerId',
+          'ownerUid',
+          'timestamp'
+        ])
+        && request.resource.data.peerId == peerId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.timestamp is int;
+
+      allow delete: if signedIn()
+        && appId == 'voicevibe-1b8c0'
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // ==============================
+    // ОНЛАЙН СТАТУС
+    // ==============================
+
     match /presence/{userId} {
-      allow read: if signedIn() && (
-        request.auth.uid == userId ||
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(userId))
-      );
+      allow read: if signedIn()
+        && (
+          request.auth.uid == userId
+          || exists(
+            /databases/$(database)/documents/users/$(request.auth.uid)/friends/$(userId)
+          )
+        );
+
       allow create, update: if isMe(userId)
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.online is bool
         && request.resource.data.lastSeen is int
-        && request.resource.data.keys().hasOnly(['uid','online','lastSeen']);
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'online',
+          'lastSeen'
+        ]);
+
       allow delete: if isMe(userId);
     }
 
-    // Story author can create stories; reposts require a valid personal mention.
+    // ==============================
+    // ИСТОРИИ
+    // ==============================
+
     match /stories/{storyId} {
       allow read: if signedIn();
+
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid','displayName','username','photoURL','text','mediaURL','mediaType','musicURL','musicStart','musicLength','musicFade','storyFilter','textPosition','mentions','mentionedUids','repostOf','repostAuthorUid','repostUsername','repostText','likes','views','replies','createdAt','expiresAt'])
-        && request.resource.data.text is string && request.resource.data.text.size() <= 500
-        && request.resource.data.mediaType in ['text','image','video']
+
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'username',
+          'photoURL',
+          'text',
+          'mediaURL',
+          'mediaType',
+          'musicURL',
+          'musicStart',
+          'musicLength',
+          'musicFade',
+          'storyFilter',
+          'textPosition',
+          'mentions',
+          'mentionedUids',
+          'repostOf',
+          'repostAuthorUid',
+          'repostUsername',
+          'repostText',
+          'likes',
+          'views',
+          'replies',
+          'createdAt',
+          'expiresAt'
+        ])
+
+        // Данные автора
+        && request.resource.data.displayName is string
+        && request.resource.data.username is string
+        && request.resource.data.photoURL is string
+
+        // Текст
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500
+
+        // Фото или видео
         && request.resource.data.mediaURL is string
+        && request.resource.data.mediaURL.size() <= 4000
+        && request.resource.data.mediaType in [
+          'text',
+          'image',
+          'video'
+        ]
+
+        // Музыка
         && request.resource.data.musicURL is string
-        && request.resource.data.mentions is list && request.resource.data.mentions.size() <= 15
-        && request.resource.data.mentionedUids is list && request.resource.data.mentionedUids.size() <= 15
-        && request.resource.data.likes is list && request.resource.data.likes.size() == 0
-        && request.resource.data.views is list && request.resource.data.views.size() == 0
-        && request.resource.data.replies is list && request.resource.data.replies.size() == 0
+        && request.resource.data.musicURL.size() <= 4000
+
+        // Отметки пользователей
+        && (
+          !request.resource.data.keys().hasAny(['mentions'])
+          || (
+            request.resource.data.mentions is list
+            && request.resource.data.mentions.size() <= 15
+          )
+        )
+
+        && (
+          !request.resource.data.keys().hasAny(['mentionedUids'])
+          || (
+            request.resource.data.mentionedUids is list
+            && request.resource.data.mentionedUids.size() <= 15
+          )
+        )
+
+        // Длина музыки: максимум 10 секунд
+        && (
+          !request.resource.data.keys().hasAny(['musicLength'])
+          || (
+            request.resource.data.musicLength is number
+            && request.resource.data.musicLength >= 0
+            && request.resource.data.musicLength <= 10
+          )
+        )
+
+        && (
+          !request.resource.data.keys().hasAny(['musicStart'])
+          || (
+            request.resource.data.musicStart is number
+            && request.resource.data.musicStart >= 0
+          )
+        )
+
+        && (
+          !request.resource.data.keys().hasAny(['musicFade'])
+          || request.resource.data.musicFade is bool
+        )
+
+        && (
+          !request.resource.data.keys().hasAny(['storyFilter'])
+          || request.resource.data.storyFilter in [
+            'none',
+            'warm',
+            'cool',
+            'mono',
+            'vivid',
+            'retro'
+          ]
+        )
+
+        // Позиция текста на экране
+        && (
+          !request.resource.data.keys().hasAny(['textPosition'])
+          || (
+            request.resource.data.textPosition is map
+            && request.resource.data.textPosition.keys()
+              .hasOnly(['x', 'y'])
+            && request.resource.data.textPosition.x is number
+            && request.resource.data.textPosition.y is number
+          )
+        )
+
+        // Новая история создаётся без просмотров и лайков
+        && request.resource.data.likes is list
+        && request.resource.data.likes.size() == 0
+        && request.resource.data.views is list
+        && request.resource.data.views.size() == 0
+        && request.resource.data.replies is list
+        && request.resource.data.replies.size() == 0
+
+        // Срок жизни: максимум 24 часа
         && request.resource.data.createdAt is int
         && request.resource.data.expiresAt is int
-        && request.resource.data.expiresAt > request.resource.data.createdAt
-        && request.resource.data.expiresAt <= request.resource.data.createdAt + 86400000
-        && (!('repostOf' in request.resource.data) || (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)/storyMentions/$(request.resource.data.repostOf))
-          && exists(/databases/$(database)/documents/stories/$(request.resource.data.repostOf))
-          && get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.uid == request.resource.data.repostAuthorUid
-          && get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.expiresAt > request.time.toMillis()
-          && request.resource.data.expiresAt <= get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.expiresAt
-          && request.resource.data.mediaURL == get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.mediaURL
-        ));
+        && request.resource.data.createdAt
+          <= request.time.toMillis() + 60000
+        && request.resource.data.createdAt
+          >= request.time.toMillis() - 300000
+        && request.resource.data.expiresAt
+          > request.resource.data.createdAt
+        && request.resource.data.expiresAt
+          <= request.resource.data.createdAt + 86400000
+
+        // Репост только при наличии отметки
+        && validStoryRepost();
+
+      // Лайки, просмотры, ответы
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','views','replies'])
-        && request.resource.data.likes is list && request.resource.data.likes.size() <= 5000
-        && request.resource.data.views is list && request.resource.data.views.size() <= 5000
-        && request.resource.data.replies is list && request.resource.data.replies.size() <= 500;
-      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
-    }
-    match /users/{recipientUid}/storyMentions/{storyId} {
-      allow read: if isMe(recipientUid);
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['storyId','fromUid','fromUsername','recipientUid','createdAt','expiresAt'])
-        && request.resource.data.storyId == storyId
-        && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.recipientUid == recipientUid
-        && exists(/databases/$(database)/documents/stories/$(storyId))
-        && get(/databases/$(database)/documents/stories/$(storyId)).data.uid == request.auth.uid
-        && get(/databases/$(database)/documents/stories/$(storyId)).data.mentionedUids.hasAny([recipientUid])
-        && request.resource.data.expiresAt == get(/databases/$(database)/documents/stories/$(storyId)).data.expiresAt;
-      allow update: if false;
-      allow delete: if isMe(recipientUid);
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'likes',
+            'views',
+            'replies'
+          ])
+        && request.resource.data.likes is list
+        && request.resource.data.likes.size() <= 5000
+        && request.resource.data.views is list
+        && request.resource.data.views.size() <= 5000
+        && request.resource.data.replies is list
+        && request.resource.data.replies.size() <= 500;
+
+      // Удалять историю может только автор
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
     }
 
-    // One conversation per sorted UID pair. Only its participants can read/write.
+    // ==============================
+    // ЛИЧНЫЕ ЧАТЫ
+    // ==============================
+
     match /conversations/{chatId} {
+
       function isFriendConversation(data) {
-        let otherUid = data.participants[0] == request.auth.uid ? data.participants[1] : data.participants[0];
-        return exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUid))
-          || exists(/databases/$(database)/documents/users/$(otherUid)/friends/$(request.auth.uid));
+        let otherUid = data.participants[0] == request.auth.uid
+          ? data.participants[1]
+          : data.participants[0];
+
+        return exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUid)
+        )
+        || exists(
+          /databases/$(database)/documents/users/$(otherUid)/friends/$(request.auth.uid)
+        );
       }
-      // Allow a signed-in user to check whether a deterministic chat document
-      // exists; this is needed before creating a new conversation. Existing chats
-      // remain readable only by their participants.
-      allow get: if signedIn() && (
-        !exists(/databases/$(database)/documents/conversations/$(chatId)) ||
-        (resource.data.participants is list
-          && resource.data.participants.hasAny([request.auth.uid]))
-      );
-      allow list: if signedIn() && resource.data.participants is list
-        && resource.data.participants.hasAny([request.auth.uid]);
+
+      allow get: if signedIn()
+        && (
+          !exists(
+            /databases/$(database)/documents/conversations/$(chatId)
+          )
+          || (
+            resource.data.participants is list
+            && resource.data.participants.hasAny([
+              request.auth.uid
+            ])
+          )
+        );
+
+      allow list: if signedIn()
+        && request.auth.uid in resource.data.participants;
+
       allow create: if signedIn()
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
-        && request.resource.data.participants.hasAny([request.auth.uid])
+        && request.resource.data.participants.hasAny([
+          request.auth.uid
+        ])
         && isFriendConversation(request.resource.data);
+
       allow update: if signedIn()
         && resource.data.participants is list
-        && resource.data.participants.hasAny([request.auth.uid])
-        && request.resource.data.participants == resource.data.participants;
+        && resource.data.participants.hasAny([
+          request.auth.uid
+        ])
+        && request.resource.data.participants
+          == resource.data.participants
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'updatedAt',
+            'lastMessage',
+            'wallpaperURL'
+          ])
+        && (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['updatedAt'])
+          || request.resource.data.updatedAt is int
+        )
+        && (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['lastMessage'])
+          || (
+            request.resource.data.lastMessage is string
+            && request.resource.data.lastMessage.size() <= 100
+          )
+        )
+        && (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['wallpaperURL'])
+          || request.resource.data.wallpaperURL is string
+        );
+
       allow delete: if false;
 
+      // ==============================
+      // СООБЩЕНИЯ В ЧАТАХ
+      // ==============================
+
       match /messages/{messageId} {
+
         function participant() {
-          return signedIn() && get(/databases/$(database)/documents/conversations/$(chatId)).data.participants.hasAny([request.auth.uid]);
+          return signedIn()
+            && get(
+              /databases/$(database)/documents/conversations/$(chatId)
+            ).data.participants.hasAny([
+              request.auth.uid
+            ]);
         }
+
         allow read: if participant();
+
         allow create: if participant()
-          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.senderUid
+            == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 1000
-          && request.resource.data.type in ['text','snake-challenge','snake-result','sticker']
-          && (request.resource.data.type != 'sticker' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumUntil > request.time.toMillis());
+          && request.resource.data.type in [
+            'text',
+            'snake-challenge',
+            'snake-result',
+            'sticker'
+          ]
+          && (
+            request.resource.data.type != 'sticker'
+            || get(
+              /databases/$(database)/documents/users/$(request.auth.uid)
+            ).data.premiumUntil > request.time.toMillis()
+          );
+
         allow update, delete: if false;
       }
     }
 
-    // Group membership is established by the trusted createGroup callable function.
+    // ==============================
+    // ГРУППЫ
+    // ==============================
+
     match /groups/{groupId} {
-      allow read: if signedIn() && resource.data.members is list && resource.data.members.hasAny([request.auth.uid]);
+      allow read: if signedIn()
+        && request.auth.uid in resource.data.members;
+
+      // Создание групп через сервер
       allow create: if false;
+
       allow update: if signedIn()
-        && resource.data.members is list && resource.data.members.hasAny([request.auth.uid])
-        && request.resource.data.members == resource.data.members
-        && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.name == resource.data.name
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt','lastMessage','wallpaperURL'])
-        && request.resource.data.updatedAt is int;
-      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+        && resource.data.members is list
+        && resource.data.members.hasAny([
+          request.auth.uid
+        ])
+        && request.resource.data.members
+          == resource.data.members
+        && request.resource.data.createdBy
+          == resource.data.createdBy
+        && request.resource.data.name
+          == resource.data.name
+        && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'updatedAt',
+            'lastMessage',
+            'wallpaperURL'
+          ])
+        && request.resource.data.updatedAt is int
+        && (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['lastMessage'])
+          || (
+            request.resource.data.lastMessage is string
+            && request.resource.data.lastMessage.size() <= 100
+          )
+        )
+        && (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['wallpaperURL'])
+          || request.resource.data.wallpaperURL is string
+        );
+
+      allow delete: if signedIn()
+        && resource.data.createdBy == request.auth.uid;
+
+      // ==============================
+      // СООБЩЕНИЯ ГРУПП
+      // ==============================
+
       match /messages/{messageId} {
-        function groupMember() { return signedIn() && get(/databases/$(database)/documents/groups/$(groupId)).data.members.hasAny([request.auth.uid]); }
+
+        function groupMember() {
+          return signedIn()
+            && get(
+              /databases/$(database)/documents/groups/$(groupId)
+            ).data.members.hasAny([
+              request.auth.uid
+            ]);
+        }
+
         allow read: if groupMember();
+
         allow create: if groupMember()
-          && request.resource.data.senderUid == request.auth.uid
-          && request.resource.data.text is string && request.resource.data.text.size() <= 2000
-          && request.resource.data.type in ['text','sticker']
+          && request.resource.data.senderUid
+            == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.type in [
+            'text',
+            'sticker'
+          ]
           && request.resource.data.createdAt is int
-          && (request.resource.data.type != 'sticker' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumUntil > request.time.toMillis());
+          && (
+            request.resource.data.type != 'sticker'
+            || get(
+              /databases/$(database)/documents/users/$(request.auth.uid)
+            ).data.premiumUntil > request.time.toMillis()
+          );
+
         allow update, delete: if false;
       }
     }
-    match /referralCodes/{code} { allow read: if signedIn(); allow write: if false; }
-    match /referralClaims/{uid} { allow read: if signedIn() && request.auth.uid == uid; allow write: if false; }
+
+    // ==============================
+    // РЕФЕРАЛЬНЫЕ КОДЫ
+    // ==============================
+
+    match /referralCodes/{code} {
+      allow read: if signedIn();
+
+      // Только сервер
+      allow create, update, delete: if false;
+    }
+
+    // ==============================
+    // РЕФЕРАЛЬНЫЕ НАЧИСЛЕНИЯ
+    // ==============================
+
+    match /referralClaims/{uid} {
+      allow read: if isMe(uid);
+
+      // Только сервер
+      allow create, update, delete: if false;
+    }
+
+    // ==============================
+    // ВСЁ ОСТАЛЬНОЕ ЗАКРЫТО
+    // ==============================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
