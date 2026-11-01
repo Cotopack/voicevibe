@@ -444,3 +444,8 @@ header, #appHeader, .app-header {isolation:isolate}
   z-index:2147483640!important;
 }
 #storyCreateForm:not(.vv-panel-text) #vvTextDone{display:none!important}
+
+/* Reserve the top music selector and bottom publish area in the story editor. */
+#storyCreateForm #vvStoryCanvasText{max-height:calc(100dvh - 235px)!important;overflow-wrap:anywhere!important;}
+#storyCreateForm .vv-story-editor-title{z-index:120!important;pointer-events:auto!important;}
+#storyCreateForm #vvStorySongChip{position:relative;z-index:121!important;pointer-events:auto!important;}

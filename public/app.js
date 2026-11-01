@@ -1385,7 +1385,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvColorsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=true;document.getElementById('vvColorChoices').hidden=false;});
         document.getElementById('vvAlignCycle')?.addEventListener('click',()=>{const el=document.getElementById('vvTextAlign'),values=['center','left','right'];el.value=values[(values.indexOf(el.value)+1)%3];applyTextSettings();});
         document.getElementById('vvTextBackground')?.addEventListener('click',()=>{vvTextBackground=!vvTextBackground;applyTextSettings();});
-        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvCanvasText.style.touchAction='none';vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());});
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvCanvasText.style.touchAction='none';vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());vvKeepTextInSafeArea();});
         document.querySelector('.vv-text-settings')?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
         function vvKeyboardPosition(){const v=window.visualViewport;document.documentElement.style.setProperty('--vv-keyboard',v?Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px':'0px');}
         window.visualViewport?.addEventListener('resize',vvKeyboardPosition);
@@ -1424,7 +1424,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(pts.length>1&&g.distance){const distance=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);const size=Math.max(16,Math.min(120,g.size*distance/g.distance));document.getElementById('vvTextSize').value=String(size);scale=size/g.size;applyTextSettings();}
             const left=g.left+dx-(scale-1)*g.width/2,top=g.top+dy-(scale-1)*g.height/2;
             vvCanvasText.style.left=Math.max(0,Math.min(Math.max(0,g.parent.clientWidth-vvCanvasText.offsetWidth),left))+'px';
-            vvCanvasText.style.top=Math.max(0,Math.min(Math.max(0,g.parent.clientHeight-vvCanvasText.offsetHeight),top))+'px';vvCanvasText.style.transform='none';e.preventDefault();
+            vvCanvasText.style.top=vvClampTextY(g.parent,top)+'px';vvCanvasText.style.transform='none';e.preventDefault();
         });
         function vvEndTextDrag(e){
             if(!vvTextPointers.has(e.pointerId))return;
@@ -1436,6 +1436,39 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         ['pointerup','pointercancel','lostpointercapture'].forEach(n=>vvCanvasText?.addEventListener(n,vvEndTextDrag));
 
+        // Keep the draggable text below the top music selector and above publish controls.
+        function vvSafeTextTop(parent){
+            const chip=document.getElementById('vvStorySongChip');
+            const title=document.querySelector('#storyCreateForm .vv-story-editor-title');
+            const bounds=parent.getBoundingClientRect();
+            const bar=(title||chip)?.getBoundingClientRect();
+            return Math.max(72,bar?Math.ceil(bar.bottom-bounds.top+14):72);
+        }
+        function vvSafeTextBottom(parent){
+            const bar=document.querySelector('#storyCreateForm .vv-story-bottom-actions');
+            const bounds=parent.getBoundingClientRect();
+            const r=bar?.getBoundingClientRect();
+            return Math.max(vvSafeTextTop(parent)+40,r?Math.floor(r.top-bounds.top-14):parent.clientHeight-84);
+        }
+        function vvClampTextY(parent,proposed){
+            const min=vvSafeTextTop(parent);
+            const max=Math.max(min,vvSafeTextBottom(parent)-vvCanvasText.offsetHeight);
+            return Math.max(min,Math.min(max,proposed));
+        }
+        function vvKeepTextInSafeArea(){
+            if(!vvCanvasText||vvCanvasText.classList.contains('hidden'))return;
+            const parent=vvCanvasText.offsetParent;if(!parent)return;
+            const rect=vvCanvasText.getBoundingClientRect(),b=parent.getBoundingClientRect();
+            const y=rect.top-b.top+parent.scrollTop-parent.clientTop;
+            const safe=vvClampTextY(parent,y);
+            if(Math.abs(y-safe)>1){
+                vvCanvasText.style.transform='none';
+                vvCanvasText.style.left=Math.max(0,rect.left-b.left+parent.scrollLeft-parent.clientLeft)+'px';
+                vvCanvasText.style.top=safe+'px';
+            }
+        }
+        document.getElementById('vvStorySongChip')?.addEventListener('click',vvKeepTextInSafeArea);
+        window.addEventListener('resize',vvKeepTextInSafeArea);
         // Unified story-text gestures: Touch Events on iOS/Android, pointer for mouse/pen.
         // Touch tracking is attached to the editor so a second finger can land off-text.
         let storyTouch=null;
@@ -1454,7 +1487,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             // Freeze translated layout at its actual on-screen coordinates.
             const left=rect.left-bounds.left+parent.scrollLeft-parent.clientLeft;
             const top=rect.top-bounds.top+parent.scrollTop-parent.clientTop;
-            vvCanvasText.style.transform='none';vvCanvasText.style.left=left+'px';vvCanvasText.style.top=top+'px';
+            vvCanvasText.style.transform='none';vvCanvasText.style.left=left+'px';vvCanvasText.style.top=vvClampTextY(parent,top)+'px';
             storyTouch={count:pts.length,center,left,top,size:Number(document.getElementById('vvTextSize').value)||28,
                 distance:pts.length===2?Math.max(1,Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y)):0,parent};
             e.preventDefault();
@@ -1472,7 +1505,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             const x=g.left+center.x-g.center.x,y=g.top+center.y-g.center.y;
             vvCanvasText.style.left=Math.max(0,Math.min(Math.max(0,g.parent.clientWidth-vvCanvasText.offsetWidth),x))+'px';
-            vvCanvasText.style.top=Math.max(0,Math.min(Math.max(0,g.parent.clientHeight-vvCanvasText.offsetHeight),y))+'px';
+            vvCanvasText.style.top=vvClampTextY(g.parent,y)+'px';
             e.preventDefault();
         }
         vvEditor?.addEventListener('touchstart',storyBeginTouches,{passive:false,capture:true});
