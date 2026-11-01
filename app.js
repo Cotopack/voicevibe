@@ -1098,6 +1098,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 localStorage.setItem(unreadStorageKey(activeFriend), String(Date.now()));
                 state.unreadCounts.set(activeFriend, 0); updateUnreadBadge(); renderChatFriends();
             }
+            if (tab === 'chats') refreshGroupsOnce();
             const roulette = tab === 'roulette';
             const chatsTab = tab === 'chats';
             screenAgeSelect.classList.toggle('hidden', !roulette || !!state.selectedAge);
@@ -1186,7 +1187,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             clearTimeout(storyAdvanceTimer);
             clearInterval(vvStoryMusicTimer);
             stopStoryMedia();
-            document.getElementById('storyViewer')?.classList.add('hidden');
+            const viewer = document.getElementById('storyViewer');
+            if (viewer) {
+                viewer.classList.add('hidden');
+                viewer.innerHTML = '';
+            }
             setCurrentStoryAvatar('');
         }
         function renderStoryViewer() {
@@ -1199,8 +1204,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (Number(st.expiresAt) <= Date.now()) { expireStories(); closeStoryViewer(); return; }
             const storyMediaFilter={none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'}[st.storyFilter]||'none';
             const media = st.mediaType === 'video' && st.mediaURL
-                ? `<video src="${storyEscape(st.mediaURL)}" style="filter:${storyMediaFilter}" class="absolute inset-0 h-full w-full object-contain bg-transparent" autoplay playsinline controls preload="metadata"></video>`
-                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" style="filter:${storyMediaFilter}" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain"/>` : '';
+                ? `<video src="${storyEscape(st.mediaURL)}" style="filter:${storyMediaFilter}" class="absolute inset-0 h-full w-full object-contain bg-transparent pointer-events-none select-none" autoplay playsinline webkit-playsinline preload="metadata" controlslist="nodownload nofullscreen noplaybackrate" disablepictureinpicture tabindex="-1"></video>`
+                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" style="filter:${storyMediaFilter}" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain select-none"/>` : '';
             const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
             const views = Array.isArray(st.views) ? st.views : [];
             const isOwnStory = st.uid === state.user?.uid;
@@ -1244,6 +1249,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 decorateStoryText(textCard,cfg.font,cfg.background,textCard.style.color);
             }
             viewer.classList.remove('hidden');
+            const storyVideo = viewer.querySelector('video');
+            if (storyVideo) {
+                storyVideo.controls = false;
+                storyVideo.disablePictureInPicture = true;
+                storyVideo.setAttribute('playsinline', '');
+                storyVideo.setAttribute('webkit-playsinline', '');
+                storyVideo.setAttribute('controlslist', 'nodownload nofullscreen noplaybackrate');
+                storyVideo.muted = false;
+            }
             const storyAudio=viewer.querySelector('audio');
             if(storyAudio&&st.musicURL){
                 const start=Math.max(0,Number(st.musicStart)||0);
@@ -1743,7 +1757,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 alert('Репост опубликован!');storiesModal?.classList.remove('hidden');await refreshStories();
             }catch(e){console.error(e);alert('Не удалось сделать репост. Проверь Firestore Rules.');}
         }
-        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);});
+        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);setTimeout(()=>refreshGroupsOnce(user.uid),1200);});
         // Cloudinary catalog: music URLs are stored directly, no re-upload required.
         let vvCatalogTracks = [];
         let vvSelectedTrack = null;
@@ -2053,7 +2067,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const groupModal=document.getElementById('createGroupModal');
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
-        document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent='Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
+        document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsOnce();const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
         async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
@@ -2096,13 +2110,24 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (state.groupUnsub) { state.groupUnsub(); state.groupUnsub = null; }
             /* Keep cached groups visible during temporary reconnects. */
         }
+        async function refreshGroupsOnce(uid = state.user?.uid) {
+            if (!uid) return;
+            try {
+                const snap = await getDocs(query(collection(db,'groups'), where('members','array-contains',uid)));
+                groupsCache = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b)=>Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0) - Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0));
+                renderChatFriends();
+            } catch (err) {
+                console.warn('Groups refresh:', err);
+            }
+        }
         function startSocialListeners() {
             stopSocialListeners();
             if (!state.user) return;
             const uid = state.user.uid;
             const generation = socialGeneration;
             try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
-            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); });
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0)-Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); refreshGroupsOnce(uid); });
+            refreshGroupsOnce(uid);
             // Real-time conversation order: newest message (sent or received) appears first.
             state.socialUnsubs.push(onSnapshot(query(collection(db,'conversations'), where('participants','array-contains',uid)), snap => {
                 // Preserve optimistic ordering until Firestore confirms the newest update.
