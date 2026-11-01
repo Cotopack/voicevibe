@@ -1065,6 +1065,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return `<span class="vv-avatar-story-wrap ${storyState ? `has-story ${storyState}` : ''}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="${storyState ? 'Открыть историю' : 'Аватар'}">${inner}</span>`;
         }
         document.getElementById('vvProfileEditAction')?.addEventListener('click',()=>document.getElementById('socialEditProfile')?.click());
+        // Chat avatars are decorative: do not intercept chat navigation to open a story/profile.
+        // Everywhere outside chats, avatarMarkup still retains its original click behavior.
+        function chatAvatarMarkup(profile, size='h-10 w-10') {
+            return avatarMarkup(profile, size)
+                .replace(/data-story-avatar=/g, 'data-chat-avatar=')
+                .replace(/role="button"/g, 'role="img"')
+                .replace(/tabindex="0"/g, 'tabindex="-1"');
+        }
+
         function renderSocialProfile() {
             if (!state.user) return;
             const rolePanel = document.getElementById('roleManagementPanel');
@@ -2259,7 +2268,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function updateConversationPresence(uid) {
             const f = friendsCache.find(x => x.uid === uid) || {};
             const header = document.getElementById('conversationHeader');
-            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button><button type="button" id="vvChatCallButton" class="vv-friend-call-button ml-auto" aria-label="Позвонить другу" title="Позвонить другу"><i class="fa-solid fa-phone"></i><span class="hidden sm:inline">Позвонить</span></button></div>`;
+            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${chatAvatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button><button type="button" id="vvChatCallButton" class="vv-friend-call-button ml-auto" aria-label="Позвонить другу" title="Позвонить другу"><i class="fa-solid fa-phone"></i><span class="hidden sm:inline">Позвонить</span></button></div>`;
             document.getElementById('conversationBack')?.addEventListener('click', closeConversation);
             document.getElementById('conversationFriendProfile')?.addEventListener('click', () => openFriendProfile(uid)); document.getElementById('vvChatCallButton')?.addEventListener('click',()=>startFriendCall(uid));
         }
@@ -2364,7 +2373,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const friendsHtml = sortedFriends.map(f => {
                 const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0)+vvMentionUnread(uid);
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
-                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${chatAvatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('<!--vv-chat-split-->');
             const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('<!--vv-chat-split-->');
             // One chronological list: groups must not remain pinned above recent private chats.
@@ -2798,7 +2807,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function vvReactionAvatarMarkup(uid){
             const profile=vvKnownReactionProfile(uid);
             const name=profile?.displayName||profile?.username||'Пользователь';
-            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
+            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
         }
         async function vvLoadReactionProfile(uid){
             const cached=vvReactionProfiles.get(uid);
@@ -2861,7 +2870,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvBindMessageActions(host);
             host.scrollTop=atBottom?host.scrollHeight:oldScroll;
         }
-        async function vvSetMessageReaction(node,emoji,toggle=true){
+        async function vvSetMessageReaction(node,emoji,toggle=true,removeOnly=false){
             if(!state.user||!vvReactionEmojis.includes(emoji))return;
             const scope=node.dataset.messageScope,chat=node.dataset.messageChat,id=node.dataset.messageId;
             if(!['conversations','groups'].includes(scope)||!chat||!id)return;
@@ -2872,7 +2881,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 await runTransaction(db,async tx=>{
                     const snap=await tx.get(ref);if(!snap.exists())return;
                     const reactions={...(snap.data().reactions||{})};
-                    if(toggle&&reactions[uid]===emoji)delete reactions[uid];else reactions[uid]=emoji;
+                    if(removeOnly){
+                        // Only remove the current user's matching reaction.
+                        // Never add a reaction or modify another user's reaction here.
+                        if(reactions[uid]!==emoji)return;
+                        delete reactions[uid];
+                    }else if(toggle&&reactions[uid]===emoji)delete reactions[uid];else reactions[uid]=emoji;
                     tx.update(ref,{reactions});
                 });
             }catch(e){console.error('Message reaction:',e);alert('Реакция не сохранена. Опубликуй обновлённые Firestore Rules и попробуй снова.');}
@@ -2896,14 +2910,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if(lastTap&&now-lastTap<320){lastTap=0;heart();}else lastTap=now;
                 });
                 node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
-                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{
-                    // A single tap on an existing reaction never removes it.
-                    // The picker can select/change an emoji, but only a double tap
-                    // on the message itself toggles the heart off.
-                    if(!b.closest('.vv-reaction-picker'))return;
-                    node.querySelector('.vv-reaction-picker').hidden=true;
-                    vvSetMessageReaction(node,b.dataset.reaction,false);
-                }));
+                node.querySelectorAll('[data-reaction]').forEach(b=>{
+                    // Reaction buttons must never trigger the message's double-tap handler.
+                    // This matters on touch screens where synthetic click/dblclick events
+                    // can be dispatched in addition to pointer events.
+                    for(const type of ['pointerdown','pointerup','dblclick']){
+                        b.addEventListener(type,event=>event.stopPropagation());
+                    }
+                    b.addEventListener('click',event=>{
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if(!b.closest('.vv-reaction-picker')){
+                            // One tap on your OWN reaction removes it.
+                            // Other people's reactions cannot be removed by tapping.
+                            if(b.classList.contains('selected'))
+                                vvSetMessageReaction(node,b.dataset.reaction,true,true);
+                            return;
+                        }
+                        node.querySelector('.vv-reaction-picker').hidden=true;
+                        vvSetMessageReaction(node,b.dataset.reaction,false);
+                    });
+                });
             });
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
