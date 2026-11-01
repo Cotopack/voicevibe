@@ -425,3 +425,22 @@ header, #appHeader, .app-header {isolation:isolate}
 /* Universal story text controls (iOS Safari, Android Chrome, desktop) */
 .vv-immersive-story-editor #vvStoryCanvasText[contenteditable="false"]{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;cursor:grab!important;pointer-events:auto!important;z-index:60!important;overflow:visible!important;}
 .vv-immersive-story-editor #vvStoryCanvasText[contenteditable="true"]{touch-action:manipulation!important;-webkit-user-select:text!important;user-select:text!important;}
+
+/* Story v3: interactive elements are direct children of the editor form.
+   The media overlay must never intercept taps. */
+#storyCreateForm{position:relative!important}
+#storyCreateForm #vvStoryCanvasText{
+  position:absolute!important;z-index:110!important;pointer-events:auto!important;
+  touch-action:none!important;overscroll-behavior:contain!important;
+}
+#storyCreateForm #vvStoryCanvasText[contenteditable="true"]{
+  touch-action:manipulation!important;user-select:text!important;-webkit-user-select:text!important;
+}
+#storyCreateForm #vvStoryCanvasText[contenteditable="false"]{
+  touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;
+}
+#storyCreateForm.vv-panel-text #vvTextDone{
+  display:block!important;visibility:visible!important;pointer-events:auto!important;
+  z-index:2147483640!important;
+}
+#storyCreateForm:not(.vv-panel-text) #vvTextDone{display:none!important}
