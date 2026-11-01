@@ -249,6 +249,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('profileNameInput').value = p.displayName || state.user?.displayName || '';
             document.getElementById('profileUsernameInput').value = p.username ? '@' + p.username : '';
             document.getElementById('profileBioInput').value = p.bio || '';
+            document.getElementById('decorNeonInput').checked = !!p.decorNeon;
+            document.getElementById('decorRainInput').checked = !!p.decorRain;
+            document.getElementById('decorButterfliesInput').checked = !!p.decorButterflies;
+            document.getElementById('decorFirefliesInput').checked = !!p.decorFireflies;
+            document.getElementById('decorAvatarFrameInput').checked = !!p.decorAvatarFrame;
             const preview = document.getElementById('profileEditAvatarPreview');
             if (preview) preview.innerHTML = avatarMarkup({...p,uid:state.user?.uid}, 'h-14 w-14');
             const removeAvatarButton = document.getElementById('btnRemoveAvatar');
@@ -315,7 +320,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (file) photoURL = await uploadAvatarToCloudinary(await compressAvatar(file));
                 if (document.getElementById('btnRemoveAvatar')?.dataset.remove === 'true') photoURL = '';
                 await setDoc(usernameRef,{uid:state.user.uid,username,updatedAt:Date.now()});
-                const updated = {displayName,username,bio,photoURL,usernameChangedAt:changing?Date.now():changedAt,updatedAt:Date.now(),createdAt:state.userProfile?.createdAt||Date.now()};
+                const premiumDecor = Number(state.userProfile?.premiumUntil || 0) > Date.now();
+                const updated = {displayName,username,bio,photoURL,usernameChangedAt:changing?Date.now():changedAt,updatedAt:Date.now(),createdAt:state.userProfile?.createdAt||Date.now(),decorNeon: premiumDecor ? !!document.getElementById('decorNeonInput')?.checked : !!state.userProfile?.decorNeon,decorRain: premiumDecor ? !!document.getElementById('decorRainInput')?.checked : !!state.userProfile?.decorRain,decorButterflies: premiumDecor ? !!document.getElementById('decorButterfliesInput')?.checked : !!state.userProfile?.decorButterflies,decorFireflies: premiumDecor ? !!document.getElementById('decorFirefliesInput')?.checked : !!state.userProfile?.decorFireflies,decorAvatarFrame: premiumDecor ? !!document.getElementById('decorAvatarFrameInput')?.checked : !!state.userProfile?.decorAvatarFrame};
                 await setDoc(doc(db,'users',state.user.uid),updated,{merge:true});
                 if (oldUsername && oldUsername!==username) {
                     const oldRef=doc(db,'usernames',oldUsername), oldSnap=await getDoc(oldRef);
@@ -1055,6 +1061,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
 
         function escapeHTML(value='') { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+        function getProfileDecor(profile = {}) {
+            return {
+                neon: !!profile.decorNeon,
+                rain: !!profile.decorRain,
+                butterflies: !!profile.decorButterflies,
+                fireflies: !!profile.decorFireflies,
+                avatarFrame: !!profile.decorAvatarFrame
+            };
+        }
+        function profileDecorMarkup(decor = {}, variant = 'own') {
+            const pieces = [];
+            if (decor.neon) pieces.push('<div class="vv-decor-neon-strip"></div>');
+            if (decor.rain) pieces.push(`<div class="vv-decor-rain">${Array.from({length: 18}, (_, i) => `<span style="--i:${i};--x:${(i*5.25)%96 + 2}%;--d:${1.1 + (i%5)*0.2}s;--h:${26 + (i%7)*9}px"></span>`).join('')}</div>`);
+            if (decor.butterflies) pieces.push(`<div class="vv-decor-butterflies">${['🦋','🦋','🦋','🦋'].map((icon, i) => `<span style="--i:${i};--delay:${i*1.3}s;--top:${12 + i*15}%;--scale:${0.8 + (i%2)*0.2}">${icon}</span>`).join('')}</div>`);
+            if (decor.fireflies) pieces.push(`<div class="vv-decor-fireflies">${Array.from({length: 14}, (_, i) => `<span style="--x:${(i*7)%95 + 2}%;--y:${8 + (i*11)%76}%;--delay:${(i%7)*0.45}s;--size:${5 + (i%3)*2}px"></span>`).join('')}</div>`);
+            return pieces.length ? `<div class="vv-profile-effects vv-profile-effects--${variant}">${pieces.join('')}</div>` : '';
+        }
+        function withPremiumAvatarFrame(html, profile = {}) {
+            return getProfileDecor(profile).avatarFrame ? `<div class="vv-premium-avatar-frame">${html}</div>` : html;
+        }
         function avatarMarkup(profile, size='h-10 w-10') {
             const label = escapeHTML((profile?.displayName || profile?.username || '?').slice(0,1).toUpperCase());
             const src = profile?.photoURL;
@@ -1082,7 +1108,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (roleToggle) roleToggle.classList.toggle('hidden', !isDeveloper);
             if (rolePanel && !isDeveloper) rolePanel.classList.add('hidden');
             const p = state.userProfile || {};
-            document.getElementById('socialAvatar').innerHTML = avatarMarkup({ ...p, uid: state.user.uid }, 'h-20 w-20');
+            document.getElementById('socialAvatar').innerHTML = withPremiumAvatarFrame(avatarMarkup({ ...p, uid: state.user.uid }, 'h-20 w-20'), p);
             const socialName = document.getElementById('socialName');
             const ownUid = state.user.uid;
             const ownPremium = Number(p.premiumUntil || 0) > Date.now(); socialName.classList.toggle('vv-premium-name', ownPremium); socialName.innerHTML = `${escapeHTML(p.displayName || 'Настрой профиль')}${ownPremium ? ' 👑' : ''} ${roleBadgeMarkup(ownUid)}`;
@@ -1100,7 +1126,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             // Hide Premium-only controls from non-Premium accounts; keep the purchase button visible.
             ['profileBannerFile','uploadProfileBannerBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('[data-premium-only]') || el; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
             document.querySelectorAll('[data-premium-only]').forEach(el => el.classList.toggle('hidden', !premium));
-            const banner = document.getElementById('socialProfileBanner'); if (banner) { const bannerUrl = premium ? (p.bannerURL||p.bannerUrl||p.coverURL||'') : ''; const safeBannerUrl = String(bannerUrl || '').replace(/["\\]/g,''); banner.style.setProperty('--vv-cover-image', safeBannerUrl ? `url("${safeBannerUrl}")` : 'none'); banner.style.backgroundImage = safeBannerUrl ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${safeBannerUrl}")` : ''; banner.classList.toggle('hidden', !safeBannerUrl); }
+            const banner = document.getElementById('socialProfileBanner'); if (banner) { const bannerUrl = premium ? (p.bannerURL||p.bannerUrl||p.coverURL||'') : ''; const safeBannerUrl = String(bannerUrl || '').replace(/["\]/g,''); banner.style.setProperty('--vv-cover-image', safeBannerUrl ? `url("${safeBannerUrl}")` : 'none'); banner.style.backgroundImage = safeBannerUrl ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${safeBannerUrl}")` : ''; banner.classList.toggle('hidden', !safeBannerUrl); }
+            const decorLayer = document.getElementById('socialProfileDecorLayer');
+            if (decorLayer) decorLayer.innerHTML = premium ? profileDecorMarkup(getProfileDecor(p), 'own') : '';
         }
         function showTab(tab) {
             currentTab = tab;
@@ -2306,7 +2334,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const visitorPremium = Number(profile.premiumUntil || 0) > Date.now();
             const coverUrl = visitorPremium ? String(profile.bannerURL || '').replace(/["\\]/g,'') : '';
             const cover = coverUrl ? `url("${coverUrl}")` : '';
-            content.innerHTML=`${cover ? `<div class="vv-visitor-cover" style="--vv-cover-image:${escapeHTML(cover)};background-image:${escapeHTML(cover)}"></div>` : ''}<div class="vv-visitor-info"><div class="vv-visitor-identity"><div>${avatarMarkup(profile,'h-24 w-24')}</div><div class="min-w-0 flex-1 pb-2"><h2 class="text-xl font-bold break-words ${Number(profile.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(profile.displayName||'Пользователь')}${Number(profile.premiumUntil||0)>Date.now()?' 👑':''} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p></div></div><p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-300">${escapeHTML(profile.bio||'')}</p><div class="vv-visitor-actions"><button id="profileViewStories" class="rounded-xl border border-slate-700 px-3 py-3 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Добавить в друзья</button>`}</div></div>`;
+            const visitorDecor = visitorPremium ? getProfileDecor(profile) : {};
+            content.innerHTML=`${visitorPremium ? profileDecorMarkup(visitorDecor, 'visitor') : ''}${cover ? `<div class="vv-visitor-cover" style="--vv-cover-image:${escapeHTML(cover)};background-image:${escapeHTML(cover)}"></div>` : ''}<div class="vv-visitor-info"><div class="vv-visitor-identity"><div>${withPremiumAvatarFrame(avatarMarkup(profile,'h-24 w-24'), profile)}</div><div class="min-w-0 flex-1 pb-2"><h2 class="text-xl font-bold break-words ${Number(profile.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(profile.displayName||'Пользователь')}${Number(profile.premiumUntil||0)>Date.now()?' 👑':''} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p></div></div><p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-300">${escapeHTML(profile.bio||'')}</p><div class="vv-visitor-actions"><button id="profileViewStories" class="rounded-xl border border-slate-700 px-3 py-3 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Добавить в друзья</button>`}</div></div>`;
             content.querySelector('#profileViewStories')?.addEventListener('click',()=>{const has=activeStoryItems.some(st=>st.uid===uid&&Number(st.expiresAt)>Date.now());if(has){modal.remove();storiesModal?.classList.remove('hidden');openStoryByUser(uid);}else{storiesModal?.classList.remove('hidden');refreshStories();}});
             content.querySelector('#profileMessageUser')?.addEventListener('click',()=>{modal.remove();openConversation(uid);});
             content.querySelector('#profileAddUser')?.addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='Отправляем…';try{await sendFriendRequest(uid);b.textContent='Заявка отправлена';}catch(err){b.disabled=false;b.textContent='Повторить';alert(err.message||'Не удалось отправить заявку.');}});
@@ -2870,7 +2899,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvBindMessageActions(host);
             host.scrollTop=atBottom?host.scrollHeight:oldScroll;
         }
-        async function vvSetMessageReaction(node,emoji,toggle=true,removeOnly=false){
+        async function vvSetMessageReaction(node,emoji,toggle=true){
             if(!state.user||!vvReactionEmojis.includes(emoji))return;
             const scope=node.dataset.messageScope,chat=node.dataset.messageChat,id=node.dataset.messageId;
             if(!['conversations','groups'].includes(scope)||!chat||!id)return;
@@ -2881,12 +2910,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 await runTransaction(db,async tx=>{
                     const snap=await tx.get(ref);if(!snap.exists())return;
                     const reactions={...(snap.data().reactions||{})};
-                    if(removeOnly){
-                        // Only remove the current user's matching reaction.
-                        // Never add a reaction or modify another user's reaction here.
-                        if(reactions[uid]!==emoji)return;
-                        delete reactions[uid];
-                    }else if(toggle&&reactions[uid]===emoji)delete reactions[uid];else reactions[uid]=emoji;
+                    if(toggle&&reactions[uid]===emoji)delete reactions[uid];else reactions[uid]=emoji;
                     tx.update(ref,{reactions});
                 });
             }catch(e){console.error('Message reaction:',e);alert('Реакция не сохранена. Опубликуй обновлённые Firestore Rules и попробуй снова.');}
@@ -2910,27 +2934,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if(lastTap&&now-lastTap<320){lastTap=0;heart();}else lastTap=now;
                 });
                 node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
-                node.querySelectorAll('[data-reaction]').forEach(b=>{
-                    // Reaction buttons must never trigger the message's double-tap handler.
-                    // This matters on touch screens where synthetic click/dblclick events
-                    // can be dispatched in addition to pointer events.
-                    for(const type of ['pointerdown','pointerup','dblclick']){
-                        b.addEventListener(type,event=>event.stopPropagation());
-                    }
-                    b.addEventListener('click',event=>{
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if(!b.closest('.vv-reaction-picker')){
-                            // One tap on your OWN reaction removes it.
-                            // Other people's reactions cannot be removed by tapping.
-                            if(b.classList.contains('selected'))
-                                vvSetMessageReaction(node,b.dataset.reaction,true,true);
-                            return;
-                        }
-                        node.querySelector('.vv-reaction-picker').hidden=true;
-                        vvSetMessageReaction(node,b.dataset.reaction,false);
-                    });
-                });
+                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{
+                    // A single tap on an existing reaction never removes it.
+                    // The picker can select/change an emoji, but only a double tap
+                    // on the message itself toggles the heart off.
+                    if(!b.closest('.vv-reaction-picker'))return;
+                    node.querySelector('.vv-reaction-picker').hidden=true;
+                    vvSetMessageReaction(node,b.dataset.reaction,false);
+                }));
             });
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {

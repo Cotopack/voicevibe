@@ -99,7 +99,12 @@ service cloud.firestore {
           'bio',
           'createdAt',
           'updatedAt',
-          'usernameChangedAt'
+          'usernameChangedAt',
+          'decorNeon',
+          'decorRain',
+          'decorButterflies',
+          'decorFireflies',
+          'decorAvatarFrame'
         ])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 30
@@ -124,7 +129,12 @@ service cloud.firestore {
           'vibecoinBalance',
           'premiumUntil',
           'referredBy',
-          'referredAt'
+          'referredAt',
+          'decorNeon',
+          'decorRain',
+          'decorButterflies',
+          'decorFireflies',
+          'decorAvatarFrame'
         ])
         && request.resource.data.diff(resource.data)
           .affectedKeys().hasOnly([
@@ -134,7 +144,12 @@ service cloud.firestore {
             'bio',
             'updatedAt',
             'usernameChangedAt',
-            'bannerURL'
+            'bannerURL',
+            'decorNeon',
+            'decorRain',
+            'decorButterflies',
+            'decorFireflies',
+            'decorAvatarFrame'
           ])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 30
@@ -143,8 +158,22 @@ service cloud.firestore {
         && request.resource.data.photoURL is string
         && request.resource.data.bio is string
         && request.resource.data.bio.size() <= 160
+        && (!request.resource.data.keys().hasAny(['decorNeon']) || request.resource.data.decorNeon is bool)
+        && (!request.resource.data.keys().hasAny(['decorRain']) || request.resource.data.decorRain is bool)
+        && (!request.resource.data.keys().hasAny(['decorButterflies']) || request.resource.data.decorButterflies is bool)
+        && (!request.resource.data.keys().hasAny(['decorFireflies']) || request.resource.data.decorFireflies is bool)
+        && (!request.resource.data.keys().hasAny(['decorAvatarFrame']) || request.resource.data.decorAvatarFrame is bool)
         // Banner uploads require an active, server-issued Premium subscription.
         // Removing an old banner remains allowed even after Premium expires.
+        && (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['decorNeon','decorRain','decorButterflies','decorFireflies','decorAvatarFrame'])
+          || (
+            resource.data.keys().hasAny(['premiumUntil'])
+            && resource.data.premiumUntil is int
+            && resource.data.premiumUntil > request.time.toMillis()
+          )
+        )
         && (
           !request.resource.data.diff(resource.data)
             .affectedKeys().hasAny(['bannerURL'])
