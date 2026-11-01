@@ -2130,6 +2130,24 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (state.groupUnsub) { state.groupUnsub(); state.groupUnsub = null; }
             /* Keep cached groups visible during temporary reconnects. */
         }
+        // Merge group sources instead of allowing a late cached/empty snapshot to erase a valid server response.
+        function vvMergeGroups(incoming, uid = state.user?.uid) {
+            if (!uid || !Array.isArray(incoming) || state.user?.uid !== uid) return;
+            const merged = new Map(groupsCache.filter(g => Array.isArray(g.members) && g.members.includes(uid)).map(g => [g.id, g]));
+            for (const g of incoming) {
+                if (!g?.id || !Array.isArray(g.members) || !g.members.includes(uid)) continue;
+                merged.set(g.id, {...(merged.get(g.id) || {}), ...g});
+            }
+            groupsCache = [...merged.values()].sort((a,b) => Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0) - Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0));
+            renderChatFriends();
+        }
+        function vvGroupLoadStatus(message = '', error = false) {
+            const node = document.getElementById('vvGroupLoadStatus');
+            if (!node) return;
+            node.textContent = message;
+            node.classList.toggle('hidden', !message);
+            node.style.color = error ? '#fda4af' : '#c4b5fd';
+        }
         let groupsServerRefreshAt = 0;
         let groupsServerRefreshPromise = null;
         async function refreshGroupsFromServer(uid = state.user?.uid, force = false) {
@@ -2137,6 +2155,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (groupsServerRefreshPromise) return groupsServerRefreshPromise;
             if (!force && Date.now() - groupsServerRefreshAt < 12000) return;
             groupsServerRefreshAt = Date.now();
+            if (!groupsCache.length) vvGroupLoadStatus('Проверяем доступные группы…');
             groupsServerRefreshPromise = (async () => {
                 try {
                     const res = await workerPost('/my-groups');
@@ -2144,10 +2163,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     const serverGroups = res.data.groups.filter(g => Array.isArray(g.members) && g.members.includes(uid));
                     // The server uses verified Firebase credentials and can recover groups
                     // even if the local Firestore query is denied by older published rules.
-                    groupsCache = serverGroups.sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
-                    renderChatFriends();
+                    vvMergeGroups(serverGroups, uid);
+                    vvGroupLoadStatus(serverGroups.length ? '' : 'Сервер не нашёл групп, в которых твой аккаунт указан участником. Если тебя добавляли раньше, попроси создателя проверить список участников.', !serverGroups.length);
                 } catch(err) {
                     console.warn('Server groups refresh (deploy updated worker.js):',err);
+                    vvGroupLoadStatus('Ошибка загрузки групп: '+(err?.message||'проверь Cloudflare Worker и Firestore'), true);
                 }
             })();
             try { await groupsServerRefreshPromise; } finally { groupsServerRefreshPromise = null; }
@@ -2156,8 +2176,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!uid) return;
             try {
                 const snap = await getDocs(query(collection(db,'groups'), where('members','array-contains',uid)));
-                groupsCache = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b)=>Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0) - Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0));
-                renderChatFriends();
+                vvMergeGroups(snap.docs.map(d => ({ id:d.id, ...d.data() })), uid);
             } catch (err) {
                 console.warn('Groups refresh:', err);
                 await refreshGroupsFromServer(uid);
@@ -2169,7 +2188,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const uid = state.user.uid;
             const generation = socialGeneration;
             try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
-            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0)-Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); refreshGroupsOnce(uid); });
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); refreshGroupsOnce(uid); });
             refreshGroupsOnce(uid);
             refreshGroupsFromServer(uid, true);
             // Real-time conversation order: newest message (sent or received) appears first.
@@ -2495,6 +2514,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
           document.getElementById('vvGroupOwnerControls').classList.toggle('hidden',!owner);
           document.getElementById('vvGroupLeave').classList.toggle('hidden',owner);
           document.getElementById('vvGroupNewName').value=g.name||'';
+          const inviteChoices=document.getElementById('vvGroupInviteChoices');
+          if(inviteChoices) inviteChoices.innerHTML=owner ? friendsCache.filter(f=>!g.members.includes(f.uid||f.id)).map(f=>`<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-700"><input type="checkbox" class="vv-group-invite-check" value="${escapeHTML(f.uid||f.id)}"><span>${escapeHTML(f.displayName||f.username||'Друг')}</span></label>`).join('') || '<p class="text-xs text-slate-400">Все друзья уже в группе</p>' : '';
+
           document.getElementById('vvGroupStatus').textContent='';
           document.getElementById('vvGroupSettings').classList.remove('hidden');
           const host=document.getElementById('vvGroupMembers');host.textContent='Загрузка участников…';
@@ -2503,6 +2525,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         document.getElementById('vvGroupClose')?.addEventListener('click',()=>document.getElementById('vvGroupSettings').classList.add('hidden'));
         async function groupAction(action){const status=document.getElementById('vvGroupStatus');const name=document.getElementById('vvGroupNewName').value.trim();if(action==='delete'&&!confirm('Удалить группу для всех участников?'))return;if(action==='leave'&&!confirm('Выйти из группы?'))return;try{await workerPost('/group/manage',{groupId:settingsGroupId,action,name});status.textContent='Готово';if(action!=='rename'){document.getElementById('vvGroupSettings').classList.add('hidden');socialChatsPanel.classList.remove('chat-open');activeGroupId=null;}else{const g=groupsCache.find(x=>x.id===settingsGroupId);if(g)g.name=name;openGroupConversation(settingsGroupId);}}catch(e){status.textContent=e.message||'Ошибка';}}
+        document.getElementById('vvGroupInviteBtn')?.addEventListener('click',async()=>{
+          const status=document.getElementById('vvGroupStatus');
+          const selected=[...document.querySelectorAll('.vv-group-invite-check:checked')].map(input=>input.value);
+          if(!selected.length){status.textContent='Выбери друзей для добавления.';return;}
+          const button=document.getElementById('vvGroupInviteBtn');button.disabled=true;
+          try {await workerPost('/group/manage',{groupId:settingsGroupId,action:'add-members',members:selected});status.textContent='Участники добавлены. Теперь группа должна появиться у них в чатах.';await refreshGroupsFromServer(state.user.uid,true);await showGroupSettings(settingsGroupId);}
+          catch(e){status.textContent='Ошибка добавления: '+(e?.message||'проверь Worker');}
+          finally{button.disabled=false;}
+        });
         document.getElementById('vvGroupRename')?.addEventListener('click',()=>groupAction('rename'));
         document.getElementById('vvGroupDelete')?.addEventListener('click',()=>groupAction('delete'));
         document.getElementById('vvGroupLeave')?.addEventListener('click',()=>groupAction('leave'));

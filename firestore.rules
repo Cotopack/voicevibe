@@ -710,9 +710,15 @@ service cloud.firestore {
     // ==============================
 
     match /groups/{groupId} {
-      allow read: if signedIn()
-        && resource.data.members is list
-        && request.auth.uid in resource.data.members;
+      // Чтение доступно только участникам, включая участников старых групп.
+      // Запрос клиента: where('members', 'array-contains', request.auth.uid).
+      function isGroupMember() {
+        return signedIn()
+          && resource.data.members is list
+          && resource.data.members.hasAny([request.auth.uid]);
+      }
+
+      allow get, list: if isGroupMember();
 
       // Создание групп через сервер
       allow create: if false;

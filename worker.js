@@ -200,6 +200,18 @@ async function manageGroup(token,uid,body){
  const members=(g.fields?.members?.arrayValue?.values||[]).map(x=>x.stringValue);
  if(!members.includes(uid))throw Error('Нет доступа к группе');
  const owner=stringField(g.fields,'createdBy')===uid;
+ if(body.action==='add-members'&&owner){
+   const selected=[...new Set((Array.isArray(body.members)?body.members:[]).filter(x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(x)&&x!==uid))];
+   if(!selected.length||selected.length>49)throw Error('Выбери от 1 до 49 друзей');
+   const added=selected.filter(x=>!members.includes(x));
+   if(members.length+added.length>50)throw Error('В группе максимум 50 участников');
+   for(const member of added){
+     const [a,b]=await Promise.all([getDocument(token,`users/${uid}/friends/${member}`),getDocument(token,`users/${member}/friends/${uid}`)]);
+     if(!a||!b)throw Error('Можно добавить только взаимных друзей');
+   }
+   if(added.length){await commit(token,[updateWrite(path,{members:{arrayValue:{values:[...members,...added].map(x=>({stringValue:x}))}},updatedAt:{integerValue:String(Date.now())}},['members','updatedAt'],g.updateTime)]);}
+   return {ok:true,added:added.length};
+ }
  if(body.action==='rename'&&owner){const name=String(body.name||'').trim();if(name.length<1||name.length>40)throw Error('Название: 1–40 символов');await commit(token,[updateWrite(path,{name:{stringValue:name},updatedAt:{integerValue:String(Date.now())}},['name','updatedAt'],g.updateTime)]);return {ok:true};}
  if(body.action==='delete'&&owner){await commit(token,[{delete:docName(path),currentDocument:{updateTime:g.updateTime}}]);return {ok:true};}
  if(body.action==='leave'&&!owner){await commit(token,[updateWrite(path,{members:{arrayValue:{values:members.filter(x=>x!==uid).map(x=>({stringValue:x}))}},updatedAt:{integerValue:String(Date.now())}},['members','updatedAt'],g.updateTime)]);return {ok:true};}
