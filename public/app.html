@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-slate-950 text-slate-100" lang="ru">
+<head>
+<meta name="google-adsense-account" content="ca-pub-1620383667186320">
+<!-- AdSense verification: display ads only on public content pages -->
+
+
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>VoiceVibe — голосовая чат-рулетка</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="tailwind-config.js"></script>
+<!-- FontAwesome Icons -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- PeerJS WebRTC Library -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<link href="styles.css?v=blur-retry-20261101-v3" rel="stylesheet"/>
+<style>
+      html{scroll-behavior:smooth;height:100%;overscroll-behavior:none}
+      button,input,textarea{transition:background-color .18s ease,border-color .18s ease,transform .18s ease,opacity .18s ease}
+      button:active{transform:scale(.98)}
+      #chatFriendsList button{border:1px solid transparent}
+      #chatFriendsList button:hover{border-color:rgba(139,92,246,.28)}
+      #messagesList{display:flex;flex-direction:column;gap:.65rem;min-height:0;overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y}
+      #messagesList>div{animation:vvMessageIn .18s ease-out}
+      #conversationHeader{min-height:66px}
+      #conversationPane{background:rgba(15,23,42,.42)}
+      #conversationPane:not(.hidden){display:flex}
+      #conversationBack{display:none}
+      @media(max-width:767px){#socialScreen.chat-tab-active{position:fixed;inset:64px 0 calc(66px + env(safe-area-inset-bottom)) 0;height:auto;overflow:hidden;padding:8px 10px 8px}#socialChatsPanel{height:100%;min-height:0}#socialChatsPanel>.chat-shell{height:100%;min-height:0!important;grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr)}#socialChatsPanel.chat-open aside{display:none}#socialChatsPanel.chat-open #conversationPane{display:flex!important;height:100%;min-height:0!important;max-height:100%;overflow:hidden}#conversationPane:not(.hidden) #conversationBack{display:inline-flex}#socialChatsPanel:not(.chat-open) #conversationPane{display:none!important}#socialChatsPanel:not(.chat-open)>.chat-shell{overflow-y:auto}#socialChatsPanel:not(.chat-open) aside{max-height:100%;overflow-y:auto;overscroll-behavior:contain}#conversationHeader,#messageForm,#conversationPane>.flex.justify-end{flex-shrink:0}#messagesList{flex:1 1 0%;height:0;min-height:0;overflow-y:auto;padding:12px}body:has(#socialScreen.chat-tab-active){overflow:hidden}}
+      #socialChatsPanel .chat-shell{min-height:65vh}
+      #snakeCanvas{image-rendering:auto; touch-action:none}
+      #friendsList>div{transition:border-color .18s ease,background .18s ease}
+      #friendsList>div:hover{border-color:rgba(139,92,246,.35)}
+      #snakeCanvas{touch-action:none}
+      .online-dot{width:8px;height:8px;border-radius:50%;background:#34d399;display:inline-block}
+      @keyframes vvMessageIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+      @media(max-width:767px){#chatFriendsList{overflow:auto;overscroll-behavior:contain}}
+      #profileModal>div{max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain}
+      .profile-avatar-preview{box-shadow:0 0 0 4px rgba(139,92,246,.12),0 12px 32px rgba(0,0,0,.25)}
+    
+        .vv-role-star { display:inline-block; vertical-align:-2px; margin-left:2px; flex:none; }
+    </style>
+<style>
+      .story-avatar-ring{display:inline-flex;flex-shrink:0;width:54px;height:54px;padding:2px;border-radius:9999px;background:linear-gradient(135deg,#22c55e,#16a34a);align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(34,197,94,.18);}
+      .story-avatar-ring img,.story-avatar-ring span{width:100%;height:100%;border-radius:9999px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#6d28d9;font-weight:700;object-fit:cover;}
+      .vv-avatar-story-wrap{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:9999px;position:relative;cursor:default;}
+      .vv-avatar-story-wrap.has-story{padding:2px;background:#22c55e;cursor:pointer;box-shadow:0 0 0 1px rgba(34,197,94,.15);}
+      .vv-avatar-story-wrap.has-story.story-viewed{background:#64748b;box-shadow:0 0 0 1px rgba(148,163,184,.15);}
+      .vv-avatar-story-wrap.has-story.story-unviewed{background:#22c55e;}
+      .vv-avatar-story-wrap.has-story>img,.vv-avatar-story-wrap.has-story>span{border:2px solid #020617;}
+      .vv-avatar-story-wrap:focus-visible{outline:2px solid #a78bfa;outline-offset:2px;}
+      .story-avatar-ring.story-viewed{background:#64748b;box-shadow:0 0 0 1px rgba(148,163,184,.16);}
+      .story-avatar-ring.story-unviewed{background:#22c55e;}
+      .story-top-gradient{background:linear-gradient(to bottom,rgba(0,0,0,.78),transparent);}
+      .story-bottom-gradient{background:linear-gradient(to top,rgba(0,0,0,.88),transparent);}
+      #storyViewer .story-avatar-ring{width:38px;height:38px;}
+    .story-upload-card{padding:12px;border:1px solid rgba(148,163,184,.2);border-radius:16px;background:rgba(15,23,42,.7)}
+      #storyCreateForm input[type=file]{padding:10px;border-radius:12px;background:rgba(30,41,59,.7);border:1px dashed rgba(148,163,184,.4)}
+      #storiesList [data-open-story-user] .story-avatar-ring{padding:2px}
+      #storiesList [data-open-story-user]:hover .story-avatar-ring{box-shadow:0 0 0 3px rgba(34,197,94,.15)}
+      .story-text-card{position:relative;padding:18px 20px;border:1px solid rgba(216,180,254,.35);border-radius:22px;background:linear-gradient(135deg,rgba(91,33,182,.42),rgba(15,23,42,.82) 55%,rgba(5,150,105,.2));box-shadow:0 12px 36px rgba(0,0,0,.25);backdrop-filter:blur(12px);}
+      .story-text-card-label{display:block;margin-bottom:8px;color:#d8b4fe;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;}
+      .story-text-card p{font-size:clamp(16px,3.5vw,20px);line-height:1.55;font-weight:600;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.25);}
+      .vv-avatar-story-wrap.story-currently-open{background:#22c55e!important;box-shadow:0 0 0 2px rgba(34,197,94,.24),0 0 18px rgba(34,197,94,.72)!important;}
+      .story-music-trim{padding:12px;border:1px solid rgba(167,139,250,.3);border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(15,23,42,.72));}
+      .vv-file-input{padding:10px;border:1px dashed rgba(167,139,250,.4);border-radius:14px;background:rgba(15,23,42,.7)}
+      .vv-file-picker{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;padding:10px;border:1px solid rgba(167,139,250,.28);border-radius:15px;background:linear-gradient(135deg,rgba(30,41,59,.92),rgba(15,23,42,.92));}
+      .vv-file-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:10px 14px;border-radius:11px;background:linear-gradient(115deg,#7c3aed,#c026d3);color:#fff;font-size:13px;font-weight:750;cursor:pointer;box-shadow:0 5px 18px rgba(124,58,237,.2);transition:transform .15s,filter .15s;}
+      .vv-file-button:hover{filter:brightness(1.12);transform:translateY(-1px)}
+      .vv-file-button:active{transform:translateY(0)}
+      .vv-file-name{min-width:0;flex:1;color:#cbd5e1;font-size:12px;overflow-wrap:anywhere}
+      .vv-native-file{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;}
+      .music-waveform{height:42px;display:flex;align-items:center;gap:3px;padding:5px 8px;border-radius:12px;overflow:hidden;background:linear-gradient(90deg,rgba(139,92,246,.18),rgba(217,70,239,.12));}
+      .music-waveform span{flex:1;min-width:2px;border-radius:4px;background:linear-gradient(180deg,#e879f9,#8b5cf6);opacity:.85}
+
+/* Centered referral modal and richer non-white story palette */
+#referralPanel:not(.hidden){position:fixed!important;inset:0!important;z-index:120!important;display:flex!important;flex-direction:column;justify-content:center;max-width: min(560px, calc(100vw - 28px));max-height:min(88dvh, 760px);overflow-y:auto;margin:auto!important;padding:clamp(20px,4vw,30px)!important;border:1px solid rgba(196,181,253,.48)!important;border-radius:30px!important;background:linear-gradient(145deg,rgba(49,36,91,.98),rgba(39,43,82,.98) 55%,rgba(89,40,120,.98))!important;box-shadow:0 30px 100px rgba(12,8,35,.55),0 0 0 100vmax rgba(15,12,35,.62)!important;backdrop-filter:blur(24px);}
+#referralPanel:not(.hidden)::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;}
+#referralPanel h3{font-size:clamp(20px,4vw,26px);color:#fff;}
+#referralPanel input{background:rgba(20,18,45,.82)!important;border-color:rgba(196,181,253,.3)!important;color:#fff!important;}
+#referralPanel #shareReferralLink{background:linear-gradient(100deg,#8b5cf6,#d946ef);color:#fff;}
+#storiesModal{background:linear-gradient(135deg,#dbeafe 0%,#e9d5ff 48%,#fce7f3 100%)!important;}
+#storiesModal>div{background:linear-gradient(145deg,rgba(236,233,255,.96),rgba(219,234,254,.94) 48%,rgba(252,231,243,.96))!important;}
+#storiesModal .border-violet-100{border-color:rgba(167,139,250,.35)!important;}
+#storiesModal .bg-white\/85,#storiesModal .bg-white\/80{background:rgba(242,239,255,.86)!important;}
+#storiesModal textarea,#storiesModal input:not([type=range]){background:rgba(245,243,255,.94)!important;color:#334155!important;}
+#storiesModal .story-upload-card{background:linear-gradient(135deg,#ddd6fe,#dbeafe 52%,#fce7f3)!important;}
+
+/* Light, edge-to-edge stories experience */
+#storiesModal{padding:0!important;}
+#storiesModal>div{border-radius:0!important;border:0!important;max-width:none!important;max-height:100dvh!important;}
+#storyViewer .story-top-gradient{background:linear-gradient(to bottom,rgba(255,255,255,.94),rgba(255,255,255,.56) 72%,transparent);}
+#storyViewer .story-bottom-gradient{background:linear-gradient(to top,rgba(255,255,255,.96),rgba(255,255,255,.72) 65%,transparent);}
+#storyViewer .story-text-card{padding:clamp(20px,4vw,36px);border:1px solid rgba(255,255,255,.9);border-radius:28px;background:linear-gradient(135deg,rgba(255,255,255,.92),rgba(250,245,255,.84) 55%,rgba(240,249,255,.9));box-shadow:0 24px 80px rgba(91,33,182,.16);backdrop-filter:blur(24px);color:#334155;max-height:52dvh;overflow:auto;}
+#storyViewer .story-text-card-label{color:#8b5cf6;}
+#storyViewer .story-text-card p{color:#334155;text-shadow:none;font-size:clamp(19px,4vw,30px);line-height:1.5;font-weight:700;}
+#storyViewer #storyReplyInput{background:rgba(255,255,255,.88);border-color:rgba(139,92,246,.22);color:#334155;box-shadow:0 8px 24px rgba(91,33,182,.08);}
+#storyViewer #storyReplyInput::placeholder{color:#94a3b8;}
+#storyViewer #storyReplyForm button,#storyViewer #storyLikeBtn,#storyViewer #storyViewersBtn{background:rgba(255,255,255,.88);color:#475569;border:1px solid rgba(139,92,246,.16);box-shadow:0 8px 24px rgba(91,33,182,.08);}
+#storyViewer #storyViewersList{background:rgba(255,255,255,.95);color:#475569;border:1px solid #ede9fe;}
+#storyViewer #storyOwnerProfile{color:#334155;}
+#storyViewer .story-avatar-ring img,#storyViewer .story-avatar-ring span{border-color:#fff;}
+#storiesModal .vv-file-picker{background:linear-gradient(135deg,#fff,#f5f3ff);border-color:#ddd6fe;}
+#storiesModal .vv-file-name{color:#64748b;}
+#storiesModal .story-upload-card{background:linear-gradient(135deg,#f5f3ff,#fff1f2);border-color:#ddd6fe;}
+#storiesModal .text-slate-400{color:#64748b!important;}
+#storiesModal .text-slate-500{color:#64748b!important;}
+@media(max-width:640px){#storyViewer .story-centered-text{padding-left:18px;padding-right:18px;}#storyViewer .story-text-card{border-radius:22px;}#storyViewer .story-bottom-gradient{padding-bottom:max(16px,env(safe-area-inset-bottom));}}
+    </style>
+<style>
+/* Rich asymmetric violet premium glow, including chat headers and messages */
+.vv-premium-name{color:#f3d9ff!important;font-weight:800!important;letter-spacing:.015em;text-shadow:-2px 0 5px #a21caf,2px 1px 9px #7c3aed,0 -2px 15px #c026d3,3px 4px 24px rgba(147,51,234,.95),-4px 2px 32px rgba(217,70,239,.65)!important;filter:drop-shadow(1px 2px 3px rgba(168,85,247,.45))}
+.vv-role-star{display:inline-block!important;opacity:1!important;visibility:visible!important;position:relative;z-index:1;filter:drop-shadow(0 0 5px currentColor)!important}
+#storiesModal,#storiesModal>div{background:linear-gradient(145deg,#0b1024 0%,#1b1237 52%,#100c25 100%)!important;color:#f5f3ff!important}
+#storiesModal .bg-white\/85,#storiesModal .bg-white\/80,#storiesModal .story-upload-card,#storiesModal .vv-file-picker{background:rgba(35,25,65,.92)!important;color:#f5f3ff!important;border-color:rgba(167,139,250,.35)!important}
+#storiesModal textarea,#storiesModal input:not([type=range]){background:#17132d!important;color:#f5f3ff!important;border-color:#5b418c!important}
+#storiesModal .text-slate-400,#storiesModal .text-slate-500{color:#c4b5fd!important}
+#storiesModal .vv-file-name{color:#ddd6fe!important}
+#storiesModal .border-violet-100{border-color:rgba(167,139,250,.35)!important}
+#storyViewer{background:linear-gradient(140deg,#080d1d,#21133f,#0e1027)!important}
+
+</style>
+</head>
+<body class="h-full flex flex-col justify-between overflow-hidden bg-slate-950 text-slate-100">
+<!-- Audio Element for Remote Voice -->
+<audio autoplay="" id="remoteAudio"></audio>
+<!-- Sign-in gate: Google and email/password authentication. -->
+<section class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md" id="authOverlay">
+<div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+<div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-2xl"><i class="fa-solid fa-microphone-lines"></i></div>
+<h1 class="text-center text-2xl font-bold text-white">Добро пожаловать в <span class="text-violet-400">VoiceVibe</span></h1>
+<p class="mt-2 mb-5 text-center text-sm text-slate-400">Войди, чтобы создать личный профиль и искать собеседников.</p>
+<button class="mb-3 w-full rounded-xl border border-slate-600 bg-white px-4 py-3 font-semibold text-slate-900 transition hover:bg-slate-100" id="btnGoogleLogin"><i class="fa-brands fa-google mr-2"></i>Продолжить с Google</button>
+<div class="my-4 flex items-center gap-3 text-xs text-slate-500"><span class="h-px flex-1 bg-slate-700"></span>ИЛИ ПО ЭЛЕКТРОННОЙ ПОЧТЕ<span class="h-px flex-1 bg-slate-700"></span></div>
+<input autocomplete="email" class="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-violet-500" id="emailInput" placeholder="Электронная почта" type="email"/>
+<input autocomplete="current-password" class="mb-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-violet-500" id="emailPassword" placeholder="Пароль (минимум 6 символов)" type="password"/>
+<div class="grid grid-cols-2 gap-2"><button class="rounded-xl border border-violet-500/50 bg-violet-500/15 px-3 py-3 text-sm font-semibold text-violet-200" id="btnEmailLogin">Войти</button><button class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold text-white" id="btnEmailRegister">Создать аккаунт</button></div>
+<p class="hidden mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200" id="authMessage" role="status"></p>
+<p class="mt-4 text-center text-xs text-slate-500">Продолжая, ты соглашаешься соблюдать <a href="terms.html" target="_blank" class="text-violet-300 underline">условия</a>, <a href="safety.html" target="_blank" class="text-violet-300 underline">правила</a> и ознакомился с <a href="privacy.html" target="_blank" class="text-violet-300 underline">политикой конфиденциальности</a>.</p>
+</div>
+</section>
+<section class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" id="profileModal">
+<div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+<div class="mb-5 flex items-center justify-between"><div><h2 class="text-xl font-bold">Настройки профиля</h2><p class="mt-1 text-xs text-slate-400">Обнови информацию о себе</p></div><button aria-label="Закрыть" class="rounded-lg px-3 py-2 text-slate-400 hover:bg-slate-800" id="btnCloseProfile"><i class="fa-solid fa-xmark"></i></button></div>
+<div class="mb-5 flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-3"><div class="profile-avatar-preview flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-xl font-bold" id="profileEditAvatarPreview">V</div><div class="min-w-0"><p class="truncate text-xs text-slate-400" id="profileEmailText"></p><p class="mt-1 text-sm font-medium text-slate-200">Твой аккаунт VoiceVibe</p></div></div>
+<label class="mb-1 block text-sm text-slate-300" for="profileNameInput">Отображаемое имя (можно по-русски и со смайликами)</label><input class="mb-4 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" id="profileNameInput" maxlength="30" placeholder="Например, Alex"/>
+<label class="mb-1 block text-sm text-slate-300" for="profileUsernameInput">Уникальный @nickname</label><input class="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" id="profileUsernameInput" maxlength="24" placeholder="@tania"/><p class="mb-4 text-xs text-slate-500" id="usernameChangeHint">Менять @nickname можно раз в 14 дней.</p><label class="mb-1 block text-sm text-slate-300" for="profileBioInput">О себе</label><textarea class="mb-4 w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white" id="profileBioInput" maxlength="160" placeholder="Расскажи немного о себе…" rows="3"></textarea>
+<label class="mb-2 block text-sm text-slate-300" for="profileAvatarFile">Фото профиля</label><div class="vv-file-picker mb-3"><label class="vv-file-button" for="profileAvatarFile"><i class="fa-regular fa-image"></i> Выбрать на устройстве</label><span class="vv-file-name" id="profileAvatarFileName">Файл не загружен</span><input accept="image/*" class="vv-native-file" id="profileAvatarFile" type="file"/></div>
+<p class="mb-5 text-xs text-slate-500">Выбери фото с устройства. Чтобы убрать фото, нажми «Удалить аватар».</p>
+<div id="profileBannerPremiumSection" data-premium-only class="hidden mb-5 rounded-2xl border border-violet-400/25 bg-violet-500/10 p-3">
+<label class="mb-2 block text-sm font-semibold text-violet-200" for="profileBannerFile"><i class="fa-solid fa-crown mr-1"></i> Баннер профиля · Premium</label>
+<div class="vv-file-picker mb-2"><label class="vv-file-button" for="profileBannerFile"><i class="fa-regular fa-image"></i> Выбрать баннер</label><span class="vv-file-name" id="profileBannerFileName">Файл не загружен</span><input accept="image/jpeg,image/png,image/webp" class="vv-native-file" id="profileBannerFile" type="file"/></div>
+<button type="button" class="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500" id="uploadProfileBannerBtn">Установить баннер</button>
+<p class="mt-2 text-xs text-slate-400">JPG, PNG или WebP, до 5 МБ. Баннер постепенно размывается по краю.</p>
+</div>
+<p class="-mt-3 mb-4 text-xs text-slate-500">Никнейм должен быть уникальным. Изображение должно быть меньше 5 МБ.</p>
+<div class="mb-3 grid grid-cols-2 gap-2"><button class="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-300 hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-200" id="btnRemoveAvatar" type="button"><i class="fa-regular fa-trash-can mr-1"></i> Удалить аватар</button><button class="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-3 text-sm font-semibold text-white" id="btnSaveProfile"><i class="fa-solid fa-check mr-1"></i> Сохранить</button></div>
+<button class="mt-3 w-full rounded-xl border border-red-500/30 px-4 py-3 text-sm text-red-300 hover:bg-red-500/10" id="btnSignOut">Выйти из аккаунта</button>
+</div>
+</section>
+<!-- Header / Navbar -->
+<header class="h-16 border-b border-slate-800/80 bg-slate-900/60 px-4 flex items-center justify-between z-10 shrink-0">
+<div class="flex items-center space-x-2">
+<div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+<i class="fa-solid fa-microphone"></i>
+</div>
+<span class="font-bold text-base tracking-tight text-white">Voice<span class="text-brand-500">Vibe</span></span>
+</div>
+<div class="flex items-center space-x-2">
+<button class="hidden flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-2 py-1.5 hover:border-violet-500" id="profileBtn" title="Мой профиль"><span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-xs font-bold text-white" id="profileHeaderAvatar">П</span><span class="hidden max-w-24 truncate text-xs sm:inline" id="profileHeaderName">Профиль</span></button>
+<!-- Connection Indicator -->
+<div class="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-slate-800/90 border border-slate-700 text-xs text-slate-300" id="peerStatusBadge">
+<span class="w-2 h-2 rounded-full bg-amber-400" id="peerStatusDot"></span>
+<span id="peerStatusText">Подключение...</span>
+</div>
+<!-- Exit to Menu Button -->
+<button class="hidden px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/60 transition flex items-center space-x-1" id="btnExitMenu">
+<i class="fa-solid fa-house"></i>
+<span class="hidden sm:inline">В меню</span>
+</button>
+</div>
+</header>
+<!-- Screen 1: Age Selection Menu -->
+<main class="flex-1 flex flex-col justify-center items-center p-4 max-w-md mx-auto w-full space-y-6" id="screenAgeSelect">
+<div class="text-center space-y-2">
+<h2 class="text-2xl font-bold text-white">Голосовая чат-рулетка</h2>
+<p class="text-xs text-slate-400">Общайтесь с реальными людьми без видео. Выберите вашу возрастную категорию для подбора собеседников:</p>
+</div>
+<div class="grid grid-cols-2 gap-3 w-full">
+<button class="btn-age p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-brand-500 hover:bg-slate-800/80 transition flex flex-col items-center space-y-1 group" data-age="12-16">
+<span class="text-lg font-bold text-brand-500 group-hover:scale-105 transition">12 - 16</span>
+<span class="text-[11px] text-slate-400">Подростки</span>
+</button>
+<button class="btn-age p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-brand-500 hover:bg-slate-800/80 transition flex flex-col items-center space-y-1 group" data-age="16-18">
+<span class="text-lg font-bold text-brand-500 group-hover:scale-105 transition">16 - 18</span>
+<span class="text-[11px] text-slate-400">Молодёжь</span>
+</button>
+<button class="btn-age p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-brand-500 hover:bg-slate-800/80 transition flex flex-col items-center space-y-1 group" data-age="18-24">
+<span class="text-lg font-bold text-brand-500 group-hover:scale-105 transition">18 - 24</span>
+<span class="text-[11px] text-slate-400">Студенты</span>
+</button>
+<button class="btn-age p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-brand-500 hover:bg-slate-800/80 transition flex flex-col items-center space-y-1 group" data-age="24-30">
+<span class="text-lg font-bold text-brand-500 group-hover:scale-105 transition">24 - 30</span>
+<span class="text-[11px] text-slate-400">Взрослые</span>
+</button>
+<button class="btn-age p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-brand-500 hover:bg-slate-800/80 transition flex flex-col items-center space-y-1 group" data-age="30-40">
+<span class="text-lg font-bold text-brand-500 group-hover:scale-105 transition">30 - 40</span>
+<span class="text-[11px] text-slate-400">Опытные</span>
+</button>
+<button class="btn-age p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-brand-500 hover:bg-slate-800/80 transition flex flex-col items-center space-y-1 group" data-age="40+">
+<span class="text-lg font-bold text-brand-500 group-hover:scale-105 transition">40+</span>
+<span class="text-[11px] text-slate-400">Старшая группа</span>
+</button>
+</div>
+<p class="text-[11px] text-amber-400/80 text-center" id="micPermissionNotice">
+<i class="fa-solid fa-shield-halved mr-1"></i> При входе требуется разрешить доступ к микрофону
+        </p>
+<!-- Error Banner inside Age Select Screen -->
+<div class="hidden w-full p-3 bg-red-500/20 border border-red-500/40 rounded-xl text-red-300 text-xs text-center" id="errorAlert">
+<i class="fa-solid fa-triangle-exclamation mr-1"></i> <span id="errorAlertText">Ошибка подключения</span>
+</div>
+</main>
+<!-- Screen 2: Active Voice Chat Roulette Room -->
+<main class="hidden flex-1 flex flex-col justify-between items-center p-4 max-w-lg mx-auto w-full" id="screenChat">
+<!-- Top Info Header -->
+<div class="w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex items-center justify-between text-xs">
+<div class="flex items-center space-x-2">
+<span class="text-slate-400">Категория:</span>
+<span class="px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-400 font-semibold border border-brand-500/30" id="selectedCategoryBadge">18-24</span>
+</div>
+<div class="flex items-center space-x-2">
+<span class="text-slate-400">Микрофон:</span>
+<div class="w-16 bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+<div class="bg-gradient-to-r from-emerald-500 to-brand-500 h-full w-0 transition-all duration-75" id="micLevelBar"></div>
+</div>
+</div>
+</div>
+<!-- Center Stage: Status Avatar / Pulse Visualizer -->
+<div class="flex flex-col items-center justify-center space-y-5 my-auto">
+<div class="relative">
+<div class="w-36 h-36 rounded-full bg-slate-900 border-2 border-slate-800 flex items-center justify-center text-4xl text-slate-600 transition-all duration-500" id="avatarCircle">
+<i class="fa-solid fa-user-large" id="avatarIcon"></i>
+</div>
+</div>
+<div class="text-center space-y-1">
+<h3 class="text-xl font-bold text-white" id="chatStatusTitle">Режим ожидания</h3>
+<p class="text-xs text-slate-400" id="chatStatusDesc">Нажмите "Искать собеседника" для начала общения</p>
+</div>
+</div>
+<!-- Bottom Controls Dashboard -->
+<div class="w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-2xl">
+<!-- Primary Action Buttons (Search / Skip / Pause) -->
+<div class="flex items-center gap-2">
+<button class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white font-semibold text-sm transition shadow-lg shadow-brand-600/20 active:scale-95 flex items-center justify-center space-x-2" id="btnStartSearch">
+<i class="fa-solid fa-magnifying-glass"></i>
+<span>Искать</span>
+</button>
+<button class="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition border border-slate-700 active:scale-95 flex items-center justify-center space-x-2" disabled="" id="btnSkip">
+<i class="fa-solid fa-forward"></i>
+<span>Пропустить</span>
+</button>
+<button class="py-3 px-4 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold border border-amber-500/30 transition flex items-center justify-center space-x-1.5" disabled="" id="btnPause" title="Пауза / Стоп поиска">
+<i class="fa-solid fa-pause"></i>
+<span class="hidden sm:inline">Пауза</span>
+</button>
+</div>
+<!-- Secondary Controls (Mute / Exit Menu) -->
+<div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
+<!-- Toggle Mic Button -->
+<button class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/60 transition flex items-center justify-center space-x-2 mr-2" id="btnToggleMic">
+<i class="fa-solid fa-microphone text-emerald-400" id="micBtnIcon"></i>
+<span id="micBtnText">Микрофон вкл</span>
+</button>
+<!-- Exit to Menu Button (Mobile Friendly) -->
+<button class="py-2.5 px-4 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium border border-red-500/30 transition flex items-center justify-center space-x-1.5" id="btnExitMenuBottom">
+<i class="fa-solid fa-right-from-bracket"></i>
+<span>Выйти</span>
+</button>
+</div>
+</div>
+</main>
+<section aria-label="Звонок другу" aria-modal="true" class="hidden fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-md" id="vvFriendCallOverlay" role="dialog">
+<div class="w-full max-w-sm rounded-3xl border border-violet-400/30 bg-slate-900 p-6 text-center shadow-2xl shadow-violet-950/40">
+<div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/20 text-3xl text-violet-200"><i class="fa-solid fa-phone-volume"></i></div>
+<h2 class="text-xl font-bold text-white" id="vvFriendCallName">Звонок</h2>
+<p aria-live="polite" class="mt-2 text-sm text-violet-200" id="vvFriendCallStatus">Подключение…</p>
+<div class="mt-5 rounded-2xl border border-violet-400/20 bg-slate-950/50 p-3">
+<p class="mb-2 text-xs text-violet-200">Громкость собеседника</p>
+<div aria-label="Громкость звонка" class="flex gap-2" role="group">
+<button aria-pressed="false" class="flex-1 rounded-xl border border-violet-400/25 px-3 py-2 text-sm text-white" data-vv-call-volume="quiet" type="button"><i class="fa-solid fa-volume-low mr-1"></i>Тихий</button>
+<button aria-pressed="true" class="flex-1 rounded-xl border border-violet-400 bg-violet-600 px-3 py-2 text-sm text-white" data-vv-call-volume="loud" type="button"><i class="fa-solid fa-volume-high mr-1"></i>Громкий</button>
+</div>
+</div>
+<div class="mt-6 flex justify-center gap-3">
+<button class="hidden rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white" id="vvFriendCallAccept"><i class="fa-solid fa-phone mr-2"></i>Принять</button>
+<button class="hidden rounded-xl border border-violet-400/30 px-4 py-3 text-white" id="vvFriendCallMute"><i class="fa-solid fa-microphone mr-2"></i>Микрофон</button><button class="rounded-xl bg-rose-600 px-5 py-3 font-semibold text-white" id="vvFriendCallHangup"><i class="fa-solid fa-phone-slash mr-2"></i>Завершить</button>
+</div>
+</div>
+<audio autoplay="" id="vvFriendCallAudio" playsinline=""></audio>
+</section>
+<!-- Social tabs: roulette stays available as a feature -->
+<section class="hidden flex-1 min-h-0 overflow-y-auto px-4 py-5 pb-24" id="socialScreen">
+<div class="hidden mx-auto w-full max-w-xl space-y-4" id="socialProfilePanel">
+<div class="relative rounded-3xl border border-slate-800 bg-slate-900/80 p-5 pt-16 sm:pt-14">
+<div class="vv-profile-top-actions"><span class="vv-top-coins" title="Баланс VibeCoins"><img alt="VibeCoin" class="vv-coin-image" src="vibecoin.png"/> <span id="vvTopCoinBalance">0</span></span><button aria-expanded="false" aria-label="Открыть меню профиля" class="vv-profile-menu-button" id="vvMenuToggle" title="Меню профиля" type="button"><i aria-hidden="true" class="fa-solid fa-bars"></i></button></div>
+<div class="hidden vv-cover" id="socialProfileBanner"></div>
+<div class="vv-identity"><div class="vv-identity-text"><h2 class="vv-display-name" id="socialName">Мой профиль</h2><p class="vv-handle" id="socialHandle">@nickname</p><button class="vv-friend-button" id="vvFriendsOpen" type="button"><strong id="socialFriendCount">0 друзей</strong><span class="hidden vv-request-dot" id="vvRequestDot"></span><span class="vv-friend-caption">Друзья · открыть список</span></button><p class="vv-profile-bio" id="socialBio"></p><span class="hidden" id="vibecoinBalance">0</span><span class="hidden rounded-xl border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-2 text-xs font-bold text-fuchsia-200" id="premiumStatusBadge">👑 PREMIUM</span></div><div class="vv-avatar-side"><div class="vv-big-avatar" id="socialAvatar">V</div></div></div>
+<button aria-label="Редактировать профиль" class="vv-edit-pencil" id="socialEditProfile" title="Редактировать профиль" type="button"><i class="fa-solid fa-pencil"></i></button>
+<button class="hidden whitespace-nowrap rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-300" id="roleManagementToggle" type="button"><i class="fa-solid fa-star mr-1"></i>Панель разработчика</button>
+</div>
+<div aria-label="Меню профиля" aria-modal="true" class="hidden vv-fullscreen-menu" id="vvProfileMenu" role="dialog"><div class="vv-fullscreen-menu-inner"><div class="vv-fullscreen-menu-header"><h2>Настройки VoiceVibe</h2><button aria-label="Закрыть меню" id="vvMenuClose" type="button"><i class="fa-solid fa-xmark"></i></button></div>
+<section class="rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-950/80 via-slate-900 to-fuchsia-950/50 p-4 shadow-xl"><div class="flex flex-wrap items-center justify-between gap-3"><div><h3 class="font-bold text-white">Vibecoin и Premium</h3><p class="mt-1 text-xs text-slate-400">Приглашай друзей: +10 монет за каждого нового пользователя. 5 приглашений = месяц Premium!</p></div></div><div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"><button class="rounded-xl border border-violet-300/30 bg-violet-500/15 px-4 py-3 text-sm font-bold text-violet-100" id="openReferralPanel" type="button">🎁 Рефералы · +10 обоим</button><button class="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-bold text-white" id="buyPremiumBtn">👑 Купить Premium · 50 Vibecoin</button><button class="rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100" id="watchAdCoinsBtn">▶ Посмотреть рекламу · +5</button></div><div class="mt-3 rounded-2xl border border-violet-400/20 bg-slate-950/40 p-3 text-sm"><h4 class="font-bold text-fuchsia-200">👑 Что даёт Premium · 50 VibeCoins / 30 дней</h4><ul class="mt-2 list-disc space-y-1 pl-5 text-slate-300"><li>Фиолетовое неоновое свечение ника и корона 👑</li><li>Рекомендуемые обои для переписок</li><li>Загрузка своих обоев и баннера профиля</li><li>Загрузка и отправка собственных стикеров</li><li>Стикеры сохраняются после окончания Premium и снова доступны при продлении</li></ul></div></section>
+</div></div>
+<section class="hidden rounded-3xl border border-violet-300/20 bg-slate-900/90 p-4" id="referralPanel"><div class="mb-3 flex items-center justify-between"><h3 class="font-bold">🎁 Приглашай и получай Vibecoin</h3><button class="rounded-lg px-3 py-1 text-slate-400" id="closeReferralPanel">✕</button></div><p class="text-sm text-slate-400">Друг должен перейти по твоей ссылке и зарегистрироваться. Один аккаунт учитывается только один раз; повторная регистрация того же UID награду не даст.</p><label class="mt-3 block text-xs text-slate-400">Твой код</label><div class="mt-1 flex gap-2"><input class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" id="myReferralCode" readonly=""/><button class="rounded-xl bg-violet-600 px-3 text-sm font-bold" id="copyReferralCode">Копировать</button></div><label class="mt-3 block text-xs text-slate-400">Твоя ссылка</label><div class="mt-1 flex gap-2"><input class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-xs text-white" id="myReferralLink" readonly=""/><button class="rounded-xl bg-violet-600 px-3 text-sm font-bold" id="copyReferralLink">Копировать</button></div><button class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-violet-950/30" id="shareReferralLink" type="button"><i class="fa-solid fa-share-nodes"></i> Поделиться реферальной ссылкой</button><p class="mt-3 text-sm text-violet-200" id="referralStatus"></p><div class="mt-3 border-t border-slate-700 pt-3"><label class="block text-xs text-slate-400">Есть код друга? Введи его один раз</label><div class="mt-2 flex gap-2"><input class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm uppercase text-white" id="claimReferralCode" maxlength="20" placeholder="Например, VVABC123"/><button class="rounded-xl bg-fuchsia-600 px-3 text-sm font-bold" id="claimReferralBtn">Применить</button></div></div></section>
+<section class="hidden rounded-3xl border border-amber-400/30 bg-slate-900/90 p-4 shadow-lg shadow-amber-950/10" id="roleManagementPanel">
+<div class="mb-3 flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300"><i class="fa-solid fa-star"></i></span><div><h3 class="font-bold text-white">Панель разработчика</h3><p class="text-xs text-slate-400">Панель разработчика · доступна только владельцу</p></div></div>
+<label class="mb-2 block text-sm text-slate-300" for="roleUserSearch">Найти пользователя по @нику</label>
+<div class="flex gap-2"><input autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-amber-400" id="roleUserSearch" placeholder="Например, tania" spellcheck="false" type="search"><button class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950" id="roleUserSearchBtn" type="button">Найти</button></input></div>
+<p class="mt-2 text-xs text-slate-500">Назначай администратора или снимай звезду. Золотая звезда разработчика закреплена за владельцем проекта.</p>
+<div class="mt-3 space-y-2" id="roleUserSearchResults"><p class="text-sm text-slate-500">Введи ник, чтобы найти пользователя.</p></div>
+<div class="mt-4 rounded-2xl border border-violet-500/30 p-3"><h4 class="font-bold text-violet-200">Выдать VibeCoins или Premium по @нику</h4><p class="mt-1 text-xs text-slate-400">Только разработчик. Выдача проверяется на сервере.</p><input class="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2" id="devGrantUsername" placeholder="@nickname"><div class="mt-2 flex gap-2"><input class="w-1/2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2" id="devGrantCoins" max="100000" min="1" placeholder="Количество монет" type="number"><button class="rounded-xl bg-amber-500 px-3 py-2 text-slate-950 font-bold" id="devGrantCoinsBtn">Выдать монеты</button></input></div><button class="mt-2 w-full rounded-xl bg-violet-600 px-3 py-2 font-bold" id="devGrantPremiumBtn">👑 Выдать Premium на 30 дней</button><p class="mt-2 text-xs text-slate-300" id="devGrantStatus"></p></input></div>
+<p class="mt-3 hidden rounded-xl p-3 text-xs" id="roleManagementStatus"></p>
+</section>
+<button class="w-full rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 text-sm font-semibold text-rose-200 hover:bg-rose-500/10" id="socialSignOut"><i class="fa-solid fa-arrow-right-from-bracket mr-2"></i>Выйти из аккаунта</button>
+<section class="hidden vv-friends-drawer" id="vvFriendsDrawer"><div class="vv-friends-header"><h3>Друзья и заявки</h3><button aria-label="Закрыть друзей" id="vvFriendsClose" type="button">✕</button></div> <div class="rounded-3xl border border-slate-800 bg-slate-900/80 p-4"><div class="mb-3 flex items-center justify-between"><h3 class="font-bold">Заявки в друзья</h3><span class="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs text-violet-200" id="requestCount">0</span></div><div class="space-y-2" id="friendRequestsList"><p class="text-sm text-slate-500">Пока нет заявок.</p></div></div>
+<div class="rounded-3xl border border-slate-800 bg-slate-900/80 p-4"><div class="space-y-2" id="friendsList"><p class="text-sm text-slate-500">Пока нет друзей.</p></div></div></section>
+</div>
+<div class="hidden mx-auto w-full max-w-3xl" id="socialChatsPanel"><div class="vv-story-mention-inbox" id="vvStoryMentionInbox"></div>
+<div class="chat-shell grid min-h-[65vh] overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/80 md:grid-cols-[240px_1fr]">
+<aside class="border-b border-slate-800 p-3 md:border-b-0 md:border-r"><div class="mb-3 flex items-center justify-between gap-2 px-2"><h2 class="text-lg font-bold">Чаты</h2><button class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold" id="createGroupBtn"><i class="fa-solid fa-users mr-1"></i>Группа</button></div><div class="vv-chat-controls"><label class="vv-chat-search"><i class="fa-solid fa-magnifying-glass"></i><input aria-label="Поиск по чатам" autocomplete="off" id="vvChatSearch" placeholder="Поиск по чатам…" type="search"/></label><div aria-label="Фильтр чатов" class="vv-chat-filters" role="group"><button class="vv-chat-filter active" data-chat-filter="all" type="button">Все</button><button class="vv-chat-filter" data-chat-filter="private" type="button">Личные</button><button class="vv-chat-filter" data-chat-filter="groups" type="button">Группы</button><button class="vv-chat-filter" data-chat-filter="unread" type="button">Непрочитанные <span class="vv-filter-count hidden" id="vvUnreadFilterCount">0</span></button></div></div><p id="vvGroupLoadStatus" class="hidden px-3 py-2 text-xs" role="status"></p><div class="space-y-1" id="chatFriendsList"><p class="p-2 text-sm text-slate-500">Добавь друга, чтобы начать переписку.</p></div></aside>
+<section class="hidden flex min-h-[55vh] flex-col" id="conversationPane"><div class="border-b border-violet-100 p-4 text-sm text-slate-400" id="conversationHeader">Выбери друга</div><div class="flex-1 space-y-2 overflow-y-auto p-4" id="messagesList"></div><div class="flex flex-wrap items-center gap-2 border-t border-slate-800 px-3 pt-3"><button class="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200" id="openStickersBtn" type="button">✨ Стикеры</button><button class="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200" data-premium-only="" id="recommendedWallpaperBtn" type="button">🌌 Рекомендуемые обои</button><label class="cursor-pointer rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200" data-premium-only="" for="chatWallpaperFile">🖼 Обои Premium</label><input accept="image/*" class="vv-native-file" id="chatWallpaperFile" type="file"/><button class="rounded-xl border border-fuchsia-400/30 px-3 py-2 text-xs font-semibold text-fuchsia-200" data-premium-only="" id="uploadStickerBtn" type="button">＋ Мой стикер</button><input accept="image/*" class="vv-native-file" id="stickerFileInput" type="file"/></div><div class="hidden max-h-36 overflow-y-auto border-t border-slate-800 p-3" id="stickersPanel"><p class="mb-2 text-xs text-slate-400" id="stickersPanelHint"></p><div class="flex flex-wrap gap-2" id="stickersGrid"></div></div><form class="flex gap-2 border-t border-slate-800 p-3" id="messageForm"><input class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none focus:border-violet-500" disabled="" id="messageInput" maxlength="1000" placeholder="Написать сообщение…"><button aria-label="Отправить" class="rounded-xl bg-violet-600 px-4 text-white disabled:opacity-40" disabled="" id="sendMessageBtn"><i class="fa-solid fa-paper-plane"></i></button></input></form><div class="flex justify-end px-3 pb-3"><button class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 disabled:opacity-40" disabled="" id="snakeChallengeBtn"><i class="fa-solid fa-gamepad mr-1"></i> Доступные игры</button></div></section>
+</div>
+</div>
+<div class="hidden mx-auto w-full max-w-2xl" id="socialSearchPanel">
+<div class="rounded-3xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+<div class="mb-4"><h2 class="text-xl font-bold">Найти людей</h2><p class="mt-1 text-sm text-slate-400">Ищи по уникальному @nickname и отправляй заявку в друзья.</p></div>
+<div class="flex gap-2"><span class="flex items-center rounded-xl border border-slate-700 bg-slate-950 px-3 text-violet-300">@</span><input autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-violet-500" id="socialSearchInput" placeholder="nickname" spellcheck="false" type="search"/></div>
+<div class="mt-4 space-y-3" id="socialSearchResults"><p class="text-sm text-slate-500">Введи ник пользователя, например tania.</p></div>
+</div>
+</div>
+</section>
+<section class="hidden fixed inset-0 z-[70] flex items-stretch justify-stretch bg-gradient-to-br from-rose-50 via-violet-50 to-sky-50 text-slate-800" id="storiesModal"><div class="flex h-[100dvh] w-full flex-col overflow-hidden bg-white/75 shadow-2xl backdrop-blur-xl"><div class="flex items-center justify-between border-b border-violet-100 p-4"><div><h2 class="text-xl font-bold">Истории</h2><p class="text-xs text-slate-500">Публикации исчезают через 24 часа</p></div><button aria-label="Закрыть" class="rounded-xl px-3 py-2 text-slate-500 hover:bg-violet-100" id="storiesClose"><i class="fa-solid fa-xmark"></i></button></div><div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><button class="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 p-3 font-bold" id="storyCreateToggle"><i class="fa-solid fa-plus"></i> Создать историю</button><input accept="image/*,video/*" class="vv-native-file" id="storyGallery" type="file"><div class="hidden vv-story-choose" id="vvStoryChoose"><div class="vv-story-choose-head"><strong>Новая история</strong><button aria-label="Назад" id="vvStoryChooseClose" type="button">✕</button></div><p>Выбери фото или видео</p><label class="vv-story-choose-gallery" for="storyGallery"><i class="fa-regular fa-images"></i><span>Открыть галерею</span><small>Фото и видео с устройства</small></label><button class="vv-story-text-only" id="vvStoryTextOnly" type="button"><i class="fa-solid fa-font"></i> Создать текстовую историю</button></div><form class="hidden vv-immersive-story-editor" id="storyCreateForm"><div class="vv-story-editor-title"><button aria-label="Назад" id="vvStoryEditorBack" type="button">←</button><button class="vv-story-song-chip" id="vvStorySongChip" type="button">♫ Музыка</button></div><div class="vv-story-side-tools"><button id="vvStoryTextTool" type="button"><b>Aa</b><small>Текст</small></button><button id="vvStoryFilterTool" type="button"><b>◉</b><small>Фильтры</small></button><button id="vvStoryMusicTool" type="button"><b>✂</b><small>Обрезка</small></button></div><div class="vv-story-bottom-actions"><button id="vvStoryBottomPublish" type="submit">Ваша история ➜</button></div><div class="vv-story-filter-box hidden" id="vvStoryFilterBox"><p>Фильтры</p><div class="vv-story-filters"><button class="active" data-vv-filter="none" type="button">Оригинал</button><button data-vv-filter="warm" type="button">Тепло</button><button data-vv-filter="cool" type="button">Холод</button><button data-vv-filter="mono" type="button">Ч/Б</button><button data-vv-filter="vivid" type="button">Ярко</button><button data-vv-filter="retro" type="button">Ретро</button></div></div><div aria-hidden="true" class="vv-story-hidden-input"><textarea class="mt-2 w-full rounded-xl border border-violet-100 bg-white p-3 text-sm text-slate-800 outline-none focus:border-violet-500" id="storyText" maxlength="500" placeholder="Что нового?" rows="3"></textarea></div><div class="vv-story-mentions hidden" id="vvStoryMentionResults"></div><div class="vv-gallery-picker"><p class="text-sm font-semibold">Фото или видео из галереи <span class="text-xs font-normal text-slate-500">(необязательно)</span></p><div class="vv-file-picker mt-2"><label class="vv-file-button" for="storyGallery"><i class="fa-regular fa-images"></i> Загрузить из галереи</label><span class="vv-file-name" id="storyGalleryName">Файл не загружен</span></div><div class="vv-gallery-preview hidden" id="storyGalleryPreview"></div><div class="vv-text-settings"><div class="vv-text-strip" id="vvFontChoices"><button data-text-font="classic" type="button">Classic</button><button data-text-font="elegance" type="button">Elegance</button><button data-text-font="neon" type="button">Neon</button><button data-text-font="retro" type="button">Retro</button></div><div class="vv-text-strip" hidden="" id="vvColorChoices"><button aria-label="Цвет #ffffff" data-text-color="#ffffff" style="--swatch:#ffffff" type="button"></button><button aria-label="Цвет #000000" data-text-color="#000000" style="--swatch:#000000" type="button"></button><button aria-label="Цвет #ef4444" data-text-color="#ef4444" style="--swatch:#ef4444" type="button"></button><button aria-label="Цвет #fb923c" data-text-color="#fb923c" style="--swatch:#fb923c" type="button"></button><button aria-label="Цвет #fde047" data-text-color="#fde047" style="--swatch:#fde047" type="button"></button><button aria-label="Цвет #65a85d" data-text-color="#65a85d" style="--swatch:#65a85d" type="button"></button><button aria-label="Цвет #14b8a6" data-text-color="#14b8a6" style="--swatch:#14b8a6" type="button"></button><button aria-label="Цвет #06b6d4" data-text-color="#06b6d4" style="--swatch:#06b6d4" type="button"></button><button aria-label="Цвет #3498db" data-text-color="#3498db" style="--swatch:#3498db" type="button"></button><button aria-label="Цвет #4338ca" data-text-color="#4338ca" style="--swatch:#4338ca" type="button"></button><button aria-label="Цвет #c084fc" data-text-color="#c084fc" style="--swatch:#c084fc" type="button"></button></div><div class="vv-text-toolbar"><button aria-label="Шрифт" id="vvFontsTab" type="button">A</button><button aria-label="Цвет" id="vvColorsTab" type="button">🌈</button><button aria-label="Выравнивание" id="vvAlignCycle" type="button">☰</button><button aria-label="Подложка" id="vvTextBackground" type="button">▣</button><button aria-label="Удалить текст" id="vvStoryTextDelete" type="button">⌫</button></div><input id="vvTextSize" type="hidden" value="28"/><input id="vvTextColor" type="hidden" value="#ffffff"/><input checked="" hidden="" id="vvTextBold" type="checkbox"/><select hidden="" id="vvTextAlign"><option value="center">Центр</option><option value="left">Слева</option><option value="right">Справа</option></select><button hidden="" id="vvStoryTextDrag" type="button"></button></div><button aria-label="Закрыть инструменты" class="vv-story-tap-dismiss hidden" id="vvStoryTapDismiss" type="button"></button><p class="mt-2 text-xs text-slate-500">Можно выбрать фото, видео или просто написать текст. Видео — до 25 МБ.</p></div><div class="story-upload-card rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-rose-50 p-4"><div class="mb-3 flex items-center gap-3"><div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-xl shadow-lg"><i class="fa-solid fa-music"></i></div><div class="min-w-0 flex-1"><p class="font-semibold">Саундтрек истории</p><p class="text-xs text-slate-400">Выбери песню из каталога VoiceVibe</p></div></div><div class="vv-catalog"><div class="vv-catalog-top"><strong>🎵 Каталог VoiceVibe</strong><span id="vvMusicCount">Загрузка…</span></div><div class="vv-catalog-search"><input autocomplete="off" id="vvMusicSearch" placeholder="Поиск по названию или исполнителю" type="search"><select id="vvMusicGenre"><option value="">Все жанры</option></select></input></div><div class="vv-catalog-tracks" id="vvMusicTracks"><p>Загружаем музыку…</p></div><div class="vv-catalog-selected hidden" id="vvMusicSelected"></div><button class="vv-catalog-clear hidden" id="vvMusicClear" type="button">Убрать песню</button></div><div class="mt-4 rounded-xl border border-violet-100 bg-white/80 p-3"><div class="mb-2 flex items-center justify-between gap-2"><div><p class="text-xs font-semibold">Выбери нужный фрагмент</p><p class="text-[11px] text-slate-400" id="storyMusicTrimLabel">От 0 до 10 секунд</p></div><button class="shrink-0 rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold" id="storyMusicPreviewPlay" type="button"><i class="fa-solid fa-play mr-1"></i>Прослушать</button></div><div aria-label="Перетяни выделение для выбора начала музыки" aria-valuemin="0" aria-valuenow="0" class="music-waveform vv-wave-editor" id="storyMusicWave" role="slider" tabindex="0"><div class="vv-wave-bars" id="storyMusicWaveBars"></div><div class="vv-wave-selection" id="storyMusicWaveSelection"><span class="vv-wave-handle vv-wave-handle-left"></span><span class="vv-wave-handle vv-wave-handle-right"></span></div><span class="vv-wave-time" id="storyMusicWaveTime">0:00</span></div><p class="text-[11px] text-slate-500 mt-1">Перетаскивай выделение мышкой или пальцем. Потяни за край, чтобы изменить длительность.</p><input id="storyMusicStart" type="hidden" value="0"><input id="storyMusicLength" type="hidden" value="10"><label class="vv-fade-toggle"><input checked="" id="vvMusicFade" type="checkbox"> Плавное начало и затухание (0,5 сек.)</input></label><audio class="hidden" id="storyMusicPreview" preload="metadata"></audio></input></input></div></div><p class="text-xs text-slate-500">Фото показывается 10 секунд. История исчезнет через 24 часа.</p><p class="hidden text-sm text-rose-300" id="storyCreateStatus"></p><button class="w-full rounded-xl bg-violet-600 p-3 font-bold" id="storyPublishBtn">Опубликовать</button><button id="vvTextDone" style="display:none;position:fixed;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;z-index:2147483640;pointer-events:auto;" type="button">Готово</button><div class="vv-story-canvas-text hidden" contenteditable="true" data-placeholder="Напишите текст или @username..." id="vvStoryCanvasText" spellcheck="true"></div></form><div class="space-y-3" id="storiesList"><p class="text-sm text-slate-400">Загружаем истории…</p></div></input></div></div><div class="hidden fixed inset-0 z-[80] flex items-stretch justify-stretch bg-gradient-to-br from-rose-100 via-violet-100 to-sky-100 p-0" id="storyViewer"></div></section>
+<section class="hidden fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" id="createGroupModal"><div class="w-full max-w-lg rounded-3xl border border-violet-300/20 bg-slate-900 p-5"><div class="mb-4 flex items-center justify-between"><div><h2 class="text-xl font-bold">Создать группу</h2><p class="mt-1 text-xs text-slate-400">Выбери друзей, которых хочешь добавить.</p></div><button class="rounded-xl px-3 py-2 text-slate-400" id="closeCreateGroup">✕</button></div><label class="mb-3 block text-sm">Название группы<input class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" id="groupNameInput" maxlength="40" placeholder="Например, Наша компания"/></label><div class="mb-4 max-h-64 space-y-2 overflow-y-auto" id="groupFriendsChoices"><p class="text-sm text-slate-400">Загружаем друзей…</p></div><p class="mb-3 text-sm text-rose-300" id="createGroupStatus"></p><button class="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 p-3 font-bold" id="confirmCreateGroup">Создать группу</button></div></section>
+<section class="hidden fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" id="gamesModal"><div class="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-5"><div class="mb-4 flex items-center justify-between"><div><h2 class="text-xl font-bold">Доступные игры</h2><p class="mt-1 text-sm text-slate-400">Выбери игру для соревнования с другом.</p></div><button aria-label="Закрыть" class="rounded-lg px-3 py-2 text-slate-400" id="gamesClose"><i class="fa-solid fa-xmark"></i></button></div><button class="flex w-full items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-left hover:bg-emerald-500/15" id="gameSnakeChoice"><span class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20 text-2xl">🐍</span><span class="flex-1"><b class="block">Змейка</b><span class="text-xs text-slate-400">Набери больше очков и отправь результат другу.</span></span><i class="fa-solid fa-chevron-right text-slate-400"></i></button></div></section>
+<section class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-3 backdrop-blur-sm" id="snakeModal"><div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-4"><div class="mb-3 flex items-center justify-between"><div><h2 class="text-lg font-bold">Змейка</h2><p class="text-xs text-slate-400" id="snakeHint">Набери больше очков, чем друг!</p></div><button aria-label="Закрыть" class="rounded-lg px-3 py-2 text-slate-400" id="snakeClose"><i class="fa-solid fa-xmark"></i></button></div><div class="mb-3 flex items-center justify-between text-sm"><span>Очки: <b id="snakeScore">0</b></span><span class="text-slate-400" id="snakeBest">Личный рекорд: 0</span></div><canvas class="mx-auto block w-full max-w-[320px] rounded-2xl border border-slate-700 bg-slate-950" height="320" id="snakeCanvas" width="320"></canvas><div class="mt-3 grid grid-cols-3 gap-2 text-sm"><span></span><button class="snake-dir rounded-xl bg-slate-800 p-3" data-dir="up">▲</button><span></span><button class="snake-dir rounded-xl bg-slate-800 p-3" data-dir="left">◀</button><button class="snake-dir rounded-xl bg-slate-800 p-3" data-dir="down">▼</button><button class="snake-dir rounded-xl bg-slate-800 p-3" data-dir="right">▶</button></div><button class="mt-3 w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 p-3 font-semibold" id="snakeStart">Начать игру</button></div></section>
+<nav class="hidden fixed bottom-0 left-0 right-0 z-30 border-t border-slate-800 bg-slate-950/95 px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl" id="bottomNav"><div class="mx-auto grid max-w-xl grid-cols-5 gap-1"><button class="nav-tab rounded-xl px-1 py-2 text-violet-300" data-tab="roulette"><i class="fa-solid fa-microphone-lines block text-lg"></i><span class="text-[10px]">Рулетка</span></button><button class="nav-tab relative rounded-xl px-1 py-2 text-slate-400" data-tab="chats"><i class="fa-solid fa-comments block text-lg"></i><span class="text-[10px]">Чаты</span></button><button aria-label="Истории" class="rounded-xl px-1 py-1 text-slate-300" id="storiesNavBtn" type="button"><span class="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-xl font-bold text-white shadow-lg">+</span><span class="text-[10px]">Истории</span></button><button class="nav-tab rounded-xl px-1 py-2 text-slate-400" data-tab="search"><i class="fa-solid fa-magnifying-glass block text-lg"></i><span class="text-[10px]">Поиск</span></button><button class="nav-tab rounded-xl px-1 py-2 text-slate-400" data-tab="profile"><i class="fa-solid fa-user block text-lg"></i><span class="text-[10px]">Профиль</span></button></div></nav>
+<!-- Footer -->
+<footer class="p-3 text-center text-[11px] text-slate-600 border-t border-slate-900 bg-slate-950">
+        VoiceVibe · <a href="index.html">О проекте</a> · <a href="privacy.html">Конфиденциальность</a> · <a href="terms.html">Условия</a> · <a href="contact.html">Контакты</a>
+    </footer>
+<!-- Firebase SDK (ES Modules / Web script) -->
+<script src="app.js?v=stories-anyavatar-blur-20261101-v3" type="module"></script>
+<div class="hidden fixed inset-0 z-50 items-center justify-center bg-black/80 p-4" id="vvGroupSettings"><div class="w-full max-w-md rounded-3xl border border-violet-500/30 bg-slate-900 p-5 text-white"><div class="flex justify-between"><h3 class="text-lg font-bold">Настройки группы</h3><button id="vvGroupClose">✕</button></div><p class="mt-3 max-h-48 overflow-y-auto text-sm text-slate-300" id="vvGroupMembers"></p><div class="hidden mt-4" id="vvGroupOwnerControls"><label class="text-sm">Название группы</label><input class="mt-1 w-full rounded-xl bg-slate-800 p-3" id="vvGroupNewName" maxlength="40"><button class="mt-2 rounded-xl bg-violet-600 px-4 py-2" id="vvGroupRename">Сохранить название</button><div class="mt-4 border-t border-slate-700 pt-3"><h4 class="text-sm font-bold text-violet-200">Добавить друзей в группу</h4><div class="mt-2 max-h-36 overflow-y-auto space-y-2" id="vvGroupInviteChoices"></div><button class="mt-2 rounded-xl bg-violet-600 px-4 py-2" id="vvGroupInviteBtn" type="button">Добавить участников</button></div><button class="mt-3 block rounded-xl bg-rose-700 px-4 py-2" id="vvGroupDelete">Удалить группу</button></input></div><button class="mt-4 rounded-xl border border-rose-400/50 px-4 py-2 text-rose-200" id="vvGroupLeave">Выйти из группы</button><p class="mt-3 text-sm" id="vvGroupStatus"></p></div></div>
+</body>
+</html>
