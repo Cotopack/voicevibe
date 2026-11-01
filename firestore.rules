@@ -631,23 +631,17 @@ service cloud.firestore {
 
       allow list: if signedIn()
         && resource.data.participants is list
-        && resource.data.participants.hasAny([
-          request.auth.uid
-        ]);
+        && request.auth.uid in resource.data.participants;
 
       allow create: if signedIn()
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
-        && request.resource.data.participants.hasAny([
-          request.auth.uid
-        ])
+        && request.request.auth.uid in resource.data.participants
         && isFriendConversation(request.resource.data);
 
       allow update: if signedIn()
         && resource.data.participants is list
-        && resource.data.participants.hasAny([
-          request.auth.uid
-        ])
+        && request.auth.uid in resource.data.participants
         && request.resource.data.participants
           == resource.data.participants
         && request.resource.data.diff(resource.data)
@@ -728,7 +722,7 @@ service cloud.firestore {
       function isGroupMember() {
         return signedIn()
           && resource.data.members is list
-          && resource.data.members.hasAny([request.auth.uid]);
+          && request.auth.uid in resource.data.members;
       }
 
       allow get, list: if isGroupMember();
