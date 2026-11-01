@@ -1055,6 +1055,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const storyState = getStoryRingState(uid);
             return `<span class="vv-avatar-story-wrap ${storyState ? `has-story ${storyState}` : ''}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="${storyState ? 'Открыть историю' : 'Аватар'}">${inner}</span>`;
         }
+        document.getElementById('vvProfileEditAction')?.addEventListener('click',()=>document.getElementById('socialEditProfile')?.click());
         function renderSocialProfile() {
             if (!state.user) return;
             const rolePanel = document.getElementById('roleManagementPanel');
@@ -1335,7 +1336,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvDeleteText?.classList.remove('hidden');vvDragText?.classList.remove('hidden');
             }
         }
-        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
         document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
         document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-trim')?'':'trim'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
@@ -1360,7 +1361,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             storyTextInput.dispatchEvent(new Event('input',{bubbles:true}));
         }
         vvCanvasText?.addEventListener('input',vvSyncCanvasText);
-        vvCanvasText?.addEventListener('click',e=>{if(vvSuppressTextClick){e.preventDefault();e.stopPropagation();return;}vvCanvasText.focus();});
+        vvCanvasText?.addEventListener('click',e=>{if(vvSuppressTextClick){e.preventDefault();e.stopPropagation();}});
         vvCanvasText?.addEventListener('blur',()=>{if(!vvCanvasText?.innerText.trim()){vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');}});
         vvDeleteText?.addEventListener('click',()=>{
             vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText.classList.add('hidden');vvDragText.classList.add('hidden');vvMentionResults?.classList.add('hidden');vvStoryPanel('');
@@ -1384,7 +1385,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvColorsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=true;document.getElementById('vvColorChoices').hidden=false;});
         document.getElementById('vvAlignCycle')?.addEventListener('click',()=>{const el=document.getElementById('vvTextAlign'),values=['center','left','right'];el.value=values[(values.indexOf(el.value)+1)%3];applyTextSettings();});
         document.getElementById('vvTextBackground')?.addEventListener('click',()=>{vvTextBackground=!vvTextBackground;applyTextSettings();});
-        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvStoryPanel('');});
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvStoryPanel('');});
         document.querySelector('.vv-text-settings')?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
         function vvKeyboardPosition(){const v=window.visualViewport;document.documentElement.style.setProperty('--vv-keyboard',v?Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px':'0px');}
         window.visualViewport?.addEventListener('resize',vvKeyboardPosition);
@@ -1407,7 +1408,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvGesture={parent,x:center.x,y:center.y,left:box.left-bounds.left-parent.clientLeft+parent.scrollLeft,top:box.top-bounds.top-parent.clientTop+parent.scrollTop,width:box.width,height:box.height,size:Number(document.getElementById('vvTextSize').value)||28,distance:pts.length>1?Math.max(1,Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y)):0};
         }
         vvCanvasText?.addEventListener('pointerdown',e=>{
-            if(e.button!==0||vvTextPointers.size>=2)return;
+            if(e.button!==0||vvTextPointers.size>=2||vvCanvasText.getAttribute('contenteditable')==='true')return;
             if(!vvTextPointers.size)vvSuppressTextClick=false;
             vvTextPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});vvCanvasText.setPointerCapture(e.pointerId);vvGestureStart();e.preventDefault();
         });
@@ -1431,13 +1432,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(vvCanvasText.hasPointerCapture(e.pointerId))vvCanvasText.releasePointerCapture(e.pointerId);
             if(vvTextPointers.size){vvGestureStart();return;}
             vvGesture=null;vvCanvasText.classList.remove('vv-text-dragging');
-            if(!vvSuppressTextClick&&e.type==='pointerup'){vvStoryPanel('text');vvCanvasText.focus({preventScroll:true});}
+            if(!vvSuppressTextClick&&e.type==='pointerup'&&vvCanvasText.getAttribute('contenteditable')==='true'){vvCanvasText.focus({preventScroll:true});}
         }
         ['pointerup','pointercancel','lostpointercapture'].forEach(n=>vvCanvasText?.addEventListener(n,vvEndTextDrag));
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
-        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvStoryPanel('text');});
+        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');});
         document.querySelectorAll('[data-vv-filter]').forEach(b=>b.addEventListener('click',()=>{vvStoryFilter=b.dataset.vvFilter;vvApplyStoryFilter();}));
         // Mention autocomplete; prefix search starts after two characters.
         let vvMentionSeq=0;

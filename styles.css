@@ -366,3 +366,37 @@ header, #appHeader, .app-header {isolation:isolate}
 
 /* Profile redesign */
 #socialProfilePanel>div:first-child{position:relative;min-height:295px;padding:70px 18px 24px;overflow:hidden}#socialProfilePanel>div:first-child:has(.vv-cover:not(.hidden)){padding-top:145px}.vv-cover{position:absolute;inset:0 0 auto;height:180px;background-size:cover;background-position:center;opacity:.9;mask-image:linear-gradient(#000 55%,transparent)}.vv-identity{position:relative;display:flex;align-items:center;gap:10px;justify-content:space-between;min-height:170px}.vv-identity-text{min-width:0;flex:1;z-index:1}.vv-display-name{font-size:clamp(27px,7vw,42px);font-weight:900;line-height:1.1;overflow-wrap:anywhere}.vv-handle{font-size:14px;color:#a1a1aa;margin-top:7px;overflow-wrap:anywhere}.vv-avatar-side{flex:0 0 34%;max-width:160px}.vv-big-avatar{width:100%;aspect-ratio:1;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#7c3aed;font-size:36px;border:4px solid #22d3ee;box-shadow:0 0 0 3px rgba(34,211,238,.12)}.vv-big-avatar>*,.vv-big-avatar img{width:100%!important;height:100%!important;object-fit:cover;border-radius:50%}.vv-edit-pencil{position:absolute;z-index:2;top:115px;left:50%;transform:translateX(-50%);width:40px;height:40px;border-radius:50%;background:#27213a;border:1px solid #a78bfa;color:white;display:grid;place-items:center;box-shadow:0 4px 16px #0007}#socialProfilePanel>div:first-child:not(:has(.vv-cover:not(.hidden))) .vv-edit-pencil{top:76px}.vv-friend-button{display:flex;flex-direction:column;align-items:flex-start;position:relative;margin-top:22px;padding:8px 15px;border:1px solid #6d28d9;border-radius:15px;background:#6d28d933;color:white;text-align:left}.vv-friend-button strong{font-size:22px}.vv-friend-caption{font-size:11px;color:#c4b5fd}.vv-request-dot{position:absolute;right:-5px;top:-6px;width:14px;height:14px;background:#ef4444;border-radius:50%;box-shadow:0 0 0 4px #ef444433,0 0 14px #ef4444;animation:vvPulse 1.5s infinite}@keyframes vvPulse{50%{box-shadow:0 0 0 8px #ef444422,0 0 22px #ef4444}}.vv-profile-bio{font-size:14px;color:#cbd5e1;margin-top:14px;overflow-wrap:anywhere}.vv-friends-drawer{position:fixed;inset:0;z-index:65;background:#0b0a16;overflow:auto;padding:calc(env(safe-area-inset-top) + 20px) 16px 90px}.vv-friends-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;font-size:21px;font-weight:800}.vv-friends-header button{padding:8px 14px;border-radius:12px;background:#27213a}.vv-friends-drawer>div:not(.vv-friends-header){margin-bottom:15px}@media(max-width:420px){.vv-avatar-side{flex-basis:35%}.vv-display-name{font-size:27px}.vv-edit-pencil{left:53%}}
+
+
+/* VoiceVibe mobile-first profile redesign */
+#socialProfilePanel{max-width:740px!important;padding:0 8px 28px!important}
+#socialProfilePanel>div:first-child{background:#111019!important;border:1px solid #302942!important;border-radius:23px!important;min-height:0!important;padding:0 14px 14px!important;overflow:hidden;box-shadow:0 16px 45px #0004}
+#socialProfilePanel .vv-profile-top-actions{top:12px;right:12px;z-index:8}
+#socialProfilePanel .vv-cover{position:relative;inset:auto;display:block;height:clamp(120px,28vw,175px);margin:0 -14px 0;background-size:cover;background-position:center;opacity:1;mask-image:none;border-radius:22px 22px 0 0}
+#socialProfilePanel .vv-cover.hidden{display:block!important;background-image:radial-gradient(ellipse at 65% 120%,#4c1d95 0%,transparent 60%),linear-gradient(120deg,#0a0a1b,#171345 65%,#101022)!important;height:105px}
+#socialProfilePanel>div:first-child:has(.vv-cover:not(.hidden)){padding-top:0!important}
+#socialProfilePanel>div:first-child:not(:has(.vv-cover:not(.hidden))){padding-top:0!important}
+#socialProfilePanel .vv-identity{min-height:0;display:flex;align-items:center;justify-content:flex-start;gap:12px;margin-top:-26px;position:relative;z-index:3;padding-bottom:4px}
+#socialProfilePanel .vv-avatar-side{flex:0 0 82px;max-width:82px;align-self:flex-start}
+#socialProfilePanel .vv-big-avatar{width:82px;height:82px;border:4px solid #15131f;box-shadow:0 0 0 2px #6d4ab1;background:#382368;font-size:25px}
+#socialProfilePanel .vv-identity-text{padding-top:29px;min-width:0;flex:1}
+#socialProfilePanel .vv-display-name{font-size:clamp(18px,4.7vw,25px);font-weight:800;line-height:1.25;overflow-wrap:anywhere}
+#socialProfilePanel .vv-handle{margin-top:3px;font-size:12px;color:#aaa2bc}
+#socialProfilePanel .vv-online-label{font-size:11px;color:#b6b1c4;display:flex;align-items:center;gap:5px;margin-top:4px}
+#socialProfilePanel .vv-online-dot{height:7px;width:7px;border-radius:50%;background:#25d397}
+#socialProfilePanel .vv-edit-pencil{position:static;transform:none;flex:0 0 38px;width:38px;height:38px;margin-top:23px;border:0;background:#29223e;box-shadow:none;color:#c4a4ff}
+#socialProfilePanel .vv-profile-bio{margin:12px 0;color:#e0dbea;font-size:14px;white-space:pre-wrap;line-height:1.5}
+#socialProfilePanel .vv-profile-cards{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
+#socialProfilePanel .vv-count-card,#socialProfilePanel .vv-friend-button{min-height:78px;border:0;border-radius:15px;background:#211b32;color:#e6d8ff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;margin:0;padding:10px;text-align:center;position:relative}
+#socialProfilePanel .vv-count-card strong{font-size:21px;color:white;line-height:1.2}
+#socialProfilePanel .vv-count-card span,#socialProfilePanel .vv-friend-button span:not(.vv-request-dot){font-size:12px;color:#c5b9dd}
+#socialProfilePanel .vv-friend-button i{font-size:18px;color:#c6a5ff}
+#socialProfilePanel .vv-profile-main-action{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:49px;border-radius:14px;background:linear-gradient(105deg,#7435e8,#8c36ee);font-size:14px;font-weight:700;color:white}
+#socialProfilePanel .vv-request-dot{right:8px;top:7px}
+#socialProfilePanel #roleManagementToggle{margin-top:12px}
+@media(min-width:640px){#socialProfilePanel>div:first-child{padding-left:18px!important;padding-right:18px!important}#socialProfilePanel .vv-cover{margin-left:-18px;margin-right:-18px}#socialProfilePanel .vv-avatar-side{flex-basis:92px;max-width:92px}#socialProfilePanel .vv-big-avatar{width:92px;height:92px}}
+@media(max-width:360px){#socialProfilePanel .vv-avatar-side{flex-basis:70px;max-width:70px}#socialProfilePanel .vv-big-avatar{width:70px;height:70px}#socialProfilePanel .vv-identity{gap:8px}#socialProfilePanel .vv-edit-pencil{flex-basis:34px;width:34px}}
+/* Keep story creation simple: type once, then drag or pinch to resize. */
+.vv-text-settings{display:none!important}
+#vvStoryCanvasText{touch-action:none;user-select:none;-webkit-user-select:none}
+#vvStoryCanvasText[contenteditable="true"]{user-select:text;-webkit-user-select:text;touch-action:auto}
