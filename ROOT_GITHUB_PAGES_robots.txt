@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://cotopack.github.io/voicevibe/sitemap.xml

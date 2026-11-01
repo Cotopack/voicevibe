@@ -481,47 +481,50 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-reaction-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
 .vv-reaction-initial{font-size:10px;font-weight:700;line-height:1}.vv-reaction-total{font-size:11px;opacity:.85}
 
-/* VoiceVibe Premium: stronger smooth blur ONLY at the bottom of the banner.
-   The same banner image is provided by app.js via --vv-cover-image.
-   Both own and visitor profiles share this exact effect. */
-#socialProfileBanner:not(.hidden),
-#friendProfileModal .vv-visitor-cover {
-  position: relative !important;
-  isolation: isolate !important;
-  overflow: hidden !important;
-  background-size: cover !important;
-  background-position: center center !important;
-  background-repeat: no-repeat !important;
+/* VoiceVibe: duplicate-image lower blur for Premium covers.
+   More reliable than backdrop-filter on iPhone/Safari. */
+#socialProfileBanner, #friendProfileModal .vv-visitor-cover{
+  position:relative!important;
+  overflow:hidden!important;
+  isolation:isolate!important;
+  background-size:cover!important;
+  background-position:center center!important;
+  background-repeat:no-repeat!important;
 }
-#socialProfileBanner:not(.hidden)::before,
-#friendProfileModal .vv-visitor-cover::before {
-  content: "" !important;
-  position: absolute !important;
-  inset: -10px !important;
-  z-index: 1 !important;
-  pointer-events: none !important;
-  background-image: var(--vv-cover-image, none) !important;
-  background-size: cover !important;
-  background-position: center center !important;
-  background-repeat: no-repeat !important;
-  filter: blur(21px) !important;
-  -webkit-filter: blur(21px) !important;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 62%, rgba(0,0,0,.36) 75%, rgba(0,0,0,.93) 93%, #000 100%) !important;
-  mask-image: linear-gradient(to bottom, transparent 0%, transparent 62%, rgba(0,0,0,.36) 75%, rgba(0,0,0,.93) 93%, #000 100%) !important;
+#socialProfileBanner::before, #friendProfileModal .vv-visitor-cover::before{
+  content:""!important;
+  position:absolute!important;
+  left:-2%!important;
+  right:-2%!important;
+  bottom:-6%!important;
+  height:44%!important;
+  z-index:1!important;
+  pointer-events:none!important;
+  background-image:var(--vv-cover-image)!important;
+  background-size:cover!important;
+  background-position:center bottom!important;
+  background-repeat:no-repeat!important;
+  transform:scale(1.08)!important;
+  transform-origin:center bottom!important;
+  filter:blur(14px)!important;
+  opacity:.94!important;
+  -webkit-mask-image:linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.45) 28%, #000 78%, #000 100%)!important;
+  mask-image:linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.45) 28%, #000 78%, #000 100%)!important;
 }
-#socialProfileBanner:not(.hidden)::after,
-#friendProfileModal .vv-visitor-cover::after {
-  content: "" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 2 !important;
-  pointer-events: none !important;
-  background: linear-gradient(to bottom, transparent 0%, transparent 68%, rgba(17,16,25,.22) 81%, rgba(17,16,25,.65) 92%, #111019 100%) !important;
+#socialProfileBanner::after, #friendProfileModal .vv-visitor-cover::after{
+  content:""!important;
+  position:absolute!important;
+  left:0!important;
+  right:0!important;
+  bottom:0!important;
+  height:38%!important;
+  z-index:2!important;
+  pointer-events:none!important;
+  background:linear-gradient(to bottom, rgba(8,10,20,0) 0%, rgba(8,10,20,.06) 40%, rgba(8,10,20,.18) 72%, rgba(8,10,20,.30) 100%)!important;
 }
-/* Name and avatar remain sharp and in front of the banner. */
-#socialProfilePanel .vv-identity { position: relative; z-index: 3; margin-top: -23px; }
-#socialProfilePanel .vv-identity-text { padding-top: 22px; }
-#friendProfileModal .vv-visitor-info { position: relative; z-index: 3; margin-top: -22px; }
+#socialProfilePanel .vv-identity{position:relative;z-index:3;margin-top:-23px}
+#socialProfilePanel .vv-identity-text{padding-top:22px}
+#friendProfileModal .vv-visitor-info{position:relative;z-index:3;margin-top:-22px}
 /* Story rings on avatar at any size; do not break profile positioning. */
 #profileHeaderAvatar.has-story,#profileHeaderAvatar.story-unviewed{outline:3px solid #22c55e;outline-offset:3px;cursor:pointer}
 #profileHeaderAvatar.story-viewed{outline:3px solid #64748b;outline-offset:3px;cursor:pointer}
@@ -529,29 +532,3 @@ header, #appHeader, .app-header {isolation:isolate}
 /* Premium banner is never visible until its owner's Premium is confirmed. */
 #profileBannerPremiumSection.hidden { display: none !important; }
 #profileModal > div { max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
-
-
-/* VoiceVibe Premium profile decorations */
-.vv-profile-effects-layer{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
-#friendProfileContent{position:relative;overflow:hidden;border-radius:1.5rem}
-#friendProfileContent>.vv-profile-effects{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
-#friendProfileContent>.vv-profile-effects+.vv-visitor-cover,#friendProfileContent>.vv-profile-effects+.vv-visitor-info{position:relative;z-index:3}
-#socialProfilePanel .vv-identity,#socialProfilePanel .vv-edit-pencil{z-index:4}
-.vv-profile-effects{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.vv-decor-neon-strip{position:absolute;left:3%;right:3%;top:8px;height:10px;border-radius:999px;background:linear-gradient(90deg,#8b5cf6,#ec4899,#22d3ee,#8b5cf6);background-size:300% 100%;box-shadow:0 0 10px rgba(168,85,247,.55),0 0 18px rgba(34,211,238,.25);opacity:.92;animation:vvNeonMove 4s linear infinite,vvNeonPulse 1.8s ease-in-out infinite}
-.vv-decor-neon-strip::after{content:'';position:absolute;left:0;right:0;top:100%;height:28px;background:linear-gradient(180deg,rgba(168,85,247,.35),rgba(34,211,238,.08),transparent);filter:blur(12px);opacity:.75}
-@keyframes vvNeonMove{0%{background-position:0% 50%}100%{background-position:300% 50%}}
-@keyframes vvNeonPulse{50%{opacity:1;transform:scaleX(1.02)}}
-.vv-decor-rain span{position:absolute;top:-20%;left:var(--x);width:2px;height:var(--h);border-radius:999px;background:linear-gradient(180deg,rgba(196,181,253,0),rgba(196,181,253,.7),rgba(255,255,255,.95));box-shadow:0 0 10px rgba(196,181,253,.45);opacity:.7;transform:rotate(13deg);animation:vvRainFall var(--d) linear infinite;animation-delay:calc(var(--i) * -.13s)}
-@keyframes vvRainFall{0%{transform:translate3d(0,-12%,0) rotate(13deg);opacity:0}12%{opacity:.75}100%{transform:translate3d(-70px,135%,0) rotate(13deg);opacity:0}}
-.vv-decor-butterflies span{position:absolute;left:-12%;top:var(--top);font-size:20px;filter:drop-shadow(0 0 6px rgba(167,139,250,.7));opacity:.88;animation:vvButterflyFly 13s linear infinite;animation-delay:var(--delay);transform:scale(var(--scale))}
-.vv-decor-butterflies span:nth-child(2n){font-size:17px}
-@keyframes vvButterflyFly{0%{transform:translate(-8vw,0) scale(var(--scale)) rotate(-8deg)}25%{transform:translate(24vw,-18px) scale(calc(var(--scale) + .05)) rotate(6deg)}50%{transform:translate(55vw,8px) scale(var(--scale)) rotate(-4deg)}75%{transform:translate(84vw,-14px) scale(calc(var(--scale) + .07)) rotate(8deg)}100%{transform:translate(116vw,4px) scale(var(--scale)) rotate(-6deg)}}
-.vv-decor-fireflies span{position:absolute;left:var(--x);top:var(--y);width:var(--size);height:var(--size);border-radius:50%;background:radial-gradient(circle,rgba(253,224,71,.98) 0%,rgba(250,204,21,.82) 38%,rgba(168,85,247,.28) 70%,transparent 100%);box-shadow:0 0 9px rgba(253,224,71,.8),0 0 18px rgba(168,85,247,.24);animation:vvFirefly 3.2s ease-in-out infinite;animation-delay:var(--delay)}
-@keyframes vvFirefly{0%,100%{transform:translate3d(0,0,0) scale(.85);opacity:.35}50%{transform:translate3d(5px,-10px,0) scale(1.15);opacity:1}}
-.vv-premium-avatar-frame{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:6px;border-radius:999px;background:radial-gradient(circle at 30% 30%,rgba(167,139,250,.35),rgba(109,40,217,.06) 58%,transparent 72%)}
-.vv-premium-avatar-frame::before{content:'';position:absolute;inset:1px;border-radius:999px;border:2px solid rgba(168,85,247,.82);box-shadow:0 0 12px rgba(168,85,247,.55),0 0 20px rgba(216,180,254,.25);animation:vvAvatarGlow 2.2s ease-in-out infinite}
-.vv-premium-avatar-frame::after{content:'';position:absolute;inset:-2px;border-radius:999px;border:1px solid rgba(255,255,255,.14)}
-.vv-premium-avatar-frame > *{position:relative;z-index:2;border-radius:999px}
-@keyframes vvAvatarGlow{50%{opacity:1;box-shadow:0 0 16px rgba(192,132,252,.72),0 0 26px rgba(168,85,247,.4)}}
-#friendProfileContent .vv-premium-avatar-frame{padding:7px}

@@ -1,0 +1,10 @@
+VoiceVibe SEO — инструкция
+
+1. В GitHub репозитории cotopack/voicevibe загрузите обновлённые HTML и sitemap.xml (в корень или в public — зависит от источника GitHub Pages).
+2. Главное приложение остаётся на app.html; index.html — поисковая публичная страница.
+3. Для настоящего robots.txt требуется КОРЕНЬ ДОМЕНА. В отдельном репозитории cotopack.github.io разместите ROOT_GITHUB_PAGES_robots.txt, ПЕРЕИМЕНОВАВ в robots.txt. Файл в /voicevibe/robots.txt не действует как корневой robots.txt.
+4. В Google Search Console добавьте URL-prefix ресурс https://cotopack.github.io/voicevibe/ и подтвердите доступ.
+5. В разделе Sitemaps отправьте https://cotopack.github.io/voicevibe/sitemap.xml, затем проверьте URL главной через URL inspection и запросите индексацию.
+6. Убедитесь, что https://cotopack.github.io/voicevibe/ открывается без входа, а sitemap.xml доступен.
+
+ВНИМАНИЕ: Индексация и позиции в Google не гарантированы. Этот архив НЕ публикует изменения автоматически. Не публикуйте личные профили и чаты в индексе.
