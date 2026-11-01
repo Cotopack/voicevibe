@@ -275,3 +275,29 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor .vv-wave-bars{inset:12px 0 22px}
 
 .vv-story-mention-inbox{padding:10px;color:#fff}.vv-story-mention-inbox h3{font-weight:700;color:#d9c7ff;margin:8px 0}.vv-mention-chat{background:#20163a;border:1px solid #7c3aed70;border-radius:16px;padding:12px;margin:8px 0;font-size:13px}.vv-mention-actions{display:flex;gap:8px;margin-top:10px}.vv-mention-actions button{background:white;color:#111827;padding:9px 12px;border-radius:12px;font-weight:700;flex:1}.vv-mention-actions button:first-child{background:#6d28d9;color:white}.vv-repost-badge{position:absolute;z-index:9;inset:18% 9% 21%;background:linear-gradient(145deg,#7dd3fc,#38bdf8,#bae6fd);border:3px solid #e0f2fe;border-radius:25px;display:flex;flex-direction:column;justify-content:center;align-items:center;box-shadow:0 20px 60px #0005;pointer-events:none}.vv-repost-inner{background:#130d28d9;color:white;padding:18px;max-width:86%;border-radius:18px;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.vv-repost-badge button{pointer-events:auto;color:#082f49;background:white;padding:9px 16px;border-radius:999px;margin-top:12px;font-weight:800}
+
+/* Story editor v2: on-photo editing, contextual suggestions and music controls */
+.vv-immersive-story-editor .vv-story-text-input-label{display:none!important}
+.vv-immersive-story-editor .vv-story-canvas-text{outline:none!important;border:1px dashed transparent;border-radius:12px;min-width:160px;min-height:38px;max-height:58vh;overflow-y:auto;user-select:text!important;touch-action:auto!important;cursor:text!important;z-index:15!important}
+.vv-immersive-story-editor .vv-story-canvas-text:focus{border-color:#d8b4feaa;background:#160a2850}
+.vv-immersive-story-editor .vv-story-canvas-text:empty:before{content:attr(data-placeholder);color:#ffffffa0}
+.vv-immersive-story-editor .vv-story-text-delete,.vv-immersive-story-editor .vv-story-text-drag{position:absolute;z-index:17;top:calc(46% - 38px);background:#1c133ce8;border:1px solid #ffffff55;border-radius:12px;padding:7px 10px;color:white;font-size:12px}
+.vv-immersive-story-editor .vv-story-text-delete{right:14%}.vv-immersive-story-editor .vv-story-text-drag{left:14%;touch-action:none}
+.vv-immersive-story-editor .vv-story-text-delete.hidden,.vv-immersive-story-editor .vv-story-text-drag.hidden{display:none!important}
+.vv-immersive-story-editor #vvStoryMentionResults:not(.hidden){display:block!important;position:absolute!important;z-index:25!important;top:calc(46% + 58px);left:8%;right:8%;width:auto;max-height:190px;overflow-y:auto;background:#1e1439;color:white;border:1px solid #a78bfa;border-radius:15px;box-shadow:0 15px 50px #0009}
+.vv-immersive-story-editor #vvStoryMentionResults button{color:white;background:transparent}
+.vv-immersive-story-editor #vvStoryMentionResults button:hover{background:#503182}
+.vv-immersive-story-editor .vv-story-tap-dismiss:not(.hidden){z-index:13!important}
+.vv-immersive-story-editor.vv-panel-filters .vv-story-filter-box{z-index:23!important}
+.vv-immersive-story-editor.vv-panel-music .story-upload-card{z-index:23!important}
+.vv-immersive-story-editor.vv-panel-music #vvStoryTrimControls{display:none!important}
+.vv-immersive-story-editor.vv-panel-trim .story-upload-card{display:block!important;position:absolute;z-index:23!important;bottom:100px;left:10px;right:10px;top:auto;max-height:55vh;overflow:auto;background:#1d1235!important;color:white!important;border:1px solid #6d28d9}
+.vv-immersive-story-editor.vv-panel-trim .story-upload-card>.mb-3,.vv-immersive-story-editor.vv-panel-trim .story-upload-card>.vv-catalog{display:none!important}
+.vv-immersive-story-editor #vvStoryTrimControls{background:#24173d!important;color:white;border-color:#7c3aed}
+.vv-immersive-story-editor .vv-story-music-apply{width:100%;margin-top:12px;padding:13px;border-radius:14px;background:linear-gradient(110deg,#7c3aed,#d21fe2);color:white;font-weight:800}
+.vv-immersive-story-editor #vvStoryMusicTool{display:none!important}
+.vv-immersive-story-editor.vv-music-active #vvStoryMusicTool{display:flex!important}
+.vv-immersive-story-editor .vv-gallery-picker #vvStoryTapDismiss{pointer-events:auto!important}
+.vv-immersive-story-editor .vv-story-canvas-text.hidden{display:none!important}
+.vv-immersive-story-editor .vv-story-side-tools{z-index:16!important}
+.vv-immersive-story-editor .vv-story-editor-title{z-index:16!important}

@@ -1273,31 +1273,69 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         const vvEditor=document.getElementById('storyCreateForm');
         const vvCanvasText=document.getElementById('vvStoryCanvasText');
-        function vvStoryPanel(panel){
-            ['text','filters','music','publish'].forEach(n=>vvEditor?.classList.toggle('vv-panel-'+n,n===panel));document.getElementById('vvStoryTapDismiss')?.classList.toggle('hidden',!panel);
-            if(panel==='text')storyTextInput?.focus({preventScroll:true});
+        const vvDeleteText=document.getElementById('vvStoryTextDelete');
+        const vvDragText=document.getElementById('vvStoryTextDrag');
+        const vvMusicPlayer=document.getElementById('storyMusicPreview');
+        let vvMusicApplied=false;
+        function vvPlayAppliedMusic(){
+            if(!vvMusicApplied || !vvSelectedTrack?.url || !vvMusicPlayer)return;
+            if(vvMusicPlayer.src!==vvSelectedTrack.url)vvMusicPlayer.src=vvSelectedTrack.url;
+            vvMusicPlayer.currentTime=Math.max(0,Number(document.getElementById('storyMusicStart')?.value)||0);
+            vvMusicPlayer.play().catch(()=>{});
         }
-        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-text')?'':'text'));
+        function vvStoryPanel(panel){
+            ['text','filters','music','trim','publish'].forEach(n=>vvEditor?.classList.toggle('vv-panel-'+n,n===panel));
+            document.getElementById('vvStoryTapDismiss')?.classList.toggle('hidden',!['filters','music','trim'].includes(panel));
+            if(panel==='text'){
+                vvCanvasText?.classList.remove('hidden');
+                vvCanvasText?.focus({preventScroll:true});
+                vvDeleteText?.classList.remove('hidden');vvDragText?.classList.remove('hidden');
+            }
+        }
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>vvStoryPanel('text'));
         document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
-        document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-music')?'':'music'));
+        document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-trim')?'':'trim'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
+        document.getElementById('vvStoryMusicApply')?.addEventListener('click',()=>{
+            vvMusicApplied=!!vvSelectedTrack;vvEditor?.classList.toggle('vv-music-active',vvMusicApplied);
+            document.getElementById('vvStorySongChip').textContent=vvSelectedTrack?'♫ '+vvSelectedTrack.title:'♫ Добавить музыку';
+            vvStoryPanel('');vvPlayAppliedMusic();
+        });
+        vvMusicPlayer?.addEventListener('timeupdate',()=>{
+            if(!vvMusicApplied||!vvSelectedTrack)return;
+            const start=Number(document.getElementById('storyMusicStart')?.value)||0;
+            const length=Math.min(10,Number(document.getElementById('storyMusicLength')?.value)||10);
+            if(vvMusicPlayer.currentTime>=start+length-.08)vvMusicPlayer.currentTime=start;
+        });
+        document.addEventListener('visibilitychange',()=>{if(document.hidden)vvMusicPlayer?.pause();});
         document.getElementById('vvStoryChangeMedia')?.addEventListener('click',()=>storyGalleryInput?.click());
         document.getElementById('vvStoryTapDismiss')?.addEventListener('click',()=>vvStoryPanel(''));
-        storyTextInput?.addEventListener('input',()=>{if(vvCanvasText){vvCanvasText.textContent=storyTextInput.value;vvCanvasText.classList.toggle('hidden',!storyTextInput.value.trim());}});
+        function vvSyncCanvasText(){
+            if(!vvCanvasText)return;
+            storyTextInput.value=vvCanvasText.innerText.slice(0,500);
+            vvDeleteText?.classList.toggle('hidden',!storyTextInput.value.trim());
+            vvDragText?.classList.toggle('hidden',!storyTextInput.value.trim());
+            storyTextInput.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+        vvCanvasText?.addEventListener('input',vvSyncCanvasText);
+        vvCanvasText?.addEventListener('blur',()=>{if(!vvCanvasText?.innerText.trim()){vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');}});
+        vvDeleteText?.addEventListener('click',()=>{
+            vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText.classList.add('hidden');vvDragText.classList.add('hidden');vvMentionResults?.classList.add('hidden');vvStoryPanel('');
+        });
         let vvDrag=null;
-        vvCanvasText?.addEventListener('pointerdown',e=>{vvDrag={x:e.clientX,y:e.clientY,left:vvCanvasText.offsetLeft,top:vvCanvasText.offsetTop};vvCanvasText.setPointerCapture(e.pointerId);e.preventDefault();});
-        vvCanvasText?.addEventListener('pointermove',e=>{if(!vvDrag)return;const parent=vvCanvasText.offsetParent;if(!parent)return;vvCanvasText.style.left=Math.max(0,Math.min(parent.clientWidth-vvCanvasText.offsetWidth,vvDrag.left+e.clientX-vvDrag.x))+'px';vvCanvasText.style.top=Math.max(0,Math.min(parent.clientHeight-vvCanvasText.offsetHeight,vvDrag.top+e.clientY-vvDrag.y))+'px';vvCanvasText.style.transform='none';});
-        ['pointerup','pointercancel'].forEach(n=>vvCanvasText?.addEventListener(n,()=>vvDrag=null));
+        vvDragText?.addEventListener('pointerdown',e=>{vvDrag={x:e.clientX,y:e.clientY,left:vvCanvasText.offsetLeft,top:vvCanvasText.offsetTop};vvDragText.setPointerCapture(e.pointerId);e.preventDefault();});
+        vvDragText?.addEventListener('pointermove',e=>{if(!vvDrag)return;const parent=vvCanvasText.offsetParent;if(!parent)return;const left=Math.max(0,Math.min(parent.clientWidth-vvCanvasText.offsetWidth,vvDrag.left+e.clientX-vvDrag.x));const top=Math.max(0,Math.min(parent.clientHeight-vvCanvasText.offsetHeight,vvDrag.top+e.clientY-vvDrag.y));vvCanvasText.style.left=left+'px';vvCanvasText.style.top=top+'px';vvCanvasText.style.transform='none';vvDragText.style.left=left+'px';vvDragText.style.top=Math.max(0,top-34)+'px';vvDeleteText.style.left=Math.min(parent.clientWidth-110,left+vvCanvasText.offsetWidth-100)+'px';vvDeleteText.style.top=Math.max(0,top-34)+'px';});
+        ['pointerup','pointercancel'].forEach(n=>vvDragText?.addEventListener(n,()=>vvDrag=null));
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
-        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvStoryPanel('text');storyTextInput?.focus({preventScroll:true});});
+        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvStoryPanel('text');});
         document.querySelectorAll('[data-vv-filter]').forEach(b=>b.addEventListener('click',()=>{vvStoryFilter=b.dataset.vvFilter;vvApplyStoryFilter();}));
         // Mention autocomplete; prefix search starts after two characters.
         let vvMentionSeq=0;
         const vvMentionResults=document.getElementById('vvStoryMentionResults');
         storyTextInput?.addEventListener('input',async()=>{
-            const cursor=storyTextInput.selectionStart;
+            const cursor=storyTextInput.value.length;
             const before=storyTextInput.value.slice(0,cursor);
             const match=before.match(/(?:^|\s)@([a-zA-Z0-9_.]{2,24})$/);
             const seq=++vvMentionSeq;
@@ -1311,7 +1349,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 snap.docs.filter(d=>d.id!==state.user?.uid).forEach(d=>{
                     const u=d.data(), name=String(u.username||'');if(!name)return;
                     const button=document.createElement('button');button.type='button';button.className='vv-story-mention';button.textContent='@'+name+' · '+String(u.displayName||'Пользователь');
-                    button.addEventListener('click',()=>{const current=storyTextInput.value;const start=cursor-match[1].length-1;storyTextInput.value=current.slice(0,start)+'@'+name+' '+current.slice(cursor);const pos=start+name.length+2;storyTextInput.focus();storyTextInput.setSelectionRange(pos,pos);vvMentionResults.classList.add('hidden');});
+                    button.addEventListener('click',()=>{const current=storyTextInput.value;const start=cursor-match[1].length-1;storyTextInput.value=current.slice(0,start)+'@'+name+' '+current.slice(cursor);const pos=start+name.length+2;vvCanvasText.textContent=storyTextInput.value;vvCanvasText.classList.remove('hidden');vvCanvasText.focus();const selection=window.getSelection();selection?.selectAllChildren(vvCanvasText);selection?.collapseToEnd();vvMentionResults.classList.add('hidden');});
                     vvMentionResults.appendChild(button);
                 });
                 vvMentionResults.classList.toggle('hidden',!vvMentionResults.childElementCount);
@@ -1420,7 +1458,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvRenderCatalog();
         });
         vvMusicClear?.addEventListener('click',()=>{
-            vvSelectedTrack=null;vvMusicSelected.classList.add('hidden');vvMusicClear.classList.add('hidden');vvRenderCatalog();
+            vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvSelectedTrack=null;vvMusicSelected.classList.add('hidden');vvMusicClear.classList.add('hidden');vvRenderCatalog();
         });
         vvLoadCatalog();
         const musicStartInput=document.getElementById('storyMusicStart');
@@ -1554,7 +1592,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
-                if(file){vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
+                if(file){vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
             }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
@@ -1610,7 +1648,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     try{await setDoc(doc(db,'users',target.uid,'storyMentions',storyRef.id),{storyId:storyRef.id,fromUid:state.user.uid,fromUsername:state.userProfile?.username||'',recipientUid:target.uid,createdAt:now,expiresAt:now+86400000});}
                     catch(e){console.warn('Could not notify tagged user',target.uid,e);}
                 }
-                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();vvStoryScreen('list');vvStoryFilter='none';vvStoryFilterBox?.classList.add('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicApplied=false;vvMusicPlayer?.pause();vvCanvasText.textContent='';vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();vvStoryScreen('list');vvStoryFilter='none';vvStoryFilterBox?.classList.add('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
