@@ -1385,7 +1385,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvColorsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=true;document.getElementById('vvColorChoices').hidden=false;});
         document.getElementById('vvAlignCycle')?.addEventListener('click',()=>{const el=document.getElementById('vvTextAlign'),values=['center','left','right'];el.value=values[(values.indexOf(el.value)+1)%3];applyTextSettings();});
         document.getElementById('vvTextBackground')?.addEventListener('click',()=>{vvTextBackground=!vvTextBackground;applyTextSettings();});
-        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());});
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvCanvasText.style.touchAction='none';vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());});
         document.querySelector('.vv-text-settings')?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
         function vvKeyboardPosition(){const v=window.visualViewport;document.documentElement.style.setProperty('--vv-keyboard',v?Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px':'0px');}
         window.visualViewport?.addEventListener('resize',vvKeyboardPosition);
@@ -1408,7 +1408,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvGesture={parent,x:center.x,y:center.y,left:box.left-bounds.left-parent.clientLeft+parent.scrollLeft,top:box.top-bounds.top-parent.clientTop+parent.scrollTop,width:box.width,height:box.height,size:Number(document.getElementById('vvTextSize').value)||28,distance:pts.length>1?Math.max(1,Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y)):0};
         }
         vvCanvasText?.addEventListener('pointerdown',e=>{
-            if(e.button!==0||vvTextPointers.size>=2||vvCanvasText.getAttribute('contenteditable')==='true')return;
+            if(e.pointerType==='touch'||e.button!==0||vvTextPointers.size>=2||vvCanvasText.getAttribute('contenteditable')==='true')return;
             if(!vvTextPointers.size)vvSuppressTextClick=false;
             vvTextPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});vvCanvasText.setPointerCapture(e.pointerId);vvGestureStart();e.preventDefault();
         });
@@ -1436,62 +1436,50 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         ['pointerup','pointercancel','lostpointercapture'].forEach(n=>vvCanvasText?.addEventListener(n,vvEndTextDrag));
 
-        // Mobile touch fallback: the second finger may land outside the text itself.
-        // Track touches on the story canvas, while keeping normal text entry intact.
-        const vvTouchSurface=document.getElementById('storyGalleryPreview')?.parentElement || vvEditor;
-        let vvTouchGesture=null;
-        function vvTouchCoordinates(touches){
-            return Array.from(touches).map(t=>({x:t.clientX,y:t.clientY}));
-        }
-        function vvTouchBegin(ev){
-            if(!vvCanvasText || vvCanvasText.classList.contains('hidden') ||
-               vvCanvasText.getAttribute('contenteditable')==='true')return;
-            if(ev.target.closest('button,input,textarea,select,a'))return;
-            const points=vvTouchCoordinates(ev.touches);
-            if(!points.length)return;
-            const parent=vvCanvasText.offsetParent;
+        // Unified story-text gestures: Touch Events on iOS/Android, pointer for mouse/pen.
+        // Touch tracking is attached to the editor so a second finger can land off-text.
+        let storyTouch=null;
+        const storyPoint=t=>({x:t.clientX,y:t.clientY});
+        const storyMid=pts=>pts.length===1?pts[0]:{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};
+        function storyBeginTouches(e){
+            if(!vvCanvasText || vvCanvasText.classList.contains('hidden') || vvCanvasText.isContentEditable)return;
+            if(e.target.closest('button,input,textarea,select,a') && !storyTouch)return;
+            const pts=Array.from(e.touches,storyPoint).slice(0,2);
+            if(!pts.length)return;
+            const rect=vvCanvasText.getBoundingClientRect(), parent=vvCanvasText.offsetParent;
             if(!parent)return;
-            const rect=vvCanvasText.getBoundingClientRect();
+            const center=storyMid(pts);
+            if(!storyTouch && pts.length===1 && (center.x<rect.left-24||center.x>rect.right+24||center.y<rect.top-24||center.y>rect.bottom+24))return;
             const bounds=parent.getBoundingClientRect();
-            const center=points.length>1?{x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2}:points[0];
-            if(points.length===1 && (center.x<rect.left-20 || center.x>rect.right+20 ||
-               center.y<rect.top-20 || center.y>rect.bottom+20))return;
-            vvTouchGesture={parent,center,left:rect.left-bounds.left-parent.clientLeft+parent.scrollLeft,
-              top:rect.top-bounds.top-parent.clientTop+parent.scrollTop,
-              size:Number(document.getElementById('vvTextSize').value)||28,
-              distance:points.length>1?Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y):0,
-              count:points.length};
-            ev.preventDefault();
+            // Freeze translated layout at its actual on-screen coordinates.
+            const left=rect.left-bounds.left+parent.scrollLeft-parent.clientLeft;
+            const top=rect.top-bounds.top+parent.scrollTop-parent.clientTop;
+            vvCanvasText.style.transform='none';vvCanvasText.style.left=left+'px';vvCanvasText.style.top=top+'px';
+            storyTouch={count:pts.length,center,left,top,size:Number(document.getElementById('vvTextSize').value)||28,
+                distance:pts.length===2?Math.max(1,Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y)):0,parent};
+            e.preventDefault();
         }
-        function vvTouchMove(ev){
-            if(!vvTouchGesture)return;
-            const points=vvTouchCoordinates(ev.touches);
-            if(!points.length)return;
-            if(points.length!==vvTouchGesture.count){vvTouchBegin(ev);return;}
-            const g=vvTouchGesture;
-            const center=points.length>1?{x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2}:points[0];
-            if(points.length>1 && g.distance>0){
-                const dist=Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y);
-                document.getElementById('vvTextSize').value=String(Math.round(Math.max(14,Math.min(120,g.size*dist/g.distance))));
+        function storyMoveTouches(e){
+            if(!storyTouch)return;
+            const pts=Array.from(e.touches,storyPoint).slice(0,2);
+            if(!pts.length)return;
+            if(pts.length!==storyTouch.count){storyBeginTouches(e);return;}
+            const g=storyTouch,center=storyMid(pts);
+            if(pts.length===2){
+                const d=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);
+                document.getElementById('vvTextSize').value=String(Math.round(Math.max(14,Math.min(140,g.size*d/g.distance))));
                 applyTextSettings();
             }
-            const parent=g.parent;
-            const dx=center.x-g.center.x,dy=center.y-g.center.y;
-            vvCanvasText.style.transform='none';
-            vvCanvasText.style.left=Math.max(0,Math.min(Math.max(0,parent.clientWidth-vvCanvasText.offsetWidth),g.left+dx))+'px';
-            vvCanvasText.style.top=Math.max(0,Math.min(Math.max(0,parent.clientHeight-vvCanvasText.offsetHeight),g.top+dy))+'px';
-            ev.preventDefault();
+            const x=g.left+center.x-g.center.x,y=g.top+center.y-g.center.y;
+            vvCanvasText.style.left=Math.max(0,Math.min(Math.max(0,g.parent.clientWidth-vvCanvasText.offsetWidth),x))+'px';
+            vvCanvasText.style.top=Math.max(0,Math.min(Math.max(0,g.parent.clientHeight-vvCanvasText.offsetHeight),y))+'px';
+            e.preventDefault();
         }
-        vvEditor?.addEventListener('touchstart',vvTouchBegin,{passive:false,capture:true});
-        vvEditor?.addEventListener('touchmove',vvTouchMove,{passive:false,capture:true});
-        ['touchend','touchcancel'].forEach(type=>vvEditor?.addEventListener(type,ev=>{
-            if(!ev.touches.length)vvTouchGesture=null;
-            else if(vvTouchGesture)vvTouchBegin(ev);
-        },{passive:false,capture:true}));
-        // Reset pointer bookkeeping after switching from typing to dragging.
-        document.getElementById('vvTextDone')?.addEventListener('click',()=>{
-            vvTextPointers.clear();vvGesture=null;vvTouchGesture=null;
-        });
+        vvEditor?.addEventListener('touchstart',storyBeginTouches,{passive:false,capture:true});
+        vvEditor?.addEventListener('touchmove',storyMoveTouches,{passive:false,capture:true});
+        vvEditor?.addEventListener('touchend',e=>{if(!e.touches.length)storyTouch=null;else if(storyTouch)storyBeginTouches(e);},{passive:false,capture:true});
+        vvEditor?.addEventListener('touchcancel',()=>{storyTouch=null;},{passive:false,capture:true});
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{storyTouch=null;vvTextPointers.clear();vvGesture=null;});
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));

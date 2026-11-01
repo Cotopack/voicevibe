@@ -421,3 +421,7 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor .vv-story-canvas-text[contenteditable="false"]{
  z-index:55!important;touch-action:none!important;pointer-events:auto!important;
 }
+
+/* Universal story text controls (iOS Safari, Android Chrome, desktop) */
+.vv-immersive-story-editor #vvStoryCanvasText[contenteditable="false"]{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;cursor:grab!important;pointer-events:auto!important;z-index:60!important;overflow:visible!important;}
+.vv-immersive-story-editor #vvStoryCanvasText[contenteditable="true"]{touch-action:manipulation!important;-webkit-user-select:text!important;user-select:text!important;}

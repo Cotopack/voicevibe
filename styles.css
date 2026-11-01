@@ -406,3 +406,22 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor .vv-story-canvas-text[contenteditable="true"]{touch-action:auto!important;user-select:text!important;-webkit-user-select:text!important;cursor:text!important}
 #vvTextDone{display:none;position:fixed!important;top:calc(env(safe-area-inset-top, 0px) + 18px)!important;right:18px!important;z-index:100!important;background:#7c3aed!important;color:#fff!important;border-radius:14px!important;padding:12px 18px!important;min-height:44px!important;box-shadow:0 4px 20px #0007!important}
 .vv-panel-text #vvTextDone{display:block!important}
+
+/* Story touch interactions: native page gestures must not steal text movement. */
+.vv-immersive-story-editor .vv-story-canvas-text[contenteditable="false"]{
+ touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;
+ pointer-events:auto!important;overscroll-behavior:contain;
+}
+.vv-immersive-story-editor .vv-story-canvas-text[contenteditable="true"]{
+ touch-action:manipulation!important;
+}
+
+/* Critical: the dismiss layer must not sit over draggable story text. */
+.vv-immersive-story-editor .vv-story-tap-dismiss{pointer-events:none!important}
+.vv-immersive-story-editor .vv-story-canvas-text[contenteditable="false"]{
+ z-index:55!important;touch-action:none!important;pointer-events:auto!important;
+}
+
+/* Universal story text controls (iOS Safari, Android Chrome, desktop) */
+.vv-immersive-story-editor #vvStoryCanvasText[contenteditable="false"]{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;cursor:grab!important;pointer-events:auto!important;z-index:60!important;overflow:visible!important;}
+.vv-immersive-story-editor #vvStoryCanvasText[contenteditable="true"]{touch-action:manipulation!important;-webkit-user-select:text!important;user-select:text!important;}
