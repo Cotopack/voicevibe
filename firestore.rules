@@ -386,6 +386,19 @@ service cloud.firestore {
     // ОНЛАЙН СТАТУС
     // ==============================
 
+    // Public online count uses no emails, usernames or profile content.
+    // Only an authenticated account may publish its own heartbeat.
+    match /onlinePublic/{userId} {
+      allow get, list: if signedIn();
+      allow create, update: if isMe(userId)
+        && request.resource.data.keys().hasOnly(['uid', 'lastSeen'])
+        && request.resource.data.uid == userId
+        && request.resource.data.lastSeen is int
+        && request.resource.data.lastSeen >= 0
+        && request.resource.data.lastSeen <= request.time.toMillis() + 60000;
+      allow delete: if isMe(userId);
+    }
+
     match /presence/{userId} {
       allow read: if signedIn()
         && (

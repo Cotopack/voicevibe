@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
-            getFirestore, 
+            getFirestore, getCountFromServer, 
             collection, 
             doc, 
             setDoc, 
@@ -2213,6 +2213,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }, err => { console.warn('Conversation order listener:',err); renderChatFriends(); }));
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
+            // Approximate online users, measured by a heartbeat no older than 90 seconds.
+            const publicPresenceRef = doc(db, 'onlinePublic', uid);
+            const onlineCounterNode = document.getElementById('vvOnlineCountNumber');
+            const onlineCounterRefresh = async () => {
+                try {
+                    const cutoff = Date.now() - 90000;
+                    const snapshot = await getCountFromServer(query(collection(db, 'onlinePublic'), where('lastSeen', '>=', cutoff)));
+                    if (onlineCounterNode) onlineCounterNode.textContent = String(snapshot.data().count);
+                } catch (error) {
+                    console.warn('Online counter unavailable:', error);
+                    if (onlineCounterNode) onlineCounterNode.textContent = '—';
+                }
+            };
+            const publishPublicPresence = async () => {
+                try { await setDoc(publicPresenceRef, { uid, lastSeen: document.hidden ? 0 : Date.now() }); }
+                catch (error) { console.warn('Online heartbeat:', error); }
+                await onlineCounterRefresh();
+            };
+            publishPublicPresence();
+            const publicPresenceTimer = setInterval(publishPublicPresence, 30000);
+            const publicPresenceVisibility = () => publishPublicPresence();
+            document.addEventListener('visibilitychange', publicPresenceVisibility);
+            state.socialUnsubs.push(() => {
+                clearInterval(publicPresenceTimer);
+                document.removeEventListener('visibilitychange', publicPresenceVisibility);
+                setDoc(publicPresenceRef, { uid, lastSeen: 0 }).catch(() => {});
+                if (onlineCounterNode) onlineCounterNode.textContent = '—';
+            });
             const presenceRef = doc(db, 'presence', uid);
             const publishPresence = () => setDoc(presenceRef, { uid, online: !document.hidden, lastSeen: Date.now() }, { merge:true }).catch(err => console.warn('Presence update:', err));
             publishPresence();

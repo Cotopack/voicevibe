@@ -529,3 +529,7 @@ header, #appHeader, .app-header {isolation:isolate}
 /* Premium banner is never visible until its owner's Premium is confirmed. */
 #profileBannerPremiumSection.hidden { display: none !important; }
 #profileModal > div { max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
+
+/* VoiceVibe: online count shown beneath mobile navigation */
+.vv-online-counter{display:flex;justify-content:center;align-items:center;gap:7px;font:600 11px/1.2 system-ui,sans-serif;color:#b9a9e9;padding:1px 0 3px;min-height:17px}
+.vv-online-dot{height:7px;width:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d3998a}
