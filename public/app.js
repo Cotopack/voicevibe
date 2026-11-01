@@ -1513,10 +1513,37 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         vvEditor?.addEventListener('touchend',e=>{if(!e.touches.length)storyTouch=null;else if(storyTouch)storyBeginTouches(e);},{passive:false,capture:true});
         vvEditor?.addEventListener('touchcancel',()=>{storyTouch=null;},{passive:false,capture:true});
         document.getElementById('vvTextDone')?.addEventListener('click',()=>{storyTouch=null;vvTextPointers.clear();vvGesture=null;});
-        document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
+        // Each story is a fresh draft: never reuse text from the previous story.
+        function vvResetStoryDraftText(){
+            if(storyTextInput)storyTextInput.value='';
+            if(vvCanvasText){
+                vvCanvasText.textContent='';
+                vvCanvasText.classList.add('hidden');
+                vvCanvasText.setAttribute('contenteditable','false');
+                vvCanvasText.style.removeProperty('left');
+                vvCanvasText.style.removeProperty('top');
+                vvCanvasText.style.removeProperty('transform');
+                vvCanvasText.style.removeProperty('touch-action');
+            }
+            vvDeleteText?.classList.add('hidden');
+            vvDragText?.classList.add('hidden');
+            document.getElementById('vvStoryMentionResults')?.classList.add('hidden');
+            const size=document.getElementById('vvTextSize');
+            if(size)size.value='28';
+            const color=document.getElementById('vvTextColor');
+            if(color)color.value='#ffffff';
+            const bold=document.getElementById('vvTextBold');
+            if(bold)bold.checked=false;
+            const align=document.getElementById('vvTextAlign');
+            if(align)align.value='center';
+            vvTextPointers.clear();
+            vvGesture=null;
+            storyTouch=null;
+        }
+        document.getElementById('storyCreateToggle')?.addEventListener('click',()=>{vvResetStoryDraftText();vvStoryScreen('choose');});
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
-        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');});
+        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{vvResetStoryDraftText();storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');});
         document.querySelectorAll('[data-vv-filter]').forEach(b=>b.addEventListener('click',()=>{vvStoryFilter=b.dataset.vvFilter;vvApplyStoryFilter();}));
         // Mention autocomplete; prefix search starts after two characters.
         let vvMentionSeq=0;
@@ -1574,7 +1601,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const st=source.data(),now=Date.now();
             if(!confirm('Выставить историю @'+(st.username||'user')+' у себя?'))return;
             try{
-                const taggedUsers=await vvResolveMentionUids(text);
                 const storyRef=await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||'',text:'',mediaURL:st.mediaURL||'',mediaType:st.mediaType||'text',musicURL:st.musicURL||'',musicStart:Number(st.musicStart)||0,musicLength:Math.min(10,Number(st.musicLength)||10),musicFade:!!st.musicFade,storyFilter:st.storyFilter||'none',textPosition:{x:0,y:0},mentions:[],mentionedUids:[],repostOf:id,repostAuthorUid:st.uid,repostUsername:st.username||'',repostText:st.text||'',likes:[],views:[],replies:[],createdAt:now,expiresAt:Math.min(now+86400000,Number(st.expiresAt))});
                 alert('Репост опубликован!');storiesModal?.classList.remove('hidden');await refreshStories();
             }catch(e){console.error(e);alert('Не удалось сделать репост. Проверь Firestore Rules.');}
@@ -1781,7 +1807,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
-                if(file){vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
+                if(file){vvResetStoryDraftText();vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
             }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
@@ -1832,6 +1858,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
+                const taggedUsers=await vvResolveMentionUids(text);
                 const storyRef = await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:vvTextSettings(),mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
                 for(const target of taggedUsers){
                     try{await setDoc(doc(db,'users',target.uid,'storyMentions',storyRef.id),{storyId:storyRef.id,fromUid:state.user.uid,fromUsername:state.userProfile?.username||'',recipientUid:target.uid,createdAt:now,expiresAt:now+86400000});}
