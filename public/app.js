@@ -181,6 +181,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const avatarEl = document.getElementById('profileHeaderAvatar');
             if (nameEl) nameEl.textContent = name;
             if (avatarEl) {
+                if (state.user?.uid) { avatarEl.dataset.storyAvatar = state.user.uid; avatarEl.setAttribute('role','button'); avatarEl.tabIndex=0; }
                 avatarEl.innerHTML = '';
                 if (profile.photoURL || state.user?.photoURL) {
                     const img = document.createElement('img');
@@ -249,7 +250,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('profileUsernameInput').value = p.username ? '@' + p.username : '';
             document.getElementById('profileBioInput').value = p.bio || '';
             const preview = document.getElementById('profileEditAvatarPreview');
-            if (preview) preview.innerHTML = avatarMarkup(p, 'h-14 w-14');
+            if (preview) preview.innerHTML = avatarMarkup({...p,uid:state.user?.uid}, 'h-14 w-14');
             const removeAvatarButton = document.getElementById('btnRemoveAvatar');
             if (removeAvatarButton) { removeAvatarButton.dataset.remove = 'false'; removeAvatarButton.innerHTML = '<i class="fa-regular fa-trash-can mr-1"></i> Удалить аватар'; removeAvatarButton.classList.remove('border-rose-500/50','text-rose-200'); }
             document.getElementById('profileEmailText').textContent = state.user?.email || 'Аккаунт VoiceVibe';
@@ -278,7 +279,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 button.innerHTML = '<i class="fa-solid fa-rotate-left mr-1"></i> Оставить фото';
                 button.classList.add('border-rose-500/50','text-rose-200');
             } else {
-                preview.innerHTML = avatarMarkup(state.userProfile || {}, 'h-14 w-14');
+                preview.innerHTML = avatarMarkup({...state.userProfile,uid:state.user?.uid}, 'h-14 w-14');
                 button.innerHTML = '<i class="fa-regular fa-trash-can mr-1"></i> Удалить аватар';
                 button.classList.remove('border-rose-500/50','text-rose-200');
             }
@@ -1348,7 +1349,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
         function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
         document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); closeStoryViewer(); await refreshStories(); });
-        document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user || event.target.closest('#friendProfileModal')) return; const uid=avatar.dataset.storyAvatar; const hasStory=activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now()); if(hasStory){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();storiesModal?.classList.remove('hidden');storyCreateForm?.classList.add('hidden');storiesList?.classList.remove('hidden');openStoryByUser(uid);} else { event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.(); if(uid===state.user.uid) document.getElementById('profileBtn')?.click(); else openAnyUserProfile(uid); } }, true);
+        document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user) return; const uid=avatar.dataset.storyAvatar; const hasStory=activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now()); if(hasStory){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();document.getElementById('friendProfileModal')?.remove();storiesModal?.classList.remove('hidden');storyCreateForm?.classList.add('hidden');storiesList?.classList.remove('hidden');openStoryByUser(uid);} else { event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.(); if(uid===state.user.uid) document.getElementById('profileBtn')?.click(); else openAnyUserProfile(uid); } }, true);
         document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
         document.getElementById('storiesClose')?.addEventListener('click', () => { closeStoryViewer(); document.getElementById('storyMusicPreview')?.pause(); vvResetStoryDraftText(); storiesModal?.classList.add('hidden'); });
         storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) { closeStoryViewer(); storiesModal.classList.add('hidden'); } });
@@ -2244,7 +2245,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('requestCount').textContent = String(friendRequestsCache.length);
             if (!friendRequestsCache.length) { host.innerHTML = '<p class="text-sm text-slate-500">Пока нет заявок.</p>'; return; }
             await preloadRoles(friendRequestsCache, 'fromUid');
-            host.innerHTML = friendRequestsCache.map(r => `<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-slate-950/80 p-3">${avatarMarkup(r,'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(r.displayName || 'Пользователь')} ${roleBadgeMarkup(r.fromUid)} <span class="ml-1 text-xs font-normal text-violet-300">хочет добавить вас</span></p><p class="text-xs text-slate-400">@${escapeHTML(r.username || 'user')}</p></div><button data-accept="${escapeHTML(r.fromUid)}" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold">Принять</button><button data-reject="${escapeHTML(r.fromUid)}" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs">Отклонить</button></div>`).join('');
+            host.innerHTML = friendRequestsCache.map(r => `<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-slate-950/80 p-3">${avatarMarkup({...r, uid:r.fromUid},'h-11 w-11')}<div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${escapeHTML(r.displayName || 'Пользователь')} ${roleBadgeMarkup(r.fromUid)} <span class="ml-1 text-xs font-normal text-violet-300">хочет добавить вас</span></p><p class="text-xs text-slate-400">@${escapeHTML(r.username || 'user')}</p></div><button data-accept="${escapeHTML(r.fromUid)}" class="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold">Принять</button><button data-reject="${escapeHTML(r.fromUid)}" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs">Отклонить</button></div>`).join('');
             host.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => acceptFriend(b.dataset.accept)));
             host.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => rejectFriend(b.dataset.reject)));
         }
@@ -2796,7 +2797,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function vvReactionAvatarMarkup(uid){
             const profile=vvKnownReactionProfile(uid);
             const name=profile?.displayName||profile?.username||'Пользователь';
-            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
+            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
         }
         async function vvLoadReactionProfile(uid){
             const cached=vvReactionProfiles.get(uid);
