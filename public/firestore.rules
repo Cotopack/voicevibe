@@ -12,6 +12,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function validReactionUpdate() {
+      let before = resource.data.get('reactions', {});
+      let after = request.resource.data.reactions;
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+        && after is map
+        && after.diff(before).affectedKeys().hasOnly([request.auth.uid])
+        && (!after.keys().hasAny([request.auth.uid])
+          || after[request.auth.uid] in ['❤️','👍','😂','🔥','😮','😢']);
+    }
+
     function isMe(uid) {
       return signedIn() && request.auth.uid == uid;
     }
@@ -671,6 +682,7 @@ service cloud.firestore {
         allow read: if participant();
 
         allow create: if participant()
+          && (!request.resource.data.keys().hasAny(['reactions']) || request.resource.data.reactions == {})
           && request.resource.data.senderUid
             == request.auth.uid
           && request.resource.data.text is string
@@ -688,7 +700,8 @@ service cloud.firestore {
             ).data.premiumUntil > request.time.toMillis()
           );
 
-        allow update, delete: if false;
+        allow update: if participant() && validReactionUpdate();
+        allow delete: if false;
       }
     }
 
@@ -759,6 +772,7 @@ service cloud.firestore {
         allow read: if groupMember();
 
         allow create: if groupMember()
+          && (!request.resource.data.keys().hasAny(['reactions']) || request.resource.data.reactions == {})
           && request.resource.data.senderUid
             == request.auth.uid
           && request.resource.data.text is string
@@ -775,7 +789,8 @@ service cloud.firestore {
             ).data.premiumUntil > request.time.toMillis()
           );
 
-        allow update, delete: if false;
+        allow update: if groupMember() && validReactionUpdate();
+        allow delete: if false;
       }
     }
 

@@ -1199,12 +1199,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setCurrentStoryAvatar(st.uid);
             const viewNames = views.map(v => typeof v === 'string' ? v : (v.displayName || v.username || 'Пользователь'));
             const music = st.musicURL ? `<audio src="${storyEscape(st.musicURL)}" autoplay loop playsinline class="hidden" aria-hidden="true"></audio>` : '';
-            const repostBadge=st.repostOf?`<div class="vv-repost-badge"><div class="vv-repost-inner">${storyEscape(st.repostText||'Репост истории')}</div><button id="vvOriginalProfile">@${storyEscape(st.repostUsername||'user')}</button></div>`:'';
+            const repostBadge=st.repostOf?`<div class="vv-repost-credit"><button id="vvOriginalProfile">↗ @${storyEscape(st.repostUsername||'user')}</button></div>`:'';
+            const storyContent=st.repostOf?`<div class="vv-repost-stage">${media}${!st.textLayers?.length?`<div class="vv-repost-source-text">${storyEscape(st.repostText||'')}</div>`:''}</div>`:media;
             const ownerStats = isOwnStory ? `<button id="storyViewersBtn" class="rounded-full bg-white/15 px-3 py-2 text-xs"><i class="fa-regular fa-eye mr-1"></i>${views.length} просмотров</button>` : '';
             const likeCount = isOwnStory ? `<span class="text-sm">${Array.isArray(st.likes)?st.likes.length:0}</span>` : '';
             const viewersList = isOwnStory ? `<div id="storyViewersList" class="hidden mt-2 max-h-24 overflow-y-auto rounded-xl bg-black/50 p-2 text-xs">${viewNames.map(storyEscape).join('<br>') || 'Пока никто не посмотрел.'}</div>` : '';
-            viewer.innerHTML = `<div class="relative flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-rose-100 via-violet-100 to-sky-100 text-slate-800">
-                ${media}${repostBadge}<div class="story-top-gradient absolute inset-x-0 top-0 z-20 p-4 sm:p-6"><div class="mb-3 h-1 overflow-hidden rounded-full bg-slate-800/10"><div class="h-full w-full bg-violet-500"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-slate-500">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full border border-white/80 bg-white/80 px-3 py-2 text-slate-700 shadow-lg backdrop-blur-xl" aria-label="Закрыть">✕</button></div></div>
+            viewer.innerHTML = `<div class="vv-story-view ${st.repostOf?'vv-repost-view':''} relative flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden text-slate-800">
+                ${storyContent}${repostBadge}<div class="story-top-gradient absolute inset-x-0 top-0 z-20 p-4 sm:p-6"><div class="mb-3 h-1 overflow-hidden rounded-full bg-slate-800/10"><div class="h-full w-full bg-violet-500"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-slate-500">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full border border-white/80 bg-white/80 px-3 py-2 text-slate-700 shadow-lg backdrop-blur-xl" aria-label="Закрыть">✕</button></div></div>
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
                 ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text).replace(/@([a-zA-Z0-9_.]{2,24})/g,'<button type="button" class="vv-story-profile-mention" data-mention-name="$1">@$1</button>')}</p></div></div>` : ''}
                 <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
@@ -1218,7 +1219,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     el.style.fontSize=vvLimit(Number(l.size)||28,14,140)+'px';
                     el.style.color=/^#[a-f0-9]{6}$/i.test(l.color)?l.color:'#ffffff';
                     el.style.fontWeight=l.bold?'700':'400';el.style.textAlign=l.align||'center';
-                    decorateStoryText(el,l.font,l.background,el.style.color);viewer.firstElementChild.append(el);
+                    decorateStoryText(el,l.font,l.background,el.style.color);(viewer.querySelector('.vv-repost-stage')||viewer.firstElementChild).append(el);
                 }
             }
             const textCard = viewer.querySelector('.story-centered-text');
@@ -1330,7 +1331,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         const vvEditor=document.getElementById('storyCreateForm');
         const vvCanvasText=document.getElementById('vvStoryCanvasText');
-        // VoiceVibe story build: 20261101-story-repair-5.
+        // VoiceVibe story build: 20261101-chat-reactions-6.
         // Each finished text becomes an independent, editable layer.
         const vvTextLayers=[];
         let vvEditingLayer=-1;
@@ -1699,14 +1700,24 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return users;
         }
         let vvMentionUnsub=null;
+        let vvChatMentions=[];
+        let vvDirectDocs=[];
+        function vvMentionPeers(){
+            const peers=new Map();
+            for(const m of vvChatMentions)if(!peers.has(m.fromUid))peers.set(m.fromUid,{uid:m.fromUid,displayName:m.fromUsername?'@'+m.fromUsername:'Пользователь',username:m.fromUsername||'',mentionOnly:true});
+            return [...peers.values()];
+        }
+        function vvMentionUnread(uid){return vvChatMentions.filter(m=>m.fromUid===uid&&Number(m.createdAt)>getLastReadAt(uid)).length;}
         function vvWatchMentionInbox(){
             vvMentionUnsub?.();if(!state.user)return;
-            const host=document.getElementById('vvStoryMentionInbox');if(!host)return;
-            vvMentionUnsub=onSnapshot(collection(db,'users',state.user.uid,'storyMentions'),snap=>{
-                const entries=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.expiresAt>Date.now()).sort((a,b)=>b.createdAt-a.createdAt);
-                host.innerHTML=entries.length?'<h3>Вас отметили в историях</h3>'+entries.map(m=>`<div class="vv-mention-chat"><span>📩 @${escapeHTML(m.fromUsername||'user')} отметил(а) вас в истории</span><div class="vv-mention-actions"><button data-vv-view-mention="${escapeHTML(m.storyId)}">Посмотреть</button><button data-vv-repost-mention="${escapeHTML(m.storyId)}">Выставить в историю</button></div></div>`).join(''):'';
-                host.querySelectorAll('[data-vv-view-mention]').forEach(b=>b.addEventListener('click',()=>vvOpenMentionStory(b.dataset.vvViewMention)));
-                host.querySelectorAll('[data-vv-repost-mention]').forEach(b=>b.addEventListener('click',()=>vvRepostMention(b.dataset.vvRepostMention)));
+            const owner=state.user.uid;
+            const oldHost=document.getElementById('vvStoryMentionInbox');if(oldHost){oldHost.innerHTML='';oldHost.classList.add('hidden');}
+            vvMentionUnsub=onSnapshot(collection(db,'users',owner,'storyMentions'),snap=>{
+                if(state.user?.uid!==owner)return;
+                vvChatMentions=snap.docs.map(d=>({id:d.id,...d.data()}));
+                for(const m of vvChatMentions)recentChatTimes.set(m.fromUid,Math.max(recentChatTimes.get(m.fromUid)||0,Number(m.createdAt)||0));
+                if(activeFriend&&!activeGroupId){vvRenderDirectMessages(activeFriend);if(currentTab==='chats')localStorage.setItem(unreadStorageKey(activeFriend),String(Date.now()));}
+                renderChatFriends();updateUnreadBadge();
             },e=>console.warn('Mention inbox:',e));
         }
         async function vvOpenMentionStory(id){
@@ -1720,11 +1731,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const st=source.data(),now=Date.now();
             if(!confirm('Выставить историю @'+(st.username||'user')+' у себя?'))return;
             try{
-                const storyRef=await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||'',text:'',mediaURL:st.mediaURL||'',mediaType:st.mediaType||'text',musicURL:st.musicURL||'',musicStart:Number(st.musicStart)||0,musicLength:Math.min(10,Number(st.musicLength)||10),musicFade:!!st.musicFade,storyFilter:st.storyFilter||'none',textPosition:{x:0,y:0},mentions:[],mentionedUids:[],repostOf:id,repostAuthorUid:st.uid,repostUsername:st.username||'',repostText:st.text||'',likes:[],views:[],replies:[],createdAt:now,expiresAt:Math.min(now+86400000,Number(st.expiresAt))});
+                const storyRef=await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||'',text:'',mediaURL:st.mediaURL||'',mediaType:st.mediaType||'text',musicURL:st.musicURL||'',musicStart:Number(st.musicStart)||0,musicLength:Math.min(10,Number(st.musicLength)||10),musicFade:!!st.musicFade,storyFilter:st.storyFilter||'none',textPosition:{x:0,y:0},mentions:[],mentionedUids:[],repostOf:id,repostAuthorUid:st.uid,repostUsername:st.username||'',repostText:st.text||'',textLayers:Array.isArray(st.textLayers)?st.textLayers.slice(0,10):[],likes:[],views:[],replies:[],createdAt:now,expiresAt:Math.min(now+86400000,Number(st.expiresAt))});
                 alert('Репост опубликован!');storiesModal?.classList.remove('hidden');await refreshStories();
             }catch(e){console.error(e);alert('Не удалось сделать репост. Проверь Firestore Rules.');}
         }
-        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();return;}setTimeout(vvWatchMentionInbox,1500);});
+        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];return;}setTimeout(vvWatchMentionInbox,1500);});
         // Cloudinary catalog: music URLs are stored directly, no re-upload required.
         let vvCatalogTracks = [];
         let vvSelectedTrack = null;
@@ -2035,7 +2046,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent='Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>{const m=d.data();const mine=m.senderUid===state.user.uid;const senderProfile=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);const sender=mine?(state.userProfile?.displayName||'Вы'):(senderProfile?.displayName||'Участник');const senderPremium=Number(senderProfile?.premiumUntil||0)>Date.now();if(m.type==='sticker')return `<div class="flex ${mine?'justify-end':'justify-start'}"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"></div>`;return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[88%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold opacity-75 ${senderPremium?'vv-premium-name':''}">${escapeHTML(sender)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`;}).join('');host.scrollTop=host.scrollHeight;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -2212,7 +2223,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function unreadStorageKey(friendUid) { return `vv_read_${state.user?.uid || 'guest'}_${friendUid}`; }
         function getLastReadAt(friendUid) { return Number(localStorage.getItem(unreadStorageKey(friendUid)) || 0); }
         function updateUnreadBadge() {
-            const total = [...state.unreadCounts.values()].reduce((sum, n) => sum + n, 0);
+            const total = [...state.unreadCounts.values()].reduce((sum, n) => sum + n, 0)+vvMentionPeers().reduce((n,p)=>n+vvMentionUnread(p.uid),0);
             const nav = document.querySelector('[data-tab="chats"]');
             if (nav) {
                 let badge = document.getElementById('chatsUnreadBadge');
@@ -2248,14 +2259,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         async function renderChatFriends() {
             const sequence = ++chatRenderSequence;
             const host = document.getElementById('chatFriendsList');
-            if (!friendsCache.length && !groupsCache.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">Добавь друга или создай группу, чтобы начать переписку.</p>'; return; }
+            if (!friendsCache.length && !groupsCache.length && !vvChatMentions.length) { host.innerHTML = '<p class="p-2 text-sm text-slate-500">Добавь друга или создай группу, чтобы начать переписку.</p>'; return; }
             await preloadRoles(friendsCache);
             if (sequence !== chatRenderSequence) return;
-            const sortedFriends = [...friendsCache].sort((a,b) => (recentChatTimes.get(b.uid||b.id)||0) - (recentChatTimes.get(a.uid||a.id)||0));
+            const sortedFriends = [...friendsCache,...vvMentionPeers().filter(p=>!friendsCache.some(f=>(f.uid||f.id)===p.uid))].sort((a,b) => (recentChatTimes.get(b.uid||b.id)||0) - (recentChatTimes.get(a.uid||a.id)||0));
             const friendsHtml = sortedFriends.map(f => {
-                const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0);
+                const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0)+vvMentionUnread(uid);
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
-                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('<!--vv-chat-split-->');
             const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('<!--vv-chat-split-->');
             // One chronological list: groups must not remain pinned above recent private chats.
@@ -2558,7 +2569,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         async function openConversation(friendUid) {
             if (!state.user || !friendUid || friendUid === state.user.uid) return;
             const uid = String(friendUid);
-            const friendDoc = friendsCache.find(f => String(f.uid || f.id) === uid);
+            const friendDoc = friendsCache.find(f => String(f.uid || f.id) === uid)||vvMentionPeers().find(p=>p.uid===uid);
+            vvDirectDocs=[];
             if (!friendDoc) {
                 console.warn('Friend is not in local cache; attempting direct lookup', uid);
             }
@@ -2581,7 +2593,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const pane = document.getElementById('conversationPane');
             if (pane) pane.classList.remove('hidden', 'conversation-empty');
             socialChatsPanel.classList.add('chat-open');
-            if (host) host.innerHTML = '<p class="text-sm text-slate-400">Открываем переписку…</p>';
+            if (host) {host.style.backgroundImage='';host.innerHTML = '<p class="text-sm text-slate-400">Открываем переписку…</p>';} 
             if (input) input.disabled = true;
             if (send) send.disabled = true;
             if (game) game.disabled = true;
@@ -2593,6 +2605,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const friendSnap = await getDoc(friendRef);
                 if (!stillOpening()) return;
                 if (!friendSnap.exists()) {
+                    if(vvChatMentions.some(m=>m.fromUid===uid)){
+                        activeConversationId=null;vvRenderDirectMessages(uid);showTab('chats');renderChatFriends();updateUnreadBadge();return;
+                    }
                     throw new Error('FRIEND_DOC_MISSING: Этот пользователь отсутствует в списке друзей текущего аккаунта.');
                 }
                 const friendData = { ...friendSnap.data(), uid };
@@ -2623,15 +2638,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         const stickToBottom = host.scrollHeight - host.scrollTop - host.clientHeight < 96 || !host.dataset.loadedChat || host.dataset.loadedChat !== openingId;
                         const previousScroll = host.scrollTop;
                         host.dataset.loadedChat = openingId;
-                        if (snap.empty) host.innerHTML = '<p class="text-sm text-slate-500">Пока нет сообщений. Напиши первым 👋</p>';
-                        else host.innerHTML = snap.docs.map(d => {
-                            const m = d.data();
-                            const mine = m.senderUid === state.user.uid;
-                            if (m.type === 'snake-challenge') return `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm"><b>🎮 Вызов в Змейку</b><p class="mt-1 text-xs text-slate-300">${escapeHTML(m.text || 'Сыграем?')}</p><button data-playchallenge="${escapeHTML(d.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold">Играть</button></div>`;
-                            if (m.type === 'snake-result') return `<div class="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 text-sm">🐍 ${escapeHTML(m.text || '')}</div>`;
-                            if(m.type==='sticker') return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[85%] rounded-2xl p-2"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"><p class="mt-1 text-right text-[10px] text-slate-400">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`; const senderName=mine?(state.userProfile?.displayName||'Вы'):(friendDoc?.displayName||'Друг');const senderPremium=mine?Number(state.userProfile?.premiumUntil||0)>Date.now():Number(friendDoc?.premiumUntil||0)>Date.now();return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold ${senderPremium?'vv-premium-name':''}">${escapeHTML(senderName)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
-                        }).join('');
-                        host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
+                        vvDirectDocs=snap.docs.map(d=>({id:d.id,...d.data()}));
+                        vvRenderDirectMessages(uid);
                         host.scrollTop = stickToBottom ? host.scrollHeight : previousScroll;
                         localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
                         state.unreadCounts.set(uid, 0); updateUnreadBadge(); renderChatFriends();
@@ -2655,6 +2663,75 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (send) send.disabled = true;
                 if (game) game.disabled = true;
             }
+        }
+        const vvReactionEmojis=['❤️','👍','😂','🔥','😮','😢'];
+        const vvReactionBusy=new Set();
+        function vvReactionCounts(reactions){
+            const counts=new Map();
+            for(const emoji of Object.values(reactions||{}))if(vvReactionEmojis.includes(emoji))counts.set(emoji,(counts.get(emoji)||0)+1);
+            return [...counts];
+        }
+        function vvRenderChatMessage(m,scope,chatId){
+            const mine=m.senderUid===state.user.uid;
+            const sender=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);
+            const name=sender?.displayName||(mine?'Вы':'Участник');
+            const reactions=m.reactions||{};
+            let body=m.type==='sticker'?`<img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain">`:`<p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p>`;
+            if(m.type==='snake-challenge')body+=`<button data-playchallenge="${escapeHTML(m.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2">🎮 Играть</button>`;
+            return `<div class="vv-message-row ${mine?'vv-message-mine':''}"><div class="vv-message-bubble" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionCounts(reactions).map(([e,n])=>`<button type="button" data-reaction="${e}" class="${reactions[state.user.uid]===e?'selected':''}">${e} ${n}</button>`).join('')}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div></div></div>`;
+        }
+        function vvRenderMention(m){
+            const expired=Number(m.expiresAt)<=Date.now();
+            return `<div class="vv-chat-mention"><b>📸 Вас отметили в истории</b><p>@${escapeHTML(m.fromUsername||'user')} отметил(а) вас</p><div class="vv-mention-actions">${expired?'<span>История уже недоступна</span>':`<button data-chat-story="${escapeHTML(m.storyId)}">Посмотреть</button><button data-chat-repost="${escapeHTML(m.storyId)}">В свою историю</button>`}</div><small>${new Date(m.createdAt).toLocaleString()}</small></div>`;
+        }
+        function vvRenderDirectMessages(uid){
+            if(activeFriend!==uid||activeGroupId)return;
+            const host=document.getElementById('messagesList');if(!host)return;
+            const atBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96;
+            const oldScroll=host.scrollTop;
+            const mentions=vvChatMentions.filter(m=>m.fromUid===uid).map(m=>({...m,notice:true}));
+            const items=[...vvDirectDocs,...mentions].sort((a,b)=>(Number(a.createdAt)||0)-(Number(b.createdAt)||0)||String(a.id).localeCompare(String(b.id)));
+            host.innerHTML=items.length?items.map(m=>m.notice?vvRenderMention(m):vvRenderChatMessage(m,'conversations',activeConversationId)).join(''):'<p class="text-sm text-slate-500">Пока нет сообщений. Напиши первым 👋</p>';
+            if(!activeConversationId)host.innerHTML+='<p class="vv-mention-hint">Добавьте автора в друзья, чтобы переписываться.</p>';
+            vvBindMessageActions(host);
+            host.scrollTop=atBottom?host.scrollHeight:oldScroll;
+        }
+        async function vvSetMessageReaction(node,emoji,toggle=true){
+            if(!state.user||!vvReactionEmojis.includes(emoji))return;
+            const scope=node.dataset.messageScope,chat=node.dataset.messageChat,id=node.dataset.messageId;
+            if(!['conversations','groups'].includes(scope)||!chat||!id)return;
+            const uid=state.user.uid,key=scope+'/'+chat+'/'+id;
+            if(vvReactionBusy.has(key))return;vvReactionBusy.add(key);
+            try{
+                const ref=doc(db,scope,chat,'messages',id);
+                await runTransaction(db,async tx=>{
+                    const snap=await tx.get(ref);if(!snap.exists())return;
+                    const reactions={...(snap.data().reactions||{})};
+                    if(toggle&&reactions[uid]===emoji)delete reactions[uid];else reactions[uid]=emoji;
+                    tx.update(ref,{reactions});
+                });
+            }catch(e){console.error('Message reaction:',e);alert('Реакция не сохранена. Опубликуй обновлённые Firestore Rules и попробуй снова.');}
+            finally{vvReactionBusy.delete(key);}
+        }
+        function vvBindMessageActions(host){
+            host.querySelectorAll('[data-chat-story]').forEach(b=>b.addEventListener('click',()=>vvOpenMentionStory(b.dataset.chatStory)));
+            host.querySelectorAll('[data-chat-repost]').forEach(b=>b.addEventListener('click',()=>vvRepostMention(b.dataset.chatRepost)));
+            host.querySelectorAll('[data-playchallenge]').forEach(b=>b.addEventListener('click',()=>startSnake(b.dataset.playchallenge)));
+            host.querySelectorAll('[data-message-id]').forEach(node=>{
+                let lastTap=0,touchStart=null,lastHeart=0;
+                const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',false);};
+                node.addEventListener('dblclick',e=>{if(e.target.closest('button,a,input'))return;e.preventDefault();heart();});
+                node.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||e.target.closest('button,a,input'))return;touchStart={x:e.clientX,y:e.clientY,time:Date.now()};});
+                node.addEventListener('pointercancel',()=>{touchStart=null;lastTap=0;});
+                node.addEventListener('pointerup',e=>{
+                    if(e.pointerType!=='touch'||!touchStart)return;
+                    const start=touchStart;touchStart=null;const now=Date.now();
+                    if(Math.hypot(e.clientX-start.x,e.clientY-start.y)>12||now-start.time>350){lastTap=0;return;}
+                    if(lastTap&&now-lastTap<320){lastTap=0;heart();}else lastTap=now;
+                });
+                node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
+                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{node.querySelector('.vv-reaction-picker').hidden=true;vvSetMessageReaction(node,b.dataset.reaction);}));
+            });
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
             e.preventDefault();

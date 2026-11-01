@@ -457,3 +457,19 @@ header, #appHeader, .app-header {isolation:isolate}
 #storyCreateForm #vvStoryTextLayers .vv-story-layer {position:absolute!important;display:block!important;pointer-events:auto!important;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;z-index:1!important;max-width:80%!important;cursor:grab!important}
 #storyCreateForm #vvStoryCanvasText:not(.hidden){z-index:100!important;pointer-events:auto!important}
 #storyCreateForm #vvStoryTextLayers:empty {display:none!important}
+
+/* Story repost: the gradient is the background; the original remains visible. */
+#storyViewer .vv-story-view{background:linear-gradient(145deg,#111025,#291644);color:white}
+#storyViewer .vv-repost-view{background:linear-gradient(145deg,#7dd3fc,#38bdf8 52%,#bae6fd)}
+.vv-repost-stage{position:absolute;inset:16% 7% 23%;overflow:hidden;border:2px solid #ffffffb3;border-radius:26px;background:#171025;box-shadow:0 18px 50px #082f4955}
+.vv-repost-stage>img,.vv-repost-stage>video{width:100%;height:100%;object-fit:contain}
+.vv-repost-source-text{position:absolute;inset:15% 8%;display:flex;align-items:center;justify-content:center;text-align:center;white-space:pre-wrap;color:white;text-shadow:0 2px 8px #000;pointer-events:none}
+.vv-repost-credit{position:absolute;bottom:19%;left:10%;right:10%;z-index:12;text-align:center}
+.vv-repost-credit button{padding:8px 18px;background:#fff;color:#082f49;border-radius:30px;font-weight:700}
+.vv-message-row{display:flex;justify-content:flex-start;margin:8px 0}.vv-message-row.vv-message-mine{justify-content:flex-end}
+.vv-message-bubble{position:relative;max-width:88%;min-width:100px;padding:10px 13px;border-radius:18px;background:#1e293b;color:#f1f5f9;touch-action:manipulation;overflow-wrap:anywhere}
+.vv-message-mine .vv-message-bubble{background:#6d28d9;color:white}.vv-message-author{font-size:11px;font-weight:700;margin-bottom:5px}
+.vv-message-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;font-size:10px;opacity:.85}.vv-reaction-open{font-size:20px;min-width:32px;min-height:32px}
+.vv-reaction-counts{display:flex;gap:5px;flex-wrap:wrap}.vv-reaction-counts button{padding:3px 8px;background:#ffffff15;border:1px solid #ffffff30;border-radius:20px;font-size:12px}.vv-reaction-counts button.selected{background:#f5d0fe33;border-color:#f0abfc}
+.vv-reaction-picker:not([hidden]){display:flex;gap:3px;flex-wrap:wrap;margin-top:8px;padding:6px;background:#100c25;border-radius:14px}.vv-reaction-picker button{font-size:22px;padding:5px;min-width:36px;min-height:38px}
+.vv-chat-mention{margin:12px 0;padding:16px;max-width:90%;border:1px solid #a78bfa55;background:linear-gradient(135deg,#2d1b50,#17132d);border-radius:18px;color:#ede9fe}.vv-chat-mention p{font-size:13px;margin:7px 0}.vv-chat-mention small{display:block;margin-top:10px;opacity:.6;font-size:10px}.vv-mention-hint{font-size:12px;padding:12px;color:#c4b5fd}
