@@ -141,33 +141,53 @@ service cloud.firestore {
       allow delete: if isMe(userId);
     }
 
-    // Stories are visible to signed-in users and expire in the UI after 24 hours.
+    // Story author can create stories; reposts require a valid personal mention.
     match /stories/{storyId} {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid','displayName','username','photoURL','text','mediaURL','mediaType','musicURL','likes','views','replies','createdAt','expiresAt'])
-        && request.resource.data.displayName is string
-        && request.resource.data.username is string
-        && request.resource.data.photoURL is string
-        && request.resource.data.text is string
-        && request.resource.data.text.size() <= 500
-        && request.resource.data.mediaURL is string
+        && request.resource.data.keys().hasOnly(['uid','displayName','username','photoURL','text','mediaURL','mediaType','musicURL','musicStart','musicLength','musicFade','storyFilter','textPosition','mentions','mentionedUids','repostOf','repostAuthorUid','repostUsername','repostText','likes','views','replies','createdAt','expiresAt'])
+        && request.resource.data.text is string && request.resource.data.text.size() <= 500
         && request.resource.data.mediaType in ['text','image','video']
+        && request.resource.data.mediaURL is string
         && request.resource.data.musicURL is string
-        && request.resource.data.likes is list && request.resource.data.likes.size() <= 5000
-        && request.resource.data.views is list && request.resource.data.views.size() <= 5000
-        && request.resource.data.replies is list && request.resource.data.replies.size() <= 500
+        && request.resource.data.mentions is list && request.resource.data.mentions.size() <= 15
+        && request.resource.data.mentionedUids is list && request.resource.data.mentionedUids.size() <= 15
+        && request.resource.data.likes is list && request.resource.data.likes.size() == 0
+        && request.resource.data.views is list && request.resource.data.views.size() == 0
+        && request.resource.data.replies is list && request.resource.data.replies.size() == 0
         && request.resource.data.createdAt is int
         && request.resource.data.expiresAt is int
         && request.resource.data.expiresAt > request.resource.data.createdAt
-        && request.resource.data.expiresAt <= request.resource.data.createdAt + 86400000;
+        && request.resource.data.expiresAt <= request.resource.data.createdAt + 86400000
+        && (!('repostOf' in request.resource.data) || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)/storyMentions/$(request.resource.data.repostOf))
+          && exists(/databases/$(database)/documents/stories/$(request.resource.data.repostOf))
+          && get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.uid == request.resource.data.repostAuthorUid
+          && get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.expiresAt > request.time.toMillis()
+          && request.resource.data.expiresAt <= get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.expiresAt
+          && request.resource.data.mediaURL == get(/databases/$(database)/documents/stories/$(request.resource.data.repostOf)).data.mediaURL
+        ));
       allow update: if signedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','views','replies'])
         && request.resource.data.likes is list && request.resource.data.likes.size() <= 5000
         && request.resource.data.views is list && request.resource.data.views.size() <= 5000
         && request.resource.data.replies is list && request.resource.data.replies.size() <= 500;
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+    match /users/{recipientUid}/storyMentions/{storyId} {
+      allow read: if isMe(recipientUid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['storyId','fromUid','fromUsername','recipientUid','createdAt','expiresAt'])
+        && request.resource.data.storyId == storyId
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.recipientUid == recipientUid
+        && exists(/databases/$(database)/documents/stories/$(storyId))
+        && get(/databases/$(database)/documents/stories/$(storyId)).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/stories/$(storyId)).data.mentionedUids.hasAny([recipientUid])
+        && request.resource.data.expiresAt == get(/databases/$(database)/documents/stories/$(storyId)).data.expiresAt;
+      allow update: if false;
+      allow delete: if isMe(recipientUid);
     }
 
     // One conversation per sorted UID pair. Only its participants can read/write.
