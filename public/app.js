@@ -1262,13 +1262,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const vvMusicSelected = document.getElementById('vvMusicSelected');
         const vvMusicClear = document.getElementById('vvMusicClear');
         const vvMusicFade = document.getElementById('vvMusicFade');
+        // Favorites are private to this browser and Firebase user.
+        const vvFavoriteKey = () => `voicevibe:music:favorites:${state.user?.uid || 'guest'}`;
+        const vvGetFavorites = () => { try { return new Set(JSON.parse(localStorage.getItem(vvFavoriteKey()) || '[]')); } catch { return new Set(); } };
+        const vvSetFavorites = fav => { try { localStorage.setItem(vvFavoriteKey(), JSON.stringify([...fav])); } catch(e) { console.warn('Не удалось сохранить избранное',e); } };
         const vvMusicDuration = value => Number.isFinite(Number(value)) && Number(value) > 0 ? `${Math.floor(Number(value)/60)}:${String(Math.floor(Number(value)%60)).padStart(2,'0')}` : '—';
         function vvRenderCatalog() {
             if(!vvMusicTracks)return;
             const search=(vvMusicSearch?.value||'').trim().toLowerCase();
             const genre=vvMusicGenre?.value||'';
-            const found=vvCatalogTracks.filter(t=>(!genre||t.category===genre)&&(!search||`${t.title} ${t.artist}`.toLowerCase().includes(search)));
-            vvMusicTracks.innerHTML=found.length ? found.slice(0,250).map(t=>`<button type="button" class="vv-catalog-track ${vvSelectedTrack?.id===t.id?'selected':''}" data-music-id="${storyEscape(t.id)}"><i class="fa-solid fa-${vvSelectedTrack?.id===t.id?'check':'music'}"></i><span>${storyEscape(t.title)}<small style="display:block">${storyEscape(t.artist||'Исполнитель не указан')}</small></span><small>${vvMusicDuration(t.duration)}</small></button>`).join('') : '<p style="padding:12px">Ничего не найдено.</p>';
+            const favorites=vvGetFavorites();
+            const found=vvCatalogTracks.filter(t=>(genre!=='__favorites__'||favorites.has(t.id))&&(genre==='__favorites__'||!genre||t.category===genre)&&(!search||`${t.title} ${t.artist}`.toLowerCase().includes(search)));
+            vvMusicTracks.innerHTML=found.length ? found.slice(0,500).map(t=>`<div class="vv-catalog-track ${vvSelectedTrack?.id===t.id?'selected':''}" data-music-id="${storyEscape(t.id)}" role="button" tabindex="0" aria-label="Выбрать ${storyEscape(t.title)}"><i class="fa-solid fa-${vvSelectedTrack?.id===t.id?'check':'music'}"></i><span>${storyEscape(t.title)}<small style="display:block">${storyEscape(t.artist||'Исполнитель не указан')}</small></span><small>${vvMusicDuration(t.duration)}</small><button type="button" class="vv-favorite-btn ${favorites.has(t.id)?'is-favorite':''}" data-favorite-id="${storyEscape(t.id)}" aria-label="${favorites.has(t.id)?'Удалить из избранного':'Добавить в избранное'}" title="${favorites.has(t.id)?'Удалить из избранного':'Добавить в избранное'}"><i class="fa-${favorites.has(t.id)?'solid':'regular'} fa-heart"></i></button></div>`).join('') : '<p style="padding:12px">Ничего не найдено.</p>';
         }
         async function vvLoadCatalog() {
             if(!vvMusicTracks)return;
@@ -1279,7 +1284,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvCatalogTracks=data.tracks.filter(t=>t.url&&t.id).map(t=>({...t,category:(t.category&&t.category!=='Разное'&&t.category!=='Unknown' ? t.category : (/lo.?fi|chill|warm|sleep|dream/i.test(`${t.title} ${t.publicId||''}`)?'Lo-Fi / Chill':'Без жанра'))}));
                 document.getElementById('vvMusicCount').textContent=`${vvCatalogTracks.length} треков`;
                 const genres=[...new Set(vvCatalogTracks.map(t=>t.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
-                if(vvMusicGenre)vvMusicGenre.innerHTML='<option value="">Все жанры</option>'+genres.map(g=>`<option value="${storyEscape(g)}">${storyEscape(g)}</option>`).join('');
+                if(vvMusicGenre)vvMusicGenre.innerHTML='<option value="">Все жанры</option><option value="__favorites__">♥ Избранное</option>'+genres.map(g=>`<option value="${storyEscape(g)}">${storyEscape(g)}</option>`).join('');
                 vvRenderCatalog();
             } catch(e) {
                 console.error('Music catalog:',e);
@@ -1289,7 +1294,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         vvMusicSearch?.addEventListener('input',vvRenderCatalog);
         vvMusicGenre?.addEventListener('change',vvRenderCatalog);
+        vvMusicTracks?.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ') && e.target.matches('[data-music-id]')){e.preventDefault();e.target.click();}});
         vvMusicTracks?.addEventListener('click',e=>{
+            const favoriteButton=e.target.closest('[data-favorite-id]');
+            if(favoriteButton){
+                e.stopPropagation();
+                const favorites=vvGetFavorites();const id=favoriteButton.dataset.favoriteId;
+                if(favorites.has(id))favorites.delete(id);else favorites.add(id);
+                vvSetFavorites(favorites);vvRenderCatalog();return;
+            }
             const btn=e.target.closest('[data-music-id]');if(!btn)return;
             vvSelectedTrack=vvCatalogTracks.find(t=>t.id===btn.dataset.musicId)||null;
             if(!vvSelectedTrack)return;
@@ -1433,7 +1446,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const file=storyGalleryInput.files?.[0];
             const label=document.getElementById('storyGalleryName');
             const preview=document.getElementById('storyGalleryPreview');
-            if(label)label.textContent=file?.name||'Ничего не выбрано';
+            if(label)label.textContent=file?'Файл загружен':'Файл не загружен';
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
@@ -1468,7 +1481,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(!input.classList.contains('vv-native-file')) input.classList.add('vv-native-file');
             input.addEventListener('change',()=>{
                 const name=document.getElementById(input.id+'Name');
-                if(name)name.textContent=input.files?.[0]?.name||'Файл не выбран';
+                if(name)name.textContent=input.files?.length?'Файл загружен':'Файл не загружен';
             });
         });
         storyCreateForm?.addEventListener('submit', async event => {
@@ -1489,7 +1502,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
                 await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Ничего не выбрано';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
@@ -1526,7 +1539,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('claimReferralBtn')?.addEventListener('click',async()=>{const code=(document.getElementById('claimReferralCode')?.value||'').trim();const status=document.getElementById('referralStatus');if(!code)return;if(status)status.textContent='Проверяем код…';try{const res=await claimReferralCall({code});if(status)status.textContent=res.data?.message||'Код применён!';const wallet=await ensureReferralAccount();state.userProfile={...(state.userProfile||{}),...(wallet.data||{})};renderSocialProfile();}catch(e){if(status)status.textContent=e?.message||'Не удалось применить код.';}});
         document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{if(!state.user)throw new Error('Сначала войди в аккаунт.');const result=(await workerPost('/buy-premium')).data;state.userProfile={...(state.userProfile||{}),vibecoinBalance:result.vibecoinBalance,premiumUntil:result.premiumUntil};renderSocialProfile();alert(result.message||'Premium активирован на 30 дней!');}catch(e){console.error('Premium purchase:',e);alert(e?.message||'Не удалось купить Premium.');}finally{b.disabled=false;}});
         document.getElementById('watchAdCoinsBtn')?.addEventListener('click',async()=>{try{const res=await claimAdCoinsCall();alert(res.data?.message||'Попробуйте позже — реклама пока не подключена.');}catch(e){alert(e?.message||'Попробуйте позже — реклама пока не подключена.');}});
-        document.getElementById('profileBannerFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];const n=document.getElementById('profileBannerFileName');if(n)n.textContent=f?.name||'Файл не выбран';});
+        document.getElementById('profileBannerFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];const n=document.getElementById('profileBannerFileName');if(n)n.textContent=f?'Файл загружен':'Файл не загружен';});
         document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const url=await uploadImageToCloudinary(f,'profile-banners');await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert(`Не удалось загрузить банер в Cloudinary: ${e?.message||'ошибка загрузки'}`);}finally{b.disabled=false;}});
 
         // Groups are available only for people already in the user's friend list.

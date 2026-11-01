@@ -191,3 +191,20 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-wave-editor:active{cursor:grabbing}
 .vv-wave-selection{pointer-events:none}
 .vv-wave-handle{width:6px;background:#55ffe1}
+
+
+/* VoiceVibe: premium thin scrollbars and music favorites */
+:root{scrollbar-color:#8055bd #211936;scrollbar-width:thin}
+#storiesModal *{scrollbar-width:thin;scrollbar-color:#9b65e8 #211936}
+::-webkit-scrollbar{width:9px;height:8px}
+::-webkit-scrollbar-track{background:#211936;border-radius:99px}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#ad6bf6,#7041bc);border:2px solid #211936;border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:#c28bff}
+.vv-catalog-tracks{padding-right:4px}
+.vv-catalog-track{border-radius:10px;cursor:pointer;transition:background .16s ease;}
+.vv-catalog-track:hover,.vv-catalog-track:focus-visible{background:#33264e;outline:none}
+.vv-favorite-btn{flex:none;width:36px;height:36px;border:1px solid #685187;border-radius:12px;display:grid;place-items:center;color:#bda9d9;background:#2a2043;transition:transform .15s,background .15s,color .15s}
+.vv-favorite-btn:hover{transform:scale(1.08);background:#473060}
+.vv-favorite-btn.is-favorite{color:#fb7185;background:#4c2346;border-color:#be567b}
+.vv-file-name{display:inline-flex;align-items:center;gap:6px}
+.vv-file-name:not(:empty){font-weight:600}
