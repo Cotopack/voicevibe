@@ -173,8 +173,8 @@ header, #appHeader, .app-header {isolation:isolate}
 
 /* Mobile chat scrolling and touch gesture repair */
 @media(max-width:767px){
- #socialChatsPanel:not(.chat-open)>div{display:flex!important;flex-direction:column!important;min-height:0!important;height:100%!important;overflow:hidden!important}
- #socialChatsPanel:not(.chat-open) aside{display:flex!important;flex-direction:column!important;flex:1 1 0%!important;min-height:0!important;height:100%!important;max-height:100%!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;overscroll-behavior-y:contain!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open)>div{display:flex!important;flex-direction:column!important;min-height:0!important;height:100%!important;overflow:hidden!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open) aside{display:flex!important;flex-direction:column!important;flex:1 1 0%!important;min-height:0!important;height:100%!important;max-height:100%!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;overscroll-behavior-y:contain!important}
  #chatFriendsList{flex:0 0 auto!important;overflow:visible!important;touch-action:pan-y!important;padding-bottom:24px!important}
  #socialChatsPanel.chat-open #messagesList{overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;overscroll-behavior-y:contain!important}
  #socialChatsPanel.chat-open #conversationPane{min-height:0!important;overflow:hidden!important}
@@ -317,11 +317,11 @@ header, #appHeader, .app-header {isolation:isolate}
 
 /* Mobile chat redesign: full-height chat list starts directly below browser chrome. */
 @media(max-width:767px){
- #socialChatsPanel:not(.chat-open){position:fixed!important;inset:0 0 var(--vv-nav-height,82px) 0!important;width:100%!important;height:auto!important;max-height:none!important;overflow:hidden!important;z-index:27!important;background:#0b0d1c!important;display:flex!important;flex-direction:column!important}
- #socialChatsPanel:not(.chat-open)>div:not(#vvStoryMentionInbox){flex:1 1 auto!important;height:100%!important;min-height:0!important;display:flex!important;flex-direction:column!important;border:0!important;border-radius:0!important;background:#0b0d1c!important}
- #socialChatsPanel:not(.chat-open) aside{flex:1 1 auto!important;min-height:0!important;max-height:none!important;padding:18px 14px 8px!important;border:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
- #socialChatsPanel:not(.chat-open) aside>div:first-child{margin:0 0 17px!important;padding:0 3px!important}
- #socialChatsPanel:not(.chat-open) aside h2{font-size:24px!important;line-height:1.25!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open){position:fixed!important;inset:0 0 var(--vv-nav-height,82px) 0!important;width:100%!important;height:auto!important;max-height:none!important;overflow:hidden!important;z-index:27!important;background:#0b0d1c!important;display:flex!important;flex-direction:column!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open)>div:not(#vvStoryMentionInbox){flex:1 1 auto!important;height:100%!important;min-height:0!important;display:flex!important;flex-direction:column!important;border:0!important;border-radius:0!important;background:#0b0d1c!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open) aside{flex:1 1 auto!important;min-height:0!important;max-height:none!important;padding:18px 14px 8px!important;border:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open) aside>div:first-child{margin:0 0 17px!important;padding:0 3px!important}
+ #socialChatsPanel:not(.hidden):not(.chat-open) aside h2{font-size:24px!important;line-height:1.25!important}
  #createGroupBtn{font-size:13px!important;border-radius:15px!important;padding:12px 16px!important;background:linear-gradient(120deg,#7c3aed,#a32dec)!important}
  #chatFriendsList{padding-bottom:26px!important}
  #chatFriendsList>button{padding:15px 8px!important;min-height:77px!important;border-radius:0!important;border-bottom:1px solid rgba(155,148,194,.12)!important;gap:12px!important}
@@ -341,3 +341,6 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-chat-filter.active{background:linear-gradient(120deg,#7c3aed,#a42fe7);border-color:#bd64f7;color:white}
 .vv-filter-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;border-radius:50%;background:#9639ea;color:#fff;margin-left:4px}
 .vv-chat-empty{padding:25px 10px;color:#9993b0;text-align:center;font-size:14px}
+
+/* Hidden panels must stay hidden despite layout overrides. */
+#socialChatsPanel.hidden, #socialScreen.hidden, #conversationPane.hidden { display:none!important; }

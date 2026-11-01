@@ -7,7 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             setDoc, 
             getDoc,
             deleteDoc, arrayUnion, arrayRemove, 
-            onSnapshot, query, where, orderBy, limit, getDocs, addDoc, updateDoc, serverTimestamp, runTransaction
+            onSnapshot, query, where, orderBy, limit, limitToLast, writeBatch, getDocs, addDoc, updateDoc, serverTimestamp, runTransaction
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         const appId = 'voicevibe-1b8c0';
@@ -123,8 +123,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 document.getElementById('authOverlay')?.classList.add('hidden');
                 try {
                     const profileSnap = await getDoc(doc(db, 'users', user.uid));
+                    if (state.user?.uid !== user.uid) return;
                     state.userProfile = profileSnap.exists() ? profileSnap.data() : {
-                        displayName: user.displayName || 'Пользователь',
+                        displayName: (user.displayName || 'Пользователь').slice(0,30),
                         photoURL: user.photoURL || '',
                         bio: '',
                         username: '',
@@ -140,6 +141,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             catch (claimErr) { console.warn('Automatic referral claim:', claimErr); }
                         }
                     } catch (walletErr) { console.warn('Vibecoin backend is not deployed/configured yet:', walletErr); }
+                    if (state.user?.uid !== user.uid) return;
                     applyProfileToUI();
                     document.getElementById('authOverlay')?.classList.add('hidden');
                     document.getElementById('profileBtn')?.classList.remove('hidden');
@@ -148,10 +150,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     renderSocialProfile();
                 } catch (err) {
                     console.error('Profile load failed:', err);
+                    document.getElementById('authOverlay')?.classList.remove('hidden');
                     showAuthMessage('Вход выполнен, но не удалось загрузить профиль. Проверьте Rules Firestore.');
                 }
             } else {
                 state.userProfile = null;
+                friendsCache = []; groupsCache = []; friendRequestsCache = []; recentChatTimes.clear();
+                state.presenceCache.clear(); state.friendProfiles.clear();
+                closeConversation(); closeStoryViewer(); activeStoryItems = []; activeStoryIndex = 0;
+                document.getElementById('storiesList')?.replaceChildren();
+                document.getElementById('vvStoryMentionInbox')?.replaceChildren();
+                renderFriends(); renderChatFriends();
                 document.getElementById('authOverlay')?.classList.remove('hidden');
                 document.getElementById('profileBtn')?.classList.add('hidden');
                 document.getElementById('bottomNav')?.classList.add('hidden');
@@ -963,6 +972,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             u.accept?.classList.add('hidden');u.mute?.classList.toggle('hidden',!connected);
         }
         function vvCallEnd(){
+            vvRingStop();
             const call=vvFriendCall;vvFriendCall=null;vvFriendCallPending=null;vvFriendCallUid=null;
             try{call?.close()}catch(_){}
             if(vvFriendStream){vvFriendStream.getTracks().forEach(t=>t.stop());vvFriendStream=null;}
@@ -974,6 +984,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             vvFriendCall=call;
             call.on('stream',stream=>{
                 if(vvFriendCall!==call)return;
+                vvRingStop();
                 const u=vvCallUI();if(u.audio){u.audio.autoplay=true;u.audio.playsInline=true;u.audio.muted=false;u.audio.volume=vvCallVolumeMode==='quiet'?0.28:1;u.audio.srcObject=stream;u.audio.play().catch(err=>{console.warn('Audio playback needs user action:',err);const btn=document.getElementById('vvFriendCallListen');btn?.classList.add('vv-audio-attention');});}
                 vvCallStatus('Разговор идёт',true);
             });
@@ -992,7 +1003,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(!state.user || !fromUid || fromUid===uid || vvFriendCall || vvFriendCallPending){call.close();return;}
                 try{
                     const friendship=await getDoc(doc(db,'users',uid,'friends',fromUid));
-                    if(!friendship.exists()){call.close();return;}
+                    if(!friendship.exists() || state.user?.uid!==uid || vvFriendCall || vvFriendCallPending){call.close();return;}
                 }catch(e){console.warn('Friend call authorization:',e);call.close();return;}
                 vvFriendCallPending=call;vvFriendCallUid=fromUid;
                 const friend=friendsCache.find(f=>(f.uid||f.id)===fromUid);
@@ -1417,7 +1428,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const genre=vvMusicGenre?.value||'';
             const favorites=vvGetFavorites();
             const found=vvCatalogTracks.filter(t=>(genre!=='__favorites__'||favorites.has(t.id))&&(genre==='__favorites__'||!genre||t.category===genre)&&(!search||`${t.title} ${t.artist}`.toLowerCase().includes(search)));
-            vvMusicTracks.innerHTML=found.length ? found.slice(0,500).map(t=>`<div class="vv-catalog-track ${vvSelectedTrack?.id===t.id?'selected':''}" data-music-id="${storyEscape(t.id)}" role="button" tabindex="0" aria-label="Выбрать ${storyEscape(t.title)}"><i class="fa-solid fa-${vvSelectedTrack?.id===t.id?'check':'music'}"></i><span>${storyEscape(t.title)}<small style="display:block">${storyEscape(t.artist||'Исполнитель не указан')}</small></span><small>${vvMusicDuration(t.duration)}</small><button type="button" class="vv-favorite-btn ${favorites.has(t.id)?'is-favorite':''}" data-favorite-id="${storyEscape(t.id)}" aria-label="${favorites.has(t.id)?'Удалить из избранного':'Добавить в избранное'}" title="${favorites.has(t.id)?'Удалить из избранного':'Добавить в избранное'}"><i class="fa-${favorites.has(t.id)?'solid':'regular'} fa-heart"></i></button></div>`).join('') : '<p style="padding:12px">Ничего не найдено.</p>';
+            vvMusicTracks.innerHTML=found.length ? found.slice(0,500).map(t=>`<div class="vv-catalog-track ${vvSelectedTrack?.id===t.id?'selected':''}" data-music-id="${storyEscape(t.id)}" role="button" tabindex="0" aria-label="Выбрать ${storyEscape(t.title)}"><i class="fa-solid fa-${vvSelectedTrack?.id===t.id?'check':'music'}"></i><span>${storyEscape(t.title)}<small style="display:block">${storyEscape(t.artist||'Исполнитель не указан')}</small></span><small>${vvMusicDuration(t.duration)}</small><button type="button" class="vv-favorite-btn ${favorites.has(t.id)?'is-favorite':''}" data-favorite-id="${storyEscape(t.id)}" aria-label="${favorites.has(t.id)?'Удалить из избранного':'Добавить в избранное'}" title="${favorites.has(t.id)?'Удалить из избранного':'Добавить в избранное'}"><i class="fa-${favorites.has(t.id)?'solid':'regular'} fa-heart"></i></button></div>`).join('') : (vvCatalogTracks.length ? '<p style="padding:12px">Ничего не найдено.</p>' : '<p style="padding:12px">Каталог пока пуст. Добавьте треки в настройки Worker.</p>');
         }
         async function vvLoadCatalog() {
             if(!vvMusicTracks)return;
@@ -1647,7 +1658,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
-                await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:{x:vvCanvasText?.offsetLeft||0,y:vvCanvasText?.offsetTop||0},mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
+                const storyRef = await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:{x:vvCanvasText?.offsetLeft||0,y:vvCanvasText?.offsetTop||0},mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
                 for(const target of taggedUsers){
                     try{await setDoc(doc(db,'users',target.uid,'storyMentions',storyRef.id),{storyId:storyRef.id,fromUid:state.user.uid,fromUsername:state.userProfile?.username||'',recipientUid:target.uid,createdAt:now,expiresAt:now+86400000});}
                     catch(e){console.warn('Could not notify tagged user',target.uid,e);}
@@ -1697,7 +1708,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent='Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limit(200)),snap=>{if(activeGroupId!==groupId)return;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>{const m=d.data();const mine=m.senderUid===state.user.uid;const senderProfile=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);const sender=mine?(state.userProfile?.displayName||'Вы'):(senderProfile?.displayName||'Участник');const senderPremium=Number(senderProfile?.premiumUntil||0)>Date.now();if(m.type==='sticker')return `<div class="flex ${mine?'justify-end':'justify-start'}"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"></div>`;return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[88%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold opacity-75 ${senderPremium?'vv-premium-name':''}">${escapeHTML(sender)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`;}).join('');host.scrollTop=host.scrollHeight;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>{const m=d.data();const mine=m.senderUid===state.user.uid;const senderProfile=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);const sender=mine?(state.userProfile?.displayName||'Вы'):(senderProfile?.displayName||'Участник');const senderPremium=Number(senderProfile?.premiumUntil||0)>Date.now();if(m.type==='sticker')return `<div class="flex ${mine?'justify-end':'justify-start'}"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"></div>`;return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[88%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold opacity-75 ${senderPremium?'vv-premium-name':''}">${escapeHTML(sender)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`;}).join('');host.scrollTop=host.scrollHeight;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -1724,7 +1735,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
 
+        let socialGeneration = 0, friendGeneration = 0;
         function stopSocialListeners() {
+            socialGeneration++; friendGeneration++;
             state.socialUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
             state.socialUnsubs = [];
             state.unreadUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
@@ -1741,6 +1754,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             stopSocialListeners();
             if (!state.user) return;
             const uid = state.user.uid;
+            const generation = socialGeneration;
             state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); });
             // Real-time conversation order: newest message (sent or received) appears first.
             state.socialUnsubs.push(onSnapshot(query(collection(db,'conversations'), where('participants','array-contains',uid)), snap => {
@@ -1758,13 +1772,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             publishPresence();
             state.presenceHeartbeat = setInterval(publishPresence, 30000);
             document.addEventListener('visibilitychange', publishPresence);
-            window.addEventListener('pagehide', () => setDoc(presenceRef, { uid, online:false, lastSeen:Date.now() }, { merge:true }).catch(()=>{}), { once:true });
+            state.socialUnsubs.push(() => document.removeEventListener('visibilitychange', publishPresence));
+            const publishOffline = () => setDoc(presenceRef, { uid, online:false, lastSeen:Date.now() }, { merge:true }).catch(()=>{});
+            window.addEventListener('pagehide', publishOffline);
+            state.socialUnsubs.push(() => window.removeEventListener('pagehide', publishOffline));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friendRequests'), snap => {
                 friendRequestsCache = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => r.status === 'pending');
                 renderFriendRequests();
             }, err => console.warn('Friend request listener:', err)));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
-                friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data(), uid:d.data().uid || d.id }));
+                const friendsVersion = ++friendGeneration;
+                friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data(), uid:d.id }));
                 refreshUnreadListeners();
                 renderFriends(); renderChatFriends(); renderSocialProfile();
                 state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
@@ -1774,6 +1792,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         const ps = await getDoc(doc(db,'users',friend.uid));
                         if (ps.exists()) Object.assign(friend, ps.data());
                     } catch (err) { console.warn('Friend profile:', err); }
+                    if (generation !== socialGeneration || friendsVersion !== friendGeneration || state.user?.uid !== uid) return;
                     const unsub = onSnapshot(doc(db,'presence',friend.uid), presenceSnap => {
                         state.presenceCache.set(friend.uid, presenceSnap.exists() ? presenceSnap.data() : { online:false });
                         renderFriends(); renderChatFriends();
@@ -1809,7 +1828,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function closeConversation() {
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
-            activeFriend = null; activeConversationId = null;
+            activeFriend = null; activeConversationId = null; activeGroupId = null;
             socialChatsPanel.classList.remove('chat-open');
             const pane = document.getElementById('conversationPane');
             pane?.classList.add('hidden');
@@ -2195,9 +2214,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const otherSnap = await getDoc(doc(db,'users',fromUid));
             const other = otherSnap.exists() ? otherSnap.data() : req;
             const batchFriend = { uid:fromUid, displayName:other.displayName || req.displayName || 'Друг', username:other.username || req.username || '', photoURL:other.photoURL || req.photoURL || '', addedAt:Date.now() };
-            await setDoc(doc(db,'users',state.user.uid,'friends',fromUid), batchFriend);
-            await setDoc(doc(db,'users',fromUid,'friends',state.user.uid), { uid:state.user.uid, displayName:me.displayName || 'Пользователь', username:me.username || '', photoURL:me.photoURL || '', addedAt:Date.now() });
-            await deleteDoc(requestRef);
+            const batch = writeBatch(db);
+            batch.set(doc(db,'users',state.user.uid,'friends',fromUid), batchFriend);
+            batch.set(doc(db,'users',fromUid,'friends',state.user.uid), { uid:state.user.uid, displayName:me.displayName || 'Пользователь', username:me.username || '', photoURL:me.photoURL || '', addedAt:Date.now() });
+            batch.delete(requestRef);
+            await batch.commit();
         }
         async function rejectFriend(fromUid) {
             if (!state.user) return;
@@ -2218,6 +2239,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.unreadCounts.set(uid, 0); updateUnreadBadge();
             const pair = [state.user.uid, uid].sort();
             activeConversationId = pair.join('_');
+            const openingId = activeConversationId;
+            const openingUser = state.user.uid;
+            const stillOpening = () => state.user?.uid === openingUser && activeConversationId === openingId && activeFriend === uid;
             const host = document.getElementById('messagesList');
             const input = document.getElementById('messageInput');
             const send = document.getElementById('sendMessageBtn');
@@ -2235,13 +2259,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 // Read the canonical friend document before attempting to create a conversation.
                 const friendRef = doc(db, 'users', state.user.uid, 'friends', uid);
                 const friendSnap = await getDoc(friendRef);
+                if (!stillOpening()) return;
                 if (!friendSnap.exists()) {
                     throw new Error('FRIEND_DOC_MISSING: Этот пользователь отсутствует в списке друзей текущего аккаунта.');
                 }
-                const friendData = { uid, ...friendSnap.data() };
+                const friendData = { ...friendSnap.data(), uid };
                 updateConversationPresence(uid);
-                const conversationRef = doc(db, 'conversations', activeConversationId);
+                const conversationRef = doc(db, 'conversations', openingId);
                 const conversationSnap = await getDoc(conversationRef);
+                if (!stillOpening()) return;
                 if (!conversationSnap.exists()) {
                     await setDoc(conversationRef, {
                         participants: pair,
@@ -2255,13 +2281,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 }
 
-                const freshConversation = await getDoc(conversationRef); const wallpaperURL = freshConversation.exists() ? freshConversation.data().wallpaperURL : ''; const messageArea = document.getElementById('messagesList'); if(messageArea){messageArea.style.backgroundImage=wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${wallpaperURL}")`:'';messageArea.style.backgroundSize='cover';}
-                const messagesCol = collection(db, 'conversations', activeConversationId, 'messages');
+                const freshConversation = await getDoc(conversationRef); if (!stillOpening()) return; const wallpaperURL = freshConversation.exists() ? freshConversation.data().wallpaperURL : ''; const messageArea = document.getElementById('messagesList'); if(messageArea){messageArea.style.backgroundImage=wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${wallpaperURL}")`:'';messageArea.style.backgroundSize='cover';}
+                const messagesCol = collection(db, 'conversations', openingId, 'messages');
                 state.messageUnsub = onSnapshot(
-                    query(messagesCol, orderBy('createdAt', 'asc'), limit(100)),
+                    query(messagesCol, orderBy('createdAt', 'asc'), limitToLast(100)),
                     snap => {
-                        if (activeConversationId !== pair.join('_')) return;
+                        if (!stillOpening()) return;
                         if (!host) return;
+                        const stickToBottom = host.scrollHeight - host.scrollTop - host.clientHeight < 96 || !host.dataset.loadedChat || host.dataset.loadedChat !== openingId;
+                        const previousScroll = host.scrollTop;
+                        host.dataset.loadedChat = openingId;
                         if (snap.empty) host.innerHTML = '<p class="text-sm text-slate-500">Пока нет сообщений. Напиши первым 👋</p>';
                         else host.innerHTML = snap.docs.map(d => {
                             const m = d.data();
@@ -2271,11 +2300,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             if(m.type==='sticker') return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[85%] rounded-2xl p-2"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"><p class="mt-1 text-right text-[10px] text-slate-400">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`; const senderName=mine?(state.userProfile?.displayName||'Вы'):(friendDoc?.displayName||'Друг');const senderPremium=mine?Number(state.userProfile?.premiumUntil||0)>Date.now():Number(friendDoc?.premiumUntil||0)>Date.now();return `<div class="flex ${mine ? 'justify-end' : 'justify-start'}"><div class="max-w-[85%] rounded-2xl ${mine ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold ${senderPremium?'vv-premium-name':''}">${escapeHTML(senderName)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text || '')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</p></div></div>`;
                         }).join('');
                         host.querySelectorAll('[data-playchallenge]').forEach(b => b.addEventListener('click', () => startSnake(b.dataset.playchallenge)));
-                        host.scrollTop = host.scrollHeight;
+                        host.scrollTop = stickToBottom ? host.scrollHeight : previousScroll;
                         localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
                         state.unreadCounts.set(uid, 0); updateUnreadBadge(); renderChatFriends();
                     },
                     err => {
+                        if (!stillOpening()) return;
                         console.error('Chat messages listener failed:', err);
                         if (host) host.innerHTML = `<div class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">Не удалось загрузить сообщения (${escapeHTML(err.code || 'unknown')}). Проверь Firestore Rules и доступ к документу conversations/${escapeHTML(activeConversationId)}.</div>`;
                     }
@@ -2286,6 +2316,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderChatFriends();
                 showTab('chats');
             } catch (e) {
+                if (!stillOpening()) return;
                 console.error('Conversation open failed:', e);
                 if (host) host.innerHTML = `<div class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200"><b>Не удалось открыть чат</b><p class="mt-1">${escapeHTML(e.message || e.code || 'Неизвестная ошибка')}</p><p class="mt-2 text-xs text-rose-300">Проверь, что оба аккаунта добавлены друг к другу в друзья и опубликованы актуальные Firestore Rules.</p></div>`;
                 if (input) input.disabled = true;
@@ -2295,21 +2326,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
             e.preventDefault();
-            const text = document.getElementById('messageInput').value.trim();
+            const messageField = document.getElementById('messageInput');
+            const sendingConversation = activeConversationId, sendingGroup = activeGroupId;
+            const originalValue = messageField.value;
+            const clearSentInput = () => { if (activeConversationId === sendingConversation && activeGroupId === sendingGroup && messageField.value === originalValue) messageField.value = ''; };
+            const text = originalValue.trim();
             if (!text || !state.user) return;
             if (activeGroupId) {
                 const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
-                try { const groupId=activeGroupId; await addDoc(collection(db,'groups',groupId,'messages'), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now()}); await updateDoc(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); document.getElementById('messageInput').value=''; } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false;} return;
+                try { const groupId=activeGroupId; const batch=writeBatch(db); batch.set(doc(collection(db,'groups',groupId,'messages')), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now()}); batch.update(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); await batch.commit(); clearSentInput(); } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false;} return;
             }
             if (!activeConversationId || !activeFriend) return;
             const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
             const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now(), clientMessageId: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`) };
             try {
                 const conversationRef = doc(db,'conversations',activeConversationId);
-                await setDoc(conversationRef, { participants:[state.user.uid,activeFriend].sort(), updatedAt:Date.now(), lastMessage:text.slice(0,100) }, {merge:true});
-                bumpRecentChat(activeFriend);
-                await addDoc(collection(db,'conversations',activeConversationId,'messages'), payload);
-                document.getElementById('messageInput').value='';
+                const sendingFriend = activeFriend;
+                const batch = writeBatch(db);
+                batch.set(conversationRef, { participants:[state.user.uid,sendingFriend].sort(), updatedAt:payload.createdAt, lastMessage:text.slice(0,100) }, {merge:true});
+                batch.set(doc(collection(conversationRef,'messages')), payload);
+                await batch.commit();
+                bumpRecentChat(sendingFriend);
+                clearSentInput();
             } catch (err) { console.error('Message send failed',err); alert('Сообщение не отправлено. Проверь Firestore Rules.'); } finally { sendBtn.disabled = false; }
         });
         document.getElementById('snakeChallengeBtn')?.addEventListener('click', () => {

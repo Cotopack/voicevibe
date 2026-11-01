@@ -27,7 +27,6 @@ service cloud.firestore {
         && request.resource.data.photoURL is string
         && request.resource.data.bio is string && request.resource.data.bio.size() <= 160;
       allow update: if isMe(userId)
-        && request.resource.data.keys().hasOnly(['displayName','username','photoURL','bio','createdAt','updatedAt','usernameChangedAt','bannerURL','referralCode','vibecoinBalance','premiumUntil','referredBy','referredAt'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','username','photoURL','bio','updatedAt','usernameChangedAt','bannerURL'])
         && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 30
         && request.resource.data.username is string && request.resource.data.username.size() <= 24
@@ -65,7 +64,7 @@ service cloud.firestore {
       match /friends/{friendUid} {
         allow read: if signedIn() && (request.auth.uid == userId || request.auth.uid == friendUid);
         allow create: if signedIn() && (
-          request.auth.uid == userId ||
+          (request.auth.uid == userId && exists(/databases/$(database)/documents/users/$(userId)/friendRequests/$(friendUid))) ||
           (request.auth.uid == friendUid && exists(/databases/$(database)/documents/users/$(friendUid)/friendRequests/$(userId)))
         ) && request.resource.data.uid == friendUid;
         allow update: if signedIn() && (request.auth.uid == userId || request.auth.uid == friendUid)
@@ -105,6 +104,7 @@ service cloud.firestore {
     match /peerSessions/{peerId} {
       allow read: if signedIn();
       allow create, update: if signedIn()
+        && (!exists(/databases/$(database)/documents/peerSessions/$(peerId)) || resource.data.ownerUid == request.auth.uid)
         && request.resource.data.peerId == peerId
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.keys().hasOnly(['peerId','ownerUid','updatedAt']);
@@ -143,6 +143,27 @@ service cloud.firestore {
 
     // Story author can create stories; reposts require a valid personal mention.
     match /stories/{storyId} {
+      function ownReactionChange() {
+        return request.resource.data.likes.toSet().difference(resource.data.likes.toSet()).hasOnly([request.auth.uid])
+          && resource.data.likes.toSet().difference(request.resource.data.likes.toSet()).hasOnly([request.auth.uid]);
+      }
+      function ownViewAppend() {
+        let old = resource.data.views;
+        let next = request.resource.data.views;
+        return next == old || (next.size() == old.size() + 1
+          && next == old.concat([next[old.size()]])
+          && next[old.size()].uid == request.auth.uid);
+      }
+      function ownReplyAppend() {
+        let old = resource.data.replies;
+        let next = request.resource.data.replies;
+        return next == old || (next.size() == old.size() + 1
+          && next == old.concat([next[old.size()]])
+          && next[old.size()].uid == request.auth.uid
+          && next[old.size()].text is string
+          && next[old.size()].text.size() <= 300
+          && next[old.size()].createdAt is int);
+      }
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
@@ -172,7 +193,8 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes','views','replies'])
         && request.resource.data.likes is list && request.resource.data.likes.size() <= 5000
         && request.resource.data.views is list && request.resource.data.views.size() <= 5000
-        && request.resource.data.replies is list && request.resource.data.replies.size() <= 500;
+        && request.resource.data.replies is list && request.resource.data.replies.size() <= 500
+        && ownReactionChange() && ownViewAppend() && ownReplyAppend();
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
     match /users/{recipientUid}/storyMentions/{storyId} {
@@ -209,11 +231,15 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
+        && request.resource.data.participants[0] is string
+        && request.resource.data.participants[1] is string
+        && request.resource.data.participants[0] != request.resource.data.participants[1]
         && request.auth.uid in request.resource.data.participants
         && isFriendConversation(request.resource.data);
       allow update: if signedIn()
         && request.auth.uid in resource.data.participants
-        && request.resource.data.participants == resource.data.participants;
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt','lastMessage','wallpaperURL']);
       allow delete: if false;
 
       match /messages/{messageId} {
@@ -225,6 +251,8 @@ service cloud.firestore {
           && request.resource.data.senderUid == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 1000
+          && request.resource.data.createdAt is int
+          && request.resource.data.keys().hasOnly(['senderUid','text','type','createdAt','clientMessageId'])
           && request.resource.data.type in ['text','snake-challenge','snake-result','sticker']
           && (request.resource.data.type != 'sticker' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premiumUntil > request.time.toMillis());
         allow update, delete: if false;

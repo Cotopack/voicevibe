@@ -4,7 +4,7 @@
  */
 const PROJECT_ID = 'voicevibe-1b8c0';
 const FIREBASE_API_KEY = 'AIzaSyDFQ4ffsLf857irvY0pTtduk35XeZCM8Ko';
-const ALLOWED_ORIGINS = ['https://cotopack.github.io'];
+const ALLOWED_ORIGINS = ['https://cotopack.github.io', 'https://voicevibe-1b8c0.web.app', 'https://voicevibe-1b8c0.firebaseapp.com'];
 const PREMIUM_PRICE = 50;
 const PREMIUM_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 const REFERRAL_REWARD = 10;
@@ -55,7 +55,7 @@ function response(data, status, origin) {
   return new Response(JSON.stringify(data), { status, headers: {
     'content-type': 'application/json; charset=utf-8',
     ...(ALLOWED_ORIGINS.includes(origin) ? { 'access-control-allow-origin': origin } : {}),
-    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-allow-headers': 'Content-Type, Authorization',
     'vary': 'Origin', 'cache-control': 'no-store'
   }});
@@ -118,7 +118,7 @@ async function claimReferral(accessToken, uid, authUser, rawCode) {
   const code = String(rawCode || '').trim().toUpperCase();
   if (!/^VV[A-Z0-9]{5,12}$/.test(code)) throw new Error('Проверь реферальный код.');
   const createdAt = Number(authUser.createdAt || 0);
-  if (!createdAt || Date.now() - createdAt > REFERRAL_MAX_AGE_MS) throw new Error('Код можно применить только в течение 7 дней после регистрации.');
+  if (!createdAt || Date.now() - createdAt > REFERRAL_MAX_AGE_MS) throw new Error('Код можно применить только в течение 15 минут после регистрации.');
 
   const codeDoc = await getDocument(accessToken, `referralCodes/${code}`);
   if (!codeDoc) throw new Error('Такой реферальный код не найден.');
@@ -200,6 +200,176 @@ async function developerGrant(token,uid,body){
  }else throw Error('Неизвестный тип награды');
  await commit(token,[updateWrite(path,fields,paths,user.updateTime)]);return {ok:true,message};
 }
+async function getCloudinaryMusic(env) {
+
+  const cloud = env.CLOUDINARY_CLOUD_NAME;
+
+  const key = env.CLOUDINARY_API_KEY;
+
+  const secret = env.CLOUDINARY_API_SECRET;
+
+  if (!cloud || !key || !secret) {
+
+    throw new Error("Cloudinary не настроен.");
+
+  }
+
+  const authorization = "Basic " + btoa(`${key}:${secret}`);
+
+  const tracks = [];
+
+  const seen = new Set();
+
+  let cursor = null;
+
+// Ищем все ресурсы типа video.
+
+// В Cloudinary аудиофайлы MP3 тоже имеют resource_type=video.
+
+  const expression = "resource_type:video";
+
+  for (let page = 0; page < 30; page++) {
+
+    const body = {
+
+      expression,
+
+      max_results: 100,
+
+      with_field: ["context"]
+
+    };
+
+    if (cursor) {
+
+      body.next_cursor = cursor;
+
+    }
+
+    const res = await fetch(
+
+      `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloud)}/resources/search`,
+
+      {
+
+        method: "POST",
+
+        headers: {
+
+          Authorization: authorization,
+
+          "Content-Type": "application/json"
+
+        },
+
+        body: JSON.stringify(body)
+
+      }
+
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+
+      throw new Error(
+
+        `Cloudinary ${res.status}: ${
+
+          data.error?.message || "Ошибка поиска музыки"
+
+        }`
+
+      );
+
+    }
+
+    for (const asset of data.resources || []) {
+
+      const fileUrl = asset.secure_url || "";
+
+      const format = String(asset.format || "").toLowerCase();
+
+      const isAudio =
+
+        ["mp3", "m4a", "wav", "ogg", "flac", "aac"].includes(format) ||
+
+        /\.(mp3|m4a|wav|ogg|flac|aac)(?:$|\?)/i.test(fileUrl);
+
+      if (!isAudio || !fileUrl) continue;
+
+      const id = asset.asset_id || asset.public_id;
+
+      if (!id || seen.has(id)) continue;
+
+      seen.add(id);
+
+      const originalName =
+
+        asset.display_name ||
+
+        asset.public_id?.split("/").pop() ||
+
+        "Без названия";
+
+      const title = originalName
+
+        .replace(/\.[^.]+$/, "")
+
+        .replace(/[_-]+/g, " ")
+
+        .trim();
+
+      tracks.push({
+
+        id,
+
+        publicId: asset.public_id,
+
+        title,
+
+        artist: asset.context?.custom?.artist || "Unknown Artist",
+
+        category: asset.context?.custom?.category || "Разное",
+
+        url: fileUrl,
+
+        duration: asset.duration ?? null,
+
+        format,
+
+        createdAt: asset.created_at || null
+
+      });
+
+    }
+
+    cursor = data.next_cursor || null;
+
+    if (!cursor) {
+
+      return {
+
+        ok: true,
+
+        total: tracks.length,
+
+        tracks
+
+      };
+
+    }
+
+  }
+
+  throw new Error(
+
+    "Превышен лимит страниц каталога Cloudinary."
+
+  );
+
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -207,7 +377,7 @@ export default {
       if (!ALLOWED_ORIGINS.includes(origin)) return new Response(null, { status: 403 });
       return new Response(null, { status: 204, headers: {
         'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Max-Age': '86400',
         'Vary': 'Origin'
@@ -215,6 +385,26 @@ export default {
     }
     if (!ALLOWED_ORIGINS.includes(origin)) return response({ error: 'Недопустимый источник запроса.' }, 403, ALLOWED_ORIGINS[0]);
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname.replace(/\/$/, '') === '/api/music') {
+      try {
+        let catalog = [];
+        if (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) {
+          catalog = await getCloudinaryMusic(env);
+        } else if (env.MUSIC_CATALOG_JSON) catalog = JSON.parse(env.MUSIC_CATALOG_JSON);
+        else if (env.MUSIC_CATALOG_URL) {
+          const catalogUrl = new URL(env.MUSIC_CATALOG_URL);
+          if (catalogUrl.protocol !== 'https:') throw new Error('Каталог должен использовать HTTPS.');
+          const upstream = await fetch(catalogUrl, { headers: { Accept: 'application/json' } });
+          if (!upstream.ok) throw new Error('Сервис каталога недоступен.');
+          catalog = await upstream.json();
+        }
+        const tracks = Array.isArray(catalog) ? catalog : catalog.tracks;
+        if (!Array.isArray(tracks)) throw new Error('Каталог должен содержать массив tracks.');
+        const safeTracks = tracks.filter(t => t && typeof t.id === 'string' && typeof t.url === 'string' && /^https:\/\//i.test(t.url))
+          .slice(0, 5000).map(t => ({ id:t.id, url:t.url, title:String(t.title || 'Без названия'), artist:String(t.artist || ''), category:String(t.category || ''), duration:Math.max(0, Number(t.duration) || 0) }));
+        return response({ ok:true, total:safeTracks.length, tracks:safeTracks }, 200, origin);
+      } catch (error) { return response({ error:error.message || 'Ошибка каталога' }, 502, origin); }
+    }
     if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405, origin);
     const route = url.pathname.replace(/\/$/, '');
     if (!['/buy-premium', '/referral/ensure', '/referral/claim', '/create-group', '/claim-ad-coins', '/developer/grant', '/group/manage'].includes(route)) return response({ error: 'Not found' }, 404, origin);
