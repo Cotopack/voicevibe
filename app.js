@@ -1187,6 +1187,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const st = activeStoryItems[activeStoryIndex];
             const viewer = document.getElementById('storyViewer');
             if (!st || !viewer) return;
+            if (Number(st.expiresAt) <= Date.now()) { expireStories(); closeStoryViewer(); return; }
             const storyMediaFilter={none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'}[st.storyFilter]||'none';
             const media = st.mediaType === 'video' && st.mediaURL
                 ? `<video src="${storyEscape(st.mediaURL)}" style="filter:${storyMediaFilter}" class="absolute inset-0 h-full w-full object-contain bg-transparent" autoplay playsinline controls preload="metadata"></video>`
@@ -1206,6 +1207,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
                 ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text).replace(/@([a-zA-Z0-9_.]{2,24})/g,'<button type="button" class="vv-story-profile-mention" data-mention-name="$1">@$1</button>')}</p></div></div>` : ''}
                 <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
+            const textCard = viewer.querySelector('.story-centered-text');
+            if (textCard && st.textPosition?.version === 2) {
+                const cfg = st.textPosition;
+                textCard.className = 'vv-published-text';
+                textCard.style.left = Math.max(0,Math.min(85,Number(cfg.x)||0))+'%';
+                textCard.style.top = Math.max(0,Math.min(85,Number(cfg.y)||0))+'%';
+                textCard.textContent = st.text || '';
+                textCard.style.fontSize = Math.max(16,Math.min(56,Number(cfg.size)||28))+'px';
+                textCard.style.color = /^#[0-9a-f]{6}$/i.test(cfg.color) ? cfg.color : '#ffffff';
+                textCard.style.fontWeight = cfg.bold ? '700' : '400';
+                textCard.style.textAlign = ['left','center','right'].includes(cfg.align) ? cfg.align : 'center';
+            }
             viewer.classList.remove('hidden');
             const storyAudio=viewer.querySelector('audio');
             if(storyAudio&&st.musicURL){
@@ -1241,6 +1254,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const viewer = {uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||''};
             try { await updateDoc(doc(db,'stories',st.id), { views: arrayUnion(viewer) }); st.views = [...(st.views||[]),viewer]; refreshAvatarStoryRings(); } catch(e) { console.warn('Could not record story view:',e); }
         }
+        function renderActiveStoryList() {
+            const now = Date.now();
+            if (!state.user) return;
+                refreshAvatarStoryRings();
+                if (!activeStoryItems.length) { storiesList.innerHTML = '<p class="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Пока нет историй. Нажми «+» и опубликуй первую.</p>'; return; }
+                const groups = new Map(); activeStoryItems.forEach(st => { if(!groups.has(st.uid)) groups.set(st.uid,[]); groups.get(st.uid).push(st); });
+                const storyUserGroups=[...groups.entries()].map(([uid,items])=>({uid,items,seen:items.every(item=>(item.views||[]).some(v=>(typeof v==='string'?v:v?.uid)===state.user.uid))})); const unseenUsers=storyUserGroups.filter(g=>!g.seen); const seenUsers=storyUserGroups.filter(g=>g.seen); const renderStoryUsers=list=>list.map(({uid,items,seen})=>{const st=items[0];return `<button data-open-story-user="${storyEscape(uid)}" class="flex w-16 shrink-0 flex-col items-center gap-1 text-center text-xs">${storyAvatar(st,seen?'story-viewed':'story-unviewed')}<span class="w-16 truncate">${uid===state.user.uid?'Ваша история':storyEscape(st.displayName||'Пользователь')}</span></button>`;}).join(''); storiesList.innerHTML = `${unseenUsers.length?`<div class="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">Новые истории</div><div class="mb-4 flex gap-4 overflow-x-auto pb-3">${renderStoryUsers(unseenUsers)}</div>`:''}${seenUsers.length?`<div class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Просмотренные</div><div class="mb-3 flex gap-4 overflow-x-auto pb-3">${renderStoryUsers(seenUsers)}</div>`:''}<div class="mt-4 space-y-2">${activeStoryItems.filter(st=>st.uid===state.user.uid).map(st=>`<div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs"><span>Моя история · ${Math.max(1,Math.ceil((Number(st.expiresAt)-now)/3600000))} ч. осталось</span><button data-delete-story="${storyEscape(st.id)}" class="rounded-lg px-3 py-2 text-rose-300 hover:bg-rose-500/10">Удалить</button></div>`).join('')}</div>`;
+                storiesList.querySelectorAll('[data-open-story-user]').forEach(btn=>btn.addEventListener('click',()=>openStoryByUser(btn.dataset.openStoryUser)));
+                storiesList.querySelectorAll('[data-open-story]').forEach(btn=>btn.addEventListener('click',()=>openStory(btn.dataset.openStory)));
+                storiesList.querySelectorAll('[data-delete-story]').forEach(btn=>btn.addEventListener('click',async()=>{try{await deleteDoc(doc(db,'stories',btn.dataset.deleteStory));await refreshStories();}catch(e){console.error(e);alert('Не удалось удалить историю.');}}));
+        }
+        function expireStories() {
+            const current = activeStoryItems[activeStoryIndex];
+            const live = activeStoryItems.filter(st => Number(st.expiresAt) > Date.now());
+            if (live.length === activeStoryItems.length) return;
+            activeStoryItems = live;
+            if (current && !live.some(st => st.id === current.id)) closeStoryViewer();
+            else if (current) activeStoryIndex = live.findIndex(st => st.id === current.id);
+            renderActiveStoryList();
+        }
+        setInterval(expireStories, 1000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) expireStories(); });
         async function refreshStories() {
             if (!storiesList) return;
             if (!state.user) { storiesList.innerHTML = '<p class="text-sm text-slate-400">Войди в аккаунт, чтобы смотреть истории.</p>'; return; }
@@ -1250,13 +1285,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const visibleStoryUids = new Set([state.user.uid, ...friendsCache.map(f => String(f.uid || f.id || ''))]);
                 const now = Date.now();
                 activeStoryItems = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(st => Number(st.expiresAt) > now && visibleStoryUids.has(String(st.uid))).sort((a,b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-                refreshAvatarStoryRings();
-                if (!activeStoryItems.length) { storiesList.innerHTML = '<p class="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Пока нет историй. Нажми «+» и опубликуй первую.</p>'; return; }
-                const groups = new Map(); activeStoryItems.forEach(st => { if(!groups.has(st.uid)) groups.set(st.uid,[]); groups.get(st.uid).push(st); });
-                const storyUserGroups=[...groups.entries()].map(([uid,items])=>({uid,items,seen:items.every(item=>(item.views||[]).some(v=>(typeof v==='string'?v:v?.uid)===state.user.uid))})); const unseenUsers=storyUserGroups.filter(g=>!g.seen); const seenUsers=storyUserGroups.filter(g=>g.seen); const renderStoryUsers=list=>list.map(({uid,items,seen})=>{const st=items[0];return `<button data-open-story-user="${storyEscape(uid)}" class="flex w-16 shrink-0 flex-col items-center gap-1 text-center text-xs">${storyAvatar(st,seen?'story-viewed':'story-unviewed')}<span class="w-16 truncate">${uid===state.user.uid?'Ваша история':storyEscape(st.displayName||'Пользователь')}</span></button>`;}).join(''); storiesList.innerHTML = `${unseenUsers.length?`<div class="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">Новые истории</div><div class="mb-4 flex gap-4 overflow-x-auto pb-3">${renderStoryUsers(unseenUsers)}</div>`:''}${seenUsers.length?`<div class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Просмотренные</div><div class="mb-3 flex gap-4 overflow-x-auto pb-3">${renderStoryUsers(seenUsers)}</div>`:''}<div class="mt-4 space-y-2">${activeStoryItems.filter(st=>st.uid===state.user.uid).map(st=>`<div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs"><span>Моя история · ${Math.max(1,Math.ceil((Number(st.expiresAt)-now)/3600000))} ч. осталось</span><button data-delete-story="${storyEscape(st.id)}" class="rounded-lg px-3 py-2 text-rose-300 hover:bg-rose-500/10">Удалить</button></div>`).join('')}</div>`;
-                storiesList.querySelectorAll('[data-open-story-user]').forEach(btn=>btn.addEventListener('click',()=>openStoryByUser(btn.dataset.openStoryUser)));
-                storiesList.querySelectorAll('[data-open-story]').forEach(btn=>btn.addEventListener('click',()=>openStory(btn.dataset.openStory)));
-                storiesList.querySelectorAll('[data-delete-story]').forEach(btn=>btn.addEventListener('click',async()=>{try{await deleteDoc(doc(db,'stories',btn.dataset.deleteStory));await refreshStories();}catch(e){console.error(e);alert('Не удалось удалить историю.');}}));
+                renderActiveStoryList();
             } catch (err) { console.error('Load stories failed:', err); storiesList.innerHTML = '<p class="rounded-2xl border border-rose-500/30 p-4 text-sm text-rose-200">Не удалось загрузить истории. Проверь Firestore Rules.</p>'; }
         }
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
@@ -1330,15 +1359,58 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             storyTextInput.dispatchEvent(new Event('input',{bubbles:true}));
         }
         vvCanvasText?.addEventListener('input',vvSyncCanvasText);
-        vvCanvasText?.addEventListener('click',()=>vvCanvasText.focus());
+        vvCanvasText?.addEventListener('click',e=>{if(vvSuppressTextClick){e.preventDefault();e.stopPropagation();return;}vvCanvasText.focus();});
         vvCanvasText?.addEventListener('blur',()=>{if(!vvCanvasText?.innerText.trim()){vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');}});
         vvDeleteText?.addEventListener('click',()=>{
             vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText.classList.add('hidden');vvDragText.classList.add('hidden');vvMentionResults?.classList.add('hidden');vvStoryPanel('');
         });
-        let vvDrag=null;
-        vvDragText?.addEventListener('pointerdown',e=>{vvDrag={x:e.clientX,y:e.clientY,left:vvCanvasText.offsetLeft,top:vvCanvasText.offsetTop};vvDragText.setPointerCapture(e.pointerId);e.preventDefault();});
-        vvDragText?.addEventListener('pointermove',e=>{if(!vvDrag)return;const parent=vvCanvasText.offsetParent;if(!parent)return;const left=Math.max(0,Math.min(parent.clientWidth-vvCanvasText.offsetWidth,vvDrag.left+e.clientX-vvDrag.x));const top=Math.max(0,Math.min(parent.clientHeight-vvCanvasText.offsetHeight,vvDrag.top+e.clientY-vvDrag.y));vvCanvasText.style.left=left+'px';vvCanvasText.style.top=top+'px';vvCanvasText.style.transform='none';vvDragText.style.left=left+'px';vvDragText.style.top=Math.max(0,top-34)+'px';vvDeleteText.style.left=Math.min(parent.clientWidth-110,left+vvCanvasText.offsetWidth-100)+'px';vvDeleteText.style.top=Math.max(0,top-34)+'px';});
-        ['pointerup','pointercancel'].forEach(n=>vvDragText?.addEventListener(n,()=>vvDrag=null));
+        function vvTextSettings() {
+            const parent = vvCanvasText.offsetParent;
+            return { version:2, x:100*vvCanvasText.offsetLeft/(parent?.clientWidth||1), y:100*vvCanvasText.offsetTop/(parent?.clientHeight||1), size:Number(document.getElementById('vvTextSize').value), color:document.getElementById('vvTextColor').value, bold:document.getElementById('vvTextBold').checked, align:document.getElementById('vvTextAlign').value };
+        }
+        function applyTextSettings() {
+            vvCanvasText.style.setProperty('font-size',document.getElementById('vvTextSize').value+'px','important');
+            vvCanvasText.style.setProperty('color',document.getElementById('vvTextColor').value,'important');
+            vvCanvasText.style.setProperty('font-weight',document.getElementById('vvTextBold').checked?'700':'400','important');
+            vvCanvasText.style.setProperty('text-align',document.getElementById('vvTextAlign').value,'important');
+        }
+        ['vvTextSize','vvTextColor','vvTextBold','vvTextAlign'].forEach(id=>document.getElementById(id)?.addEventListener('input',applyTextSettings));
+        let vvDrag=null, vvSuppressTextClick=false;
+        vvCanvasText?.addEventListener('pointerdown', e => {
+            if (e.button !== 0 || vvDrag) return;
+            const parent=vvCanvasText.offsetParent;
+            if (!parent) return;
+            const box=vvCanvasText.getBoundingClientRect(), bounds=parent.getBoundingClientRect();
+            vvSuppressTextClick=false;
+            vvDrag={id:e.pointerId,x:e.clientX,y:e.clientY,left:box.left-bounds.left-parent.clientLeft+parent.scrollLeft,top:box.top-bounds.top-parent.clientTop+parent.scrollTop,moved:false,parent};
+            vvCanvasText.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+        vvCanvasText?.addEventListener('pointermove', e => {
+            if (!vvDrag || e.pointerId!==vvDrag.id) return;
+            const dx=e.clientX-vvDrag.x,dy=e.clientY-vvDrag.y;
+            if (!vvDrag.moved && Math.hypot(dx,dy)<5) return;
+            if (!vvDrag.moved) {
+                vvDrag.moved=true; vvCanvasText.blur();
+                vvCanvasText.classList.add('vv-text-dragging');
+                window.getSelection()?.removeAllRanges();
+            }
+            const parent=vvDrag.parent;
+            const left=Math.max(0,Math.min(Math.max(0,parent.clientWidth-vvCanvasText.offsetWidth),vvDrag.left+dx));
+            const top=Math.max(0,Math.min(Math.max(0,parent.clientHeight-vvCanvasText.offsetHeight),vvDrag.top+dy));
+            vvCanvasText.style.left=left+'px';vvCanvasText.style.top=top+'px';
+            vvCanvasText.style.transform='none';
+            e.preventDefault();
+        });
+        function vvEndTextDrag(e) {
+            if (!vvDrag || e.pointerId!==vvDrag.id) return;
+            const moved=vvDrag.moved; vvDrag=null;
+            vvCanvasText.classList.remove('vv-text-dragging');
+            vvSuppressTextClick=moved;
+            if (vvCanvasText.hasPointerCapture(e.pointerId)) vvCanvasText.releasePointerCapture(e.pointerId);
+            if (!moved && e.type==='pointerup') { vvStoryPanel('text'); vvCanvasText.focus({preventScroll:true}); }
+        }
+        ['pointerup','pointercancel','lostpointercapture'].forEach(n=>vvCanvasText?.addEventListener(n,vvEndTextDrag));
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
@@ -1658,7 +1730,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
-                const storyRef = await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:{x:vvCanvasText?.offsetLeft||0,y:vvCanvasText?.offsetTop||0},mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
+                const storyRef = await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:vvTextSettings(),mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
                 for(const target of taggedUsers){
                     try{await setDoc(doc(db,'users',target.uid,'storyMentions',storyRef.id),{storyId:storyRef.id,fromUid:state.user.uid,fromUsername:state.userProfile?.username||'',recipientUid:target.uid,createdAt:now,expiresAt:now+86400000});}
                     catch(e){console.warn('Could not notify tagged user',target.uid,e);}
@@ -1708,7 +1780,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent='Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>{const m=d.data();const mine=m.senderUid===state.user.uid;const senderProfile=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);const sender=mine?(state.userProfile?.displayName||'Вы'):(senderProfile?.displayName||'Участник');const senderPremium=Number(senderProfile?.premiumUntil||0)>Date.now();if(m.type==='sticker')return `<div class="flex ${mine?'justify-end':'justify-start'}"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"></div>`;return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[88%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold opacity-75 ${senderPremium?'vv-premium-name':''}">${escapeHTML(sender)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`;}).join('');host.scrollTop=host.scrollHeight;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>{const m=d.data();const mine=m.senderUid===state.user.uid;const senderProfile=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);const sender=mine?(state.userProfile?.displayName||'Вы'):(senderProfile?.displayName||'Участник');const senderPremium=Number(senderProfile?.premiumUntil||0)>Date.now();if(m.type==='sticker')return `<div class="flex ${mine?'justify-end':'justify-start'}"><img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain"></div>`;return `<div class="flex ${mine?'justify-end':'justify-start'}"><div class="max-w-[88%] rounded-2xl ${mine?'bg-violet-600 text-white':'bg-slate-800 text-slate-100'} px-3 py-2 text-sm"><p class="mb-1 text-[10px] font-bold opacity-75 ${senderPremium?'vv-premium-name':''}">${escapeHTML(sender)}${senderPremium?' 👑':''} ${roleBadgeMarkup(m.senderUid)}</p><p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p><p class="mt-1 text-right text-[10px] opacity-60">${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</p></div></div>`;}).join('');host.scrollTop=host.scrollHeight;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -1755,6 +1827,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!state.user) return;
             const uid = state.user.uid;
             const generation = socialGeneration;
+            try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
             state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); });
             // Real-time conversation order: newest message (sent or received) appears first.
             state.socialUnsubs.push(onSnapshot(query(collection(db,'conversations'), where('participants','array-contains',uid)), snap => {
@@ -1913,7 +1986,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         const recentChatTimes = new Map();
         let chatRenderSequence = 0;
-        function bumpRecentChat(uid, time = Date.now()) { if (!uid) return; recentChatTimes.set(uid, Math.max(recentChatTimes.get(uid)||0, time)); renderChatFriends(); }
+        function bumpRecentChat(uid, time = Date.now()) { if (!uid) return; recentChatTimes.set(uid, Math.max(recentChatTimes.get(uid)||0, time)); try { localStorage.setItem('vv_recent_'+state.user.uid,JSON.stringify([...recentChatTimes])); } catch (_) {} renderChatFriends(); }
         async function renderChatFriends() {
             const sequence = ++chatRenderSequence;
             const host = document.getElementById('chatFriendsList');
@@ -1926,11 +1999,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
                 return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('<!--vv-chat-split-->');
-            const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('');
+            const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('<!--vv-chat-split-->');
             // One chronological list: groups must not remain pinned above recent private chats.
             const combined = [
                 ...sortedFriends.map((f, i) => ({ html: friendsHtml.split('<!--vv-chat-split-->')[i], time: recentChatTimes.get(f.uid||f.id)||0 })),
-                ...groupsCache.map((g, i) => ({ html: groupsHtml.split('<!--vv-chat-split-->')[i], time: Number(g.updatedAt?.toMillis?.() || g.updatedAt || 0) }))
+                ...groupsCache.map((g, i) => ({ html: groupsHtml.split('<!--vv-chat-split-->')[i], time: Math.max(recentChatTimes.get('group:'+g.id)||0,Number(g.updatedAt?.toMillis?.() || g.updatedAt || 0)) }))
             ].sort((a,b) => b.time-a.time);
             host.innerHTML = combined.map(x=>x.html).join('');
             applyVvChatFilter();
@@ -2232,6 +2305,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 console.warn('Friend is not in local cache; attempting direct lookup', uid);
             }
             activeFriend = uid;
+            bumpRecentChat(uid);
             activeGroupId = null;
             const convHeader = document.getElementById('conversationHeader'); if (convHeader) convHeader.innerHTML = `<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button>${escapeHTML(friendDoc?.displayName || 'Чат')} <span class="text-xs text-slate-500">Личный чат</span>`;
             setTimeout(()=>document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open')),0);

@@ -350,3 +350,10 @@ header, #appHeader, .app-header {isolation:isolate}
 #vvStoryMentionInbox:empty { display: none !important; }
 #socialChatsPanel > #vvStoryMentionInbox { flex: 0 0 auto; height: auto; max-height: 25dvh; overflow-y: auto; }
 #socialChatsPanel.chat-open > .chat-shell { width: 100%; margin: 0 !important; }
+
+.vv-text-settings{display:none;position:absolute;z-index:40;left:12px;right:12px;bottom:85px;padding:12px;border-radius:16px;background:#181229ee;color:white;gap:10px;flex-wrap:wrap;align-items:center}.vv-panel-text .vv-text-settings{display:flex}.vv-text-settings label{display:flex;gap:6px;align-items:center;font-size:12px}.vv-text-settings select,.vv-text-settings button{background:#493277;color:white;padding:8px;border-radius:8px}.vv-text-settings #vvStoryTextDrag{position:static!important;touch-action:none}.vv-text-settings #vvStoryTextDelete{position:static!important}.vv-published-text{position:absolute;z-index:12;max-width:85%;white-space:pre-wrap;overflow-wrap:anywhere;text-shadow:0 2px 8px #000;pointer-events:none;line-height:1.2}.vv-story-canvas-text{max-width:85%!important}
+
+/* Drag the text itself, without selecting it or scrolling the page. */
+.vv-immersive-story-editor #vvStoryCanvasText{touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;cursor:grab!important}
+.vv-immersive-story-editor #vvStoryCanvasText.vv-text-dragging{cursor:grabbing!important}
+#vvStoryTextDrag{display:none!important}
