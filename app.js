@@ -252,8 +252,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('decorNeonInput').checked = !!p.decorNeon;
             document.getElementById('decorRainInput').checked = !!p.decorRain;
             document.getElementById('decorButterfliesInput').checked = !!p.decorButterflies;
-            document.getElementById('decorFirefliesInput').checked = !!p.decorFireflies;
-            document.getElementById('decorAvatarFrameInput').checked = !!p.decorAvatarFrame;
+            
             const preview = document.getElementById('profileEditAvatarPreview');
             if (preview) preview.innerHTML = avatarMarkup({...p,uid:state.user?.uid}, 'h-14 w-14');
             const removeAvatarButton = document.getElementById('btnRemoveAvatar');
@@ -321,7 +320,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (document.getElementById('btnRemoveAvatar')?.dataset.remove === 'true') photoURL = '';
                 await setDoc(usernameRef,{uid:state.user.uid,username,updatedAt:Date.now()});
                 const premiumDecor = Number(state.userProfile?.premiumUntil || 0) > Date.now();
-                const updated = {displayName,username,bio,photoURL,usernameChangedAt:changing?Date.now():changedAt,updatedAt:Date.now(),createdAt:state.userProfile?.createdAt||Date.now(),decorNeon: premiumDecor ? !!document.getElementById('decorNeonInput')?.checked : !!state.userProfile?.decorNeon,decorRain: premiumDecor ? !!document.getElementById('decorRainInput')?.checked : !!state.userProfile?.decorRain,decorButterflies: premiumDecor ? !!document.getElementById('decorButterfliesInput')?.checked : !!state.userProfile?.decorButterflies,decorFireflies: premiumDecor ? !!document.getElementById('decorFirefliesInput')?.checked : !!state.userProfile?.decorFireflies,decorAvatarFrame: premiumDecor ? !!document.getElementById('decorAvatarFrameInput')?.checked : !!state.userProfile?.decorAvatarFrame};
+                const updated = {displayName,username,bio,photoURL,usernameChangedAt:changing?Date.now():changedAt,updatedAt:Date.now(),createdAt:state.userProfile?.createdAt||Date.now(),decorNeon: premiumDecor ? !!document.getElementById('decorNeonInput')?.checked : !!state.userProfile?.decorNeon,decorRain: premiumDecor ? !!document.getElementById('decorRainInput')?.checked : !!state.userProfile?.decorRain,decorButterflies: premiumDecor ? !!document.getElementById('decorButterfliesInput')?.checked : !!state.userProfile?.decorButterflies,decorFireflies: false,decorAvatarFrame: !!state.userProfile?.decorAvatarFrame};
                 await setDoc(doc(db,'users',state.user.uid),updated,{merge:true});
                 if (oldUsername && oldUsername!==username) {
                     const oldRef=doc(db,'usernames',oldUsername), oldSnap=await getDoc(oldRef);
@@ -1071,15 +1070,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
         }
         function profileDecorMarkup(decor = {}, variant = 'own') {
-            const pieces = [];
-            if (decor.neon) pieces.push('<div class="vv-decor-neon-strip"></div>');
-            if (decor.rain) pieces.push(`<div class="vv-decor-rain">${Array.from({length: 18}, (_, i) => `<span style="--i:${i};--x:${(i*5.25)%96 + 2}%;--d:${1.1 + (i%5)*0.2}s;--h:${26 + (i%7)*9}px"></span>`).join('')}</div>`);
-            if (decor.butterflies) pieces.push(`<div class="vv-decor-butterflies">${['🦋','🦋','🦋','🦋'].map((icon, i) => `<span style="--i:${i};--delay:${i*1.3}s;--top:${12 + i*15}%;--scale:${0.8 + (i%2)*0.2}">${icon}</span>`).join('')}</div>`);
-            if (decor.fireflies) pieces.push(`<div class="vv-decor-fireflies">${Array.from({length: 14}, (_, i) => `<span style="--x:${(i*7)%95 + 2}%;--y:${8 + (i*11)%76}%;--delay:${(i%7)*0.45}s;--size:${5 + (i%3)*2}px"></span>`).join('')}</div>`);
-            return pieces.length ? `<div class="vv-profile-effects vv-profile-effects--${variant}">${pieces.join('')}</div>` : '';
+            const elements = [];
+            if (decor.neon) elements.push('<div class="vv-decor-gif vv-decor-neon-strip"></div>');
+            if (decor.rain) elements.push('<div class="vv-decor-gif vv-decor-rain"></div>');
+            if (decor.butterflies) elements.push('<div class="vv-decor-gif vv-decor-butterflies"></div>');
+            
+            return elements.length ? `<div class="vv-profile-effects vv-profile-effects--${variant}">${elements.join('')}</div>` : '';
         }
-        function withPremiumAvatarFrame(html, profile = {}) {
-            return getProfileDecor(profile).avatarFrame ? `<div class="vv-premium-avatar-frame">${html}</div>` : html;
+        function withPremiumAvatarFrame(html) {
+            // Decorative avatar frames removed; story indicators keep their original styling.
+            return html;
         }
         function avatarMarkup(profile, size='h-10 w-10') {
             const label = escapeHTML((profile?.displayName || profile?.username || '?').slice(0,1).toUpperCase());

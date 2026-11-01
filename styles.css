@@ -555,3 +555,67 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-premium-avatar-frame > *{position:relative;z-index:2;border-radius:999px}
 @keyframes vvAvatarGlow{50%{opacity:1;box-shadow:0 0 16px rgba(192,132,252,.72),0 0 26px rgba(168,85,247,.4)}}
 #friendProfileContent .vv-premium-avatar-frame{padding:7px}
+
+/* Premium animated GIF decorations, cinematic depth (5D-inspired) */
+.vv-profile-effects, .vv-profile-effects-layer {pointer-events:none!important;overflow:hidden!important}
+.vv-profile-effects {position:absolute;inset:0;isolation:isolate}
+.vv-profile-effects .vv-decor-gif {position:absolute;pointer-events:none;background-repeat:repeat;mix-blend-mode:screen}
+.vv-profile-effects .vv-decor-neon-strip {
+ top:0;left:0;right:0;height:86px;
+ background-image:url('./assets/neon-5d.gif');background-size:100% 86px;
+ opacity:.9;filter:drop-shadow(0 0 12px rgba(168,85,247,.35));
+}
+.vv-profile-effects .vv-decor-rain {
+ inset:0;background-image:url('./assets/rain-5d.gif');background-size:360px 420px;
+ opacity:.76;filter:drop-shadow(0 0 2px rgba(170,170,255,.35));
+}
+.vv-profile-effects .vv-decor-butterflies {
+ inset:0;background-image:url('./assets/butterflies-5d.gif');background-size:360px 420px;
+ opacity:.9;filter:drop-shadow(0 0 6px rgba(168,85,247,.35));
+}
+.vv-profile-effects .vv-decor-fireflies {
+ inset:0;background-image:url('./assets/fireflies-5d.gif');background-size:360px 420px;
+ opacity:.82;filter:drop-shadow(0 0 8px rgba(250,204,21,.22));
+}
+/* No premium avatar frame. The existing story ring remains visible. */
+.vv-premium-avatar-frame{padding:0!important;background:none!important;box-shadow:none!important}
+.vv-premium-avatar-frame::before,.vv-premium-avatar-frame::after{display:none!important}
+/* Keep decorative layer on top of background, below profile controls */
+#socialProfilePanel>div:first-child{isolation:isolate}
+#socialProfileDecorLayer{z-index:2!important}
+#socialProfilePanel .vv-identity,#socialProfilePanel .vv-edit-pencil{z-index:5!important}
+#friendProfileContent>.vv-profile-effects {z-index:4!important}
+#friendProfileContent>.vv-visitor-info {z-index:5!important}
+@media (prefers-reduced-motion:reduce) {
+ .vv-profile-effects .vv-decor-gif {opacity:.2!important}
+}
+
+/* PREMIUM DEEP GLOW POLISH — opt-in only, keeps story rings */
+.vv-profile-effects{overflow:hidden;isolation:isolate;contain:paint;pointer-events:none!important}
+.vv-profile-effects .vv-decor-gif{background-repeat:repeat;will-change:background-position,opacity;pointer-events:none!important}
+.vv-profile-effects .vv-decor-neon-strip{height:116px!important;top:0!important;opacity:.98!important;background-size:100% 116px!important;filter:drop-shadow(0 0 16px rgba(173,102,255,.65)) drop-shadow(0 0 26px rgba(75,215,255,.18))!important;mix-blend-mode:screen}
+.vv-profile-effects .vv-decor-neon-strip::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 62% 85% at 45% 5%,rgba(130,80,255,.22),transparent 88%),linear-gradient(180deg,rgba(179,100,255,.20),transparent 90%);filter:blur(13px);animation:vvDecNeonBreathe 3.4s ease-in-out infinite alternate}
+.vv-profile-effects .vv-decor-rain{background-size:340px 390px!important;opacity:.62!important;filter:drop-shadow(0 0 2px rgba(190,190,255,.23))!important;animation:vvDecRainDrift 13s linear infinite;mix-blend-mode:screen}
+.vv-profile-effects .vv-decor-rain::after{content:'';position:absolute;inset:0;background-image:url('./assets/rain-5d.gif');background-size:510px 570px;opacity:.24;filter:blur(1.4px);animation:vvDecRainDrift 19s linear infinite reverse}
+.vv-profile-effects .vv-decor-butterflies{background-size:360px 420px!important;opacity:.85!important;filter:drop-shadow(0 0 9px rgba(170,116,255,.45))!important;animation:vvDecButterFly 22s ease-in-out infinite alternate;mix-blend-mode:screen}
+.vv-profile-effects .vv-decor-fireflies{background-size:360px 420px!important;opacity:.85!important;filter:drop-shadow(0 0 8px rgba(251,212,80,.36))!important;animation:vvDecFireflyFloat 15s ease-in-out infinite alternate;mix-blend-mode:screen}
+.vv-profile-effects .vv-decor-fireflies::after{content:'';position:absolute;inset:0;background-image:url('./assets/fireflies-5d.gif');background-size:475px 560px;filter:blur(3px);opacity:.3;animation:vvDecFireflyFloat 20s ease-in-out infinite alternate-reverse}
+@keyframes vvDecNeonBreathe{from{opacity:.45}to{opacity:.9}}
+@keyframes vvDecRainDrift{to{background-position:-56px 650px}}
+@keyframes vvDecButterFly{0%{background-position:0 0}50%{background-position:22px -19px}100%{background-position:53px 6px}}
+@keyframes vvDecFireflyFloat{from{background-position:0 0}to{background-position:36px -31px}}
+/* Profiles stay legible; decorations never cover clicks or the story indicator */
+#socialProfileDecorLayer, #friendProfileContent>.vv-profile-effects{pointer-events:none!important}
+#socialProfilePanel .vv-avatar-story-wrap,#friendProfileContent .vv-avatar-story-wrap{position:relative;z-index:6}
+@media (prefers-reduced-motion:reduce){.vv-profile-effects .vv-decor-gif,.vv-profile-effects .vv-decor-gif::after{animation:none!important;opacity:.18!important}}
+
+/* User-selected decorations: only rain, character and butterflies. */
+.vv-profile-effects .vv-decor-neon-strip{position:absolute!important;top:auto!important;bottom:0!important;left:auto!important;right:8px!important;width:96px!important;height:152px!important;background-image:url('./assets/character.png')!important;background-size:contain!important;background-repeat:no-repeat!important;background-position:bottom right!important;filter:drop-shadow(0 8px 16px rgba(0,0,0,.4))!important;opacity:1!important;animation:vvCharacterFloat 4s ease-in-out infinite alternate!important;mix-blend-mode:normal!important;box-shadow:none!important;border-radius:0!important;transform:none}
+.vv-profile-effects .vv-decor-neon-strip::after{display:none!important}
+@keyframes vvCharacterFloat{to{transform:translateY(-6px)}}
+.vv-profile-effects .vv-decor-rain{background-image:url('./assets/rain.gif')!important;background-size:300px auto!important;background-repeat:repeat!important;mix-blend-mode:screen!important;opacity:.55!important;filter:none!important;animation:none!important}
+.vv-profile-effects .vv-decor-rain::after{display:none!important}
+.vv-profile-effects .vv-decor-butterflies{background-image:url('./assets/butterflies.gif')!important;background-size:330px auto!important;background-repeat:repeat!important;mix-blend-mode:normal!important;opacity:1!important;filter:drop-shadow(0 0 4px rgba(150,105,255,.3))!important;animation:none!important}
+.vv-profile-effects .vv-decor-fireflies{display:none!important}
+/* Effects are behind interactive profile controls. */
+.vv-profile-effects{pointer-events:none!important;contain:paint}
