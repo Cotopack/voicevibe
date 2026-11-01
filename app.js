@@ -446,7 +446,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             state.peer = new Peer(randomID, {
                 debug: 1,
-                pingInterval: 5000,
+                pingInterval: 15000,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -459,6 +459,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             state.peer.on('open', (id) => {
                 state.myPeerId = id;
+                state.rouletteReconnectAttempts = 0;
                 if (state.searchConnectTimeout) clearTimeout(state.searchConnectTimeout);
                 if (state.peerReconnectTimer) { clearTimeout(state.peerReconnectTimer); state.peerReconnectTimer = null; }
                 if (state.pendingRouletteSearch) { state.pendingRouletteSearch = false; setTimeout(() => startSearch(), 0); }
@@ -505,18 +506,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.peer.on('disconnected', () => {
                 setPeerStatus('error', 'Восстанавливаем соединение…');
                 if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
+                const attempt = Math.min(state.rouletteReconnectAttempts || 0, 4);
                 state.peerReconnectTimer = setTimeout(() => {
                     if (state.peer && !state.peer.destroyed && state.peer.disconnected) {
-                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); initPeerJS(); }
+                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); }
                     }
-                }, 1200);
+                }, Math.min(30000, 2000 * Math.pow(2, attempt)));
             });
             state.peer.on('error', (err) => {
                 console.error('PeerJS error:', err);
                 setPeerStatus('error', err?.type === 'network' ? 'Проблема сети — повтор подключения' : 'Ошибка P2P — повторите поиск');
                 if (['network','socket-error','socket-closed'].includes(err?.type) && state.peer && !state.peer.destroyed) {
+                    state.rouletteReconnectAttempts = (state.rouletteReconnectAttempts || 0) + 1;
                     if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
-                    state.peerReconnectTimer = setTimeout(() => { try { state.peer?.reconnect(); } catch (_) {} }, 1800);
+                    if (state.rouletteReconnectAttempts >= 5) {
+                        clearTimeout(state.searchConnectTimeout);
+                        state.pendingRouletteSearch = false;
+                        chatStatusTitle.textContent = 'Сервер голосовой связи недоступен';
+                        chatStatusDesc.textContent = 'Не удаётся подключиться к PeerJS. Проверьте сеть, VPN и блокировку WebSocket. Попробуйте позже.';
+                        setPeerStatus('error','PeerJS недоступен');
+                        try {state.peer.destroy()} catch (_) {}
+                        state.peer = null; state.myPeerId = null;
+                    } else {
+                        const delay = Math.min(30000, 2000 * Math.pow(2, state.rouletteReconnectAttempts - 1));
+                        state.peerReconnectTimer = setTimeout(() => {
+                            try { if (state.peer?.disconnected && !state.peer.destroyed) state.peer.reconnect(); }
+                            catch (_) { initPeerJS(); }
+                        },delay);
+                    }
                 }
             });
         }
@@ -1059,7 +1076,21 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 call.on('close',()=>{if(vvFriendCallPending===call)vvCallEnd()});
             });
             peer.on('error',err=>{console.warn('Friend call peer:',err?.type||err);if(vvFriendCallUid && !vvFriendCallPending){vvCallStatus('Друг недоступен или занят');setTimeout(()=>{if(vvFriendCallUid)vvCallEnd()},2200);}});
-            peer.on('disconnected',()=>{try{if(!peer.destroyed)peer.reconnect()}catch(_){}});
+            // Avoid immediate endless reconnection loops when 0.peerjs.com is unavailable.
+            let friendReconnectAttempts = 0;
+            let friendReconnectTimer = null;
+            peer.on('open',()=>{friendReconnectAttempts=0;clearTimeout(friendReconnectTimer);});
+            const scheduleFriendReconnect = () => {
+                if (friendReconnectTimer || peer.destroyed || vvFriendPeer !== peer) return;
+                const delay = Math.min(30000, 2000 * Math.pow(2, Math.min(friendReconnectAttempts++, 4)));
+                friendReconnectTimer = setTimeout(() => {
+                    friendReconnectTimer = null;
+                    if (peer.destroyed || vvFriendPeer !== peer) return;
+                    if (peer.disconnected) try {peer.reconnect()} catch(e) {console.warn('Friend reconnect failed', e);scheduleFriendReconnect()}
+                }, delay);
+            };
+            peer.on('disconnected',scheduleFriendReconnect);
+            peer.on('error',err=>{if(['network','socket-error','socket-closed'].includes(err?.type)) scheduleFriendReconnect();});
         }
         async function startFriendCall(friendUid){
             if(!state.user || !friendsCache.some(f=>(f.uid||f.id)===friendUid)){alert('Звонить можно только друзьям.');return;}

@@ -1,0 +1,10 @@
+VoiceVibe — Cloudflare Worker Free
+
+1. Cloudflare Workers > vibevoice > Edit code: замените код на содержимое worker.js и нажмите Deploy.
+2. В Worker Settings > Variables and Secrets должен быть SECRET FIREBASE_SERVICE_ACCOUNT с полным JSON service account. Не добавляйте его в GitHub и не отправляйте никому.
+3. На GitHub Pages загрузите файлы из папки public/ (index.html, app.js, styles.css, tailwind-config.js).
+4. В Firebase Console опубликуйте firestore.rules из корня архива.
+5. Проверьте регистрацию, рефералы, создание группы и покупку Premium тестовыми аккаунтами.
+6. Рекламные монеты отключены до подключения проверяемого рекламного провайдера.
+
+Ограничения: бесплатные тарифы имеют квоты; сайт не тестировался на живом Firebase.

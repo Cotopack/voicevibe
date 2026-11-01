@@ -1,0 +1,10 @@
+VOICEVIBE SEO + ЛОГОТИП
+
+1. Загрузи все файлы из этого архива в корень репозитория cotopack/voicevibe (туда, где index.html и app.html).
+2. В GitHub Pages проверь, что опубликован именно этот каталог.
+3. Для иконки Google также загрузи favicon.ico и icon-48.png в корень ДРУГОГО репозитория cotopack/cotopack.github.io. Ключевой момент: Google использует одну иконку на hostname cotopack.github.io, а не для подпапок.
+4. Надпись GitHub Pages documentation определяется Google для hostname cotopack.github.io. Для бренда VoiceVibe обнови главную страницу отдельного корневого репозитория или используй собственный домен; одними тегами в /voicevibe/ это не гарантировать.
+5. Затем Search Console → Проверка URL → https://cotopack.github.io/voicevibe/ → Запросить индексирование.
+6. Первые позиции SEO-теги не гарантируют: полезны уникальные страницы, реальные ссылки, скорость и вовлеченность.
+
+Файлы app.js, styles.css и Firestore Rules НЕ МЕНЯЛИСЬ.
