@@ -1214,10 +1214,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 textCard.style.left = Math.max(0,Math.min(85,Number(cfg.x)||0))+'%';
                 textCard.style.top = Math.max(0,Math.min(85,Number(cfg.y)||0))+'%';
                 textCard.textContent = st.text || '';
-                textCard.style.fontSize = Math.max(16,Math.min(56,Number(cfg.size)||28))+'px';
+                textCard.style.fontSize = Math.max(16,Math.min(120,Number(cfg.size)||28))+'px';
                 textCard.style.color = /^#[0-9a-f]{6}$/i.test(cfg.color) ? cfg.color : '#ffffff';
                 textCard.style.fontWeight = cfg.bold ? '700' : '400';
                 textCard.style.textAlign = ['left','center','right'].includes(cfg.align) ? cfg.align : 'center';
+                decorateStoryText(textCard,cfg.font,cfg.background,textCard.style.color);
             }
             viewer.classList.remove('hidden');
             const storyAudio=viewer.querySelector('audio');
@@ -1366,49 +1367,71 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         function vvTextSettings() {
             const parent = vvCanvasText.offsetParent;
-            return { version:2, x:100*vvCanvasText.offsetLeft/(parent?.clientWidth||1), y:100*vvCanvasText.offsetTop/(parent?.clientHeight||1), size:Number(document.getElementById('vvTextSize').value), color:document.getElementById('vvTextColor').value, bold:document.getElementById('vvTextBold').checked, align:document.getElementById('vvTextAlign').value };
+            return { version:2, x:100*vvCanvasText.offsetLeft/(parent?.clientWidth||1), y:100*vvCanvasText.offsetTop/(parent?.clientHeight||1), size:Number(document.getElementById('vvTextSize').value), color:document.getElementById('vvTextColor').value, bold:document.getElementById('vvTextBold').checked, align:document.getElementById('vvTextAlign').value, font:vvTextFont, background:vvTextBackground };
         }
+        let vvTextFont='classic', vvTextBackground=false;
+        function decorateStoryText(el,font,background,color) {
+            el.style.fontFamily=font==='elegance'?'Georgia, serif':font==='retro'?'monospace':'Arial, sans-serif';
+            el.style.fontStyle=font==='retro'?'italic':'normal';
+            el.style.background=background?color:'transparent';
+            if(background)el.style.setProperty('color', ['#ffffff','#fde047','#fb923c','rgb(255, 255, 255)'].includes(color)?'#111111':'#ffffff','important');
+            el.style.borderRadius='8px';el.style.padding='8px 12px';
+            el.style.textShadow=font==='neon'?'0 0 5px '+color+',0 0 18px '+color:background?'none':'0 2px 6px #000';
+        }
+        document.querySelectorAll('[data-text-font]').forEach(b=>b.addEventListener('click',()=>{vvTextFont=b.dataset.textFont;applyTextSettings();}));
+        document.querySelectorAll('[data-text-color]').forEach(b=>b.addEventListener('click',()=>{document.getElementById('vvTextColor').value=b.dataset.textColor;applyTextSettings();}));
+        document.getElementById('vvFontsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=false;document.getElementById('vvColorChoices').hidden=true;});
+        document.getElementById('vvColorsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=true;document.getElementById('vvColorChoices').hidden=false;});
+        document.getElementById('vvAlignCycle')?.addEventListener('click',()=>{const el=document.getElementById('vvTextAlign'),values=['center','left','right'];el.value=values[(values.indexOf(el.value)+1)%3];applyTextSettings();});
+        document.getElementById('vvTextBackground')?.addEventListener('click',()=>{vvTextBackground=!vvTextBackground;applyTextSettings();});
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvStoryPanel('');});
+        document.querySelector('.vv-text-settings')?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
+        function vvKeyboardPosition(){const v=window.visualViewport;document.documentElement.style.setProperty('--vv-keyboard',v?Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px':'0px');}
+        window.visualViewport?.addEventListener('resize',vvKeyboardPosition);
+        window.visualViewport?.addEventListener('scroll',vvKeyboardPosition);
         function applyTextSettings() {
             vvCanvasText.style.setProperty('font-size',document.getElementById('vvTextSize').value+'px','important');
             vvCanvasText.style.setProperty('color',document.getElementById('vvTextColor').value,'important');
             vvCanvasText.style.setProperty('font-weight',document.getElementById('vvTextBold').checked?'700':'400','important');
             vvCanvasText.style.setProperty('text-align',document.getElementById('vvTextAlign').value,'important');
+            decorateStoryText(vvCanvasText,vvTextFont,vvTextBackground,document.getElementById('vvTextColor').value);
         }
         ['vvTextSize','vvTextColor','vvTextBold','vvTextAlign'].forEach(id=>document.getElementById(id)?.addEventListener('input',applyTextSettings));
-        let vvDrag=null, vvSuppressTextClick=false;
-        vvCanvasText?.addEventListener('pointerdown', e => {
-            if (e.button !== 0 || vvDrag) return;
-            const parent=vvCanvasText.offsetParent;
-            if (!parent) return;
-            const box=vvCanvasText.getBoundingClientRect(), bounds=parent.getBoundingClientRect();
-            vvSuppressTextClick=false;
-            vvDrag={id:e.pointerId,x:e.clientX,y:e.clientY,left:box.left-bounds.left-parent.clientLeft+parent.scrollLeft,top:box.top-bounds.top-parent.clientTop+parent.scrollTop,moved:false,parent};
-            vvCanvasText.setPointerCapture(e.pointerId);
-            e.preventDefault();
+        let vvSuppressTextClick=false, vvGesture=null;
+        const vvTextPointers=new Map();
+        function vvGestureStart() {
+            const pts=[...vvTextPointers.values()],parent=vvCanvasText.offsetParent;
+            if(!pts.length||!parent){vvGesture=null;return;}
+            const box=vvCanvasText.getBoundingClientRect(),bounds=parent.getBoundingClientRect();
+            const center=pts.length>1?{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}:pts[0];
+            vvGesture={parent,x:center.x,y:center.y,left:box.left-bounds.left-parent.clientLeft+parent.scrollLeft,top:box.top-bounds.top-parent.clientTop+parent.scrollTop,width:box.width,height:box.height,size:Number(document.getElementById('vvTextSize').value)||28,distance:pts.length>1?Math.max(1,Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y)):0};
+        }
+        vvCanvasText?.addEventListener('pointerdown',e=>{
+            if(e.button!==0||vvTextPointers.size>=2)return;
+            if(!vvTextPointers.size)vvSuppressTextClick=false;
+            vvTextPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});vvCanvasText.setPointerCapture(e.pointerId);vvGestureStart();e.preventDefault();
         });
-        vvCanvasText?.addEventListener('pointermove', e => {
-            if (!vvDrag || e.pointerId!==vvDrag.id) return;
-            const dx=e.clientX-vvDrag.x,dy=e.clientY-vvDrag.y;
-            if (!vvDrag.moved && Math.hypot(dx,dy)<5) return;
-            if (!vvDrag.moved) {
-                vvDrag.moved=true; vvCanvasText.blur();
-                vvCanvasText.classList.add('vv-text-dragging');
-                window.getSelection()?.removeAllRanges();
-            }
-            const parent=vvDrag.parent;
-            const left=Math.max(0,Math.min(Math.max(0,parent.clientWidth-vvCanvasText.offsetWidth),vvDrag.left+dx));
-            const top=Math.max(0,Math.min(Math.max(0,parent.clientHeight-vvCanvasText.offsetHeight),vvDrag.top+dy));
-            vvCanvasText.style.left=left+'px';vvCanvasText.style.top=top+'px';
-            vvCanvasText.style.transform='none';
-            e.preventDefault();
+        vvCanvasText?.addEventListener('pointermove',e=>{
+            if(!vvTextPointers.has(e.pointerId)||!vvGesture)return;
+            vvTextPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+            const pts=[...vvTextPointers.values()],g=vvGesture;
+            const c=pts.length>1?{x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2}:pts[0];
+            const dx=c.x-g.x,dy=c.y-g.y;
+            if(pts.length===1&&!vvSuppressTextClick&&Math.hypot(dx,dy)<5)return;
+            vvSuppressTextClick=true;vvCanvasText.blur();vvCanvasText.classList.add('vv-text-dragging');window.getSelection()?.removeAllRanges();
+            let scale=1;
+            if(pts.length>1&&g.distance){const distance=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);const size=Math.max(16,Math.min(120,g.size*distance/g.distance));document.getElementById('vvTextSize').value=String(size);scale=size/g.size;applyTextSettings();}
+            const left=g.left+dx-(scale-1)*g.width/2,top=g.top+dy-(scale-1)*g.height/2;
+            vvCanvasText.style.left=Math.max(0,Math.min(Math.max(0,g.parent.clientWidth-vvCanvasText.offsetWidth),left))+'px';
+            vvCanvasText.style.top=Math.max(0,Math.min(Math.max(0,g.parent.clientHeight-vvCanvasText.offsetHeight),top))+'px';vvCanvasText.style.transform='none';e.preventDefault();
         });
-        function vvEndTextDrag(e) {
-            if (!vvDrag || e.pointerId!==vvDrag.id) return;
-            const moved=vvDrag.moved; vvDrag=null;
-            vvCanvasText.classList.remove('vv-text-dragging');
-            vvSuppressTextClick=moved;
-            if (vvCanvasText.hasPointerCapture(e.pointerId)) vvCanvasText.releasePointerCapture(e.pointerId);
-            if (!moved && e.type==='pointerup') { vvStoryPanel('text'); vvCanvasText.focus({preventScroll:true}); }
+        function vvEndTextDrag(e){
+            if(!vvTextPointers.has(e.pointerId))return;
+            vvTextPointers.delete(e.pointerId);
+            if(vvCanvasText.hasPointerCapture(e.pointerId))vvCanvasText.releasePointerCapture(e.pointerId);
+            if(vvTextPointers.size){vvGestureStart();return;}
+            vvGesture=null;vvCanvasText.classList.remove('vv-text-dragging');
+            if(!vvSuppressTextClick&&e.type==='pointerup'){vvStoryPanel('text');vvCanvasText.focus({preventScroll:true});}
         }
         ['pointerup','pointercancel','lostpointercapture'].forEach(n=>vvCanvasText?.addEventListener(n,vvEndTextDrag));
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));

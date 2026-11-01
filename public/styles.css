@@ -357,3 +357,9 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor #vvStoryCanvasText{touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;cursor:grab!important}
 .vv-immersive-story-editor #vvStoryCanvasText.vv-text-dragging{cursor:grabbing!important}
 #vvStoryTextDrag{display:none!important}
+
+/* Story text tools */
+.vv-text-settings{bottom:calc(var(--vv-keyboard,0px) + 12px)!important;left:0!important;right:0!important;background:transparent!important;padding:0!important;gap:0!important;border-radius:0!important;flex-direction:column!important}
+.vv-text-strip{display:flex;gap:12px;width:100%;overflow-x:auto;padding:12px 16px;box-sizing:border-box;scrollbar-width:none}.vv-text-strip[hidden]{display:none!important}.vv-text-strip button{flex-shrink:0;border:1px solid #555;border-radius:14px;padding:14px 24px;background:#111!important;color:white!important}.vv-text-strip [data-text-color]{width:32px;height:32px;border:3px solid white;border-radius:50%;padding:0;background:var(--swatch)!important}
+.vv-text-toolbar{display:flex;width:100%;justify-content:space-around;background:#222;border-radius:30px;padding:8px}.vv-text-toolbar button{background:transparent!important;font-size:25px!important;padding:10px 20px!important}
+#vvTextDone{display:none;position:absolute;top:24px;right:20px;z-index:45;color:white;background:transparent;font-size:18px;font-weight:700}.vv-panel-text #vvTextDone{display:block}.vv-panel-text .vv-story-editor-title,.vv-panel-text .vv-story-side-tools,.vv-panel-text .vv-story-bottom-actions{visibility:hidden}.vv-panel-text .vv-story-canvas-text{max-height:35vh!important}
