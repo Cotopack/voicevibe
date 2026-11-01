@@ -3026,12 +3026,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
                 node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
                 node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{
-                    // A single tap on an existing reaction never removes it.
-                    // The picker can select/change an emoji, but only a double tap
-                    // on the message itself toggles the heart off.
-                    if(!b.closest('.vv-reaction-picker'))return;
-                    node.querySelector('.vv-reaction-picker').hidden=true;
-                    vvSetMessageReaction(node,b.dataset.reaction,false);
+                    // Reactions are toggles: tap your emoji again to remove it.
+                    // This works for both the reaction badge and emoji picker.
+                    const picker=b.closest('.vv-reaction-picker');
+                    if(picker)picker.hidden=true;
+                    vvSetMessageReaction(node,b.dataset.reaction,true);
                 }));
             });
         }
