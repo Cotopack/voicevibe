@@ -2885,7 +2885,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             host.querySelectorAll('[data-playchallenge]').forEach(b=>b.addEventListener('click',()=>startSnake(b.dataset.playchallenge)));
             host.querySelectorAll('[data-message-id]').forEach(node=>{
                 let lastTap=0,touchStart=null,lastHeart=0;
-                const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',false);};
+                const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',true);};
                 node.addEventListener('dblclick',e=>{if(e.target.closest('button,a,input'))return;e.preventDefault();heart();});
                 node.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||e.target.closest('button,a,input'))return;touchStart={x:e.clientX,y:e.clientY,time:Date.now()};});
                 node.addEventListener('pointercancel',()=>{touchStart=null;lastTap=0;});
@@ -2896,7 +2896,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if(lastTap&&now-lastTap<320){lastTap=0;heart();}else lastTap=now;
                 });
                 node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
-                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{node.querySelector('.vv-reaction-picker').hidden=true;vvSetMessageReaction(node,b.dataset.reaction);}));
+                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{
+                    // A single tap on an existing reaction never removes it.
+                    // The picker can select/change an emoji, but only a double tap
+                    // on the message itself toggles the heart off.
+                    if(!b.closest('.vv-reaction-picker'))return;
+                    node.querySelector('.vv-reaction-picker').hidden=true;
+                    vvSetMessageReaction(node,b.dataset.reaction,false);
+                }));
             });
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
