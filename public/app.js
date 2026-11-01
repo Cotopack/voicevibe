@@ -459,6 +459,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             state.peer.on('open', (id) => {
                 state.myPeerId = id;
+                if (state.searchConnectTimeout) clearTimeout(state.searchConnectTimeout);
                 if (state.peerReconnectTimer) { clearTimeout(state.peerReconnectTimer); state.peerReconnectTimer = null; }
                 if (state.pendingRouletteSearch) { state.pendingRouletteSearch = false; setTimeout(() => startSearch(), 0); }
                 if (state.user) setDoc(doc(db, 'peerSessions', id), { peerId:id, ownerUid:state.user.uid, updatedAt:Date.now() }).catch(e => console.warn('Peer session registration failed:', e));
@@ -537,6 +538,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 chatStatusDesc.textContent = 'Поиск начнётся автоматически после подключения.';
                 if (!state.peer || state.peer.destroyed) initPeerJS();
                 else if (state.peer.disconnected) { try { state.peer.reconnect(); } catch (_) { initPeerJS(); } }
+                clearTimeout(state.searchConnectTimeout);
+                state.searchConnectTimeout = setTimeout(() => {
+                    if (!state.pendingRouletteSearch || state.isSearching || state.isConnected) return;
+                    state.pendingRouletteSearch = false;
+                    chatStatusTitle.textContent = 'Сервер голосовой связи недоступен';
+                    chatStatusDesc.textContent = 'Проверьте интернет и нажмите «Искать» ещё раз.';
+                    setPeerStatus('error', 'Нет подключения к голосовому серверу');
+                    try { state.peer?.destroy(); } catch (_) {}
+                    state.peer = null; state.myPeerId = null;
+                }, 12000);
                 return;
             }
             state.searchStarting = true;
@@ -567,6 +578,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
 
                 if (state.queueUnsub) state.queueUnsub();
+                clearInterval(state.queueHeartbeat);
+                state.queueHeartbeat = setInterval(() => {
+                    if (!state.isSearching || !state.myPeerId || state.isConnected) { clearInterval(state.queueHeartbeat); return; }
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', queueName, state.myPeerId),
+                        {peerId:state.myPeerId, ownerUid:state.user.uid, timestamp:Date.now()})
+                      .catch(err => console.warn('Queue heartbeat failed:', err));
+                }, 20000);
                 state.queueUnsub = onSnapshot(queueColPath, (snapshot) => {
                     if (!state.isSearching || state.isConnected || state.connectingTo) return;
 
@@ -588,6 +606,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }, (err) => {
                     console.error('Firestore matchmaking listener failed:', err);
                     state.isSearching = false;
+                    clearInterval(state.queueHeartbeat);
                     updateUI();
                     setAvatarState('idle');
                     chatStatusTitle.textContent = 'Не удалось начать поиск';
@@ -598,6 +617,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             } catch (err) {
                 console.error('Start search failed:', err);
                 state.isSearching = false;
+                clearInterval(state.queueHeartbeat);
                 updateUI();
                 setAvatarState('idle');
                 chatStatusTitle.textContent = 'Ошибка поиска';
@@ -645,12 +665,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (!connected && state.connectingTo === targetPeerId) {
                     state.connectingTo = null;
                     try { call.close(); } catch (e) {}
+                    if (state.isSearching && !state.isConnected) {
+                        chatStatusTitle.textContent = 'Ищем доступного собеседника…';
+                        chatStatusDesc.textContent = 'Предыдущий пользователь не ответил, поиск продолжается.';
+                    }
                 }
             }, 15000);
         }
 
         async function removeFromMatchmakingQueue() {
             state.isSearching = false;
+            clearInterval(state.queueHeartbeat);
+            clearTimeout(state.searchConnectTimeout);
+            state.pendingRouletteSearch = false;
             if (state.queueUnsub) {
                 state.queueUnsub();
                 state.queueUnsub = null;
