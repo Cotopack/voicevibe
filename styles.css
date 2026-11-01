@@ -481,46 +481,47 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-reaction-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
 .vv-reaction-initial{font-size:10px;font-weight:700;line-height:1}.vv-reaction-total{font-size:11px;opacity:.85}
 
-/* VoiceVibe Premium cover fade v4: full-size duplicated image, visible only at bottom.
-   Full-size layer guarantees the crop matches the original cover on Safari/iPhone. */
+/* VoiceVibe Premium: subtle blur ONLY at the bottom of the banner.
+   The same banner image is provided by app.js via --vv-cover-image.
+   Both own and visitor profiles share this exact effect. */
 #socialProfileBanner:not(.hidden),
 #friendProfileModal .vv-visitor-cover {
-  position:relative!important;
-  isolation:isolate!important;
-  overflow:hidden!important;
-  background-position:center center!important;
-  background-size:cover!important;
-  background-repeat:no-repeat!important;
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
 }
 #socialProfileBanner:not(.hidden)::before,
 #friendProfileModal .vv-visitor-cover::before {
-  content:""!important;
-  position:absolute!important;
-  inset:-12px!important;
-  z-index:1!important;
-  pointer-events:none!important;
-  background-image:var(--vv-cover-image,none)!important;
-  background-position:center center!important;
-  background-size:cover!important;
-  background-repeat:no-repeat!important;
-  filter:blur(10px)!important;
-  opacity:1!important;
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,transparent 58%,rgba(0,0,0,.35) 74%,#000 100%)!important;
-  mask-image:linear-gradient(to bottom,transparent 0%,transparent 58%,rgba(0,0,0,.35) 74%,#000 100%)!important;
+  content: "" !important;
+  position: absolute !important;
+  inset: -6px !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  background-image: var(--vv-cover-image, none) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  filter: blur(9px) !important;
+  -webkit-filter: blur(9px) !important;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 72%, rgba(0,0,0,.2) 80%, rgba(0,0,0,.75) 94%, #000 100%) !important;
+  mask-image: linear-gradient(to bottom, transparent 0%, transparent 72%, rgba(0,0,0,.2) 80%, rgba(0,0,0,.75) 94%, #000 100%) !important;
 }
 #socialProfileBanner:not(.hidden)::after,
 #friendProfileModal .vv-visitor-cover::after {
-  content:""!important;
-  position:absolute!important;
-  inset:0!important;
-  z-index:2!important;
-  pointer-events:none!important;
-  background:linear-gradient(to bottom,transparent 60%,rgba(17,16,25,.04) 76%,rgba(17,16,25,.30) 100%)!important;
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
+  pointer-events: none !important;
+  background: linear-gradient(to bottom, transparent 0%, transparent 76%, rgba(17,16,25,.12) 84%, rgba(17,16,25,.5) 93%, #111019 100%) !important;
 }
-/* These two identity containers stay above the cover, never blurred. */
-#socialProfilePanel .vv-identity{position:relative;z-index:3;margin-top:-23px}
-#socialProfilePanel .vv-identity-text{padding-top:22px}
-#friendProfileModal .vv-visitor-info{position:relative;z-index:3;margin-top:-22px}
+/* Name and avatar remain sharp and in front of the banner. */
+#socialProfilePanel .vv-identity { position: relative; z-index: 3; margin-top: -23px; }
+#socialProfilePanel .vv-identity-text { padding-top: 22px; }
+#friendProfileModal .vv-visitor-info { position: relative; z-index: 3; margin-top: -22px; }
 /* Story rings on avatar at any size; do not break profile positioning. */
 #profileHeaderAvatar.has-story,#profileHeaderAvatar.story-unviewed{outline:3px solid #22c55e;outline-offset:3px;cursor:pointer}
 #profileHeaderAvatar.story-viewed{outline:3px solid #64748b;outline-offset:3px;cursor:pointer}
