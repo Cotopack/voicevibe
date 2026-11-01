@@ -486,3 +486,7 @@ header, #appHeader, .app-header {isolation:isolate}
 #socialProfileBanner::before,#socialProfileBanner::after,#friendProfileModal .vv-visitor-cover::before,#friendProfileModal .vv-visitor-cover::after{content:'';position:absolute;inset:0;pointer-events:none;background-image:inherit;background-size:inherit;background-position:inherit;background-repeat:no-repeat;transform:scale(1.035);transform-origin:center}
 #socialProfileBanner::before,#friendProfileModal .vv-visitor-cover::before{z-index:1;filter:blur(4px);-webkit-mask-image:linear-gradient(to bottom,transparent 20%,#000 62%);mask-image:linear-gradient(to bottom,transparent 20%,#000 62%)}
 #socialProfileBanner::after,#friendProfileModal .vv-visitor-cover::after{z-index:2;filter:blur(12px);-webkit-mask-image:linear-gradient(to bottom,transparent 48%,#000 90%);mask-image:linear-gradient(to bottom,transparent 48%,#000 90%)}
+
+/* Premium banner is never visible until its owner's Premium is confirmed. */
+#profileBannerPremiumSection.hidden { display: none !important; }
+#profileModal > div { max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }

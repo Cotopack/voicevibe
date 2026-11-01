@@ -257,6 +257,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const remaining = Math.max(0, 14*24*60*60*1000 - (Date.now()-changedAt));
             const hint = document.getElementById('usernameChangeHint');
             if (hint) hint.textContent = remaining ? `Следующая смена @nickname через ${Math.ceil(remaining/86400000)} дн.` : 'Можно менять @nickname. Следующая смена будет доступна через 14 дней.';
+            // Premium-only banner controls live exclusively in the profile editor.
+            const bannerSection = document.getElementById('profileBannerPremiumSection');
+            const premiumActive = Number(p.premiumUntil || 0) > Date.now();
+            if (bannerSection) bannerSection.classList.toggle('hidden', !premiumActive);
+            const bannerInput = document.getElementById('profileBannerFile');
+            if (bannerInput) bannerInput.value = '';
+            const bannerFilename = document.getElementById('profileBannerFileName');
+            if (bannerFilename) bannerFilename.textContent = 'Файл не загружен';
             profileModal.classList.remove('hidden');
         });
         document.getElementById('btnCloseProfile')?.addEventListener('click', () => profileModal.classList.add('hidden'));
@@ -2039,7 +2047,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('buyPremiumBtn')?.addEventListener('click',async()=>{const b=document.getElementById('buyPremiumBtn');b.disabled=true;try{if(!state.user)throw new Error('Сначала войди в аккаунт.');const result=(await workerPost('/buy-premium')).data;state.userProfile={...(state.userProfile||{}),vibecoinBalance:result.vibecoinBalance,premiumUntil:result.premiumUntil};renderSocialProfile();alert(result.message||'Premium активирован на 30 дней!');}catch(e){console.error('Premium purchase:',e);alert(e?.message||'Не удалось купить Premium.');}finally{b.disabled=false;}});
         document.getElementById('watchAdCoinsBtn')?.addEventListener('click',async()=>{try{const res=await claimAdCoinsCall();alert(res.data?.message||'Попробуйте позже — реклама пока не подключена.');}catch(e){alert(e?.message||'Попробуйте позже — реклама пока не подключена.');}});
         document.getElementById('profileBannerFile')?.addEventListener('change',e=>{const f=e.target.files?.[0];const n=document.getElementById('profileBannerFileName');if(n)n.textContent=f?'Файл загружен':'Файл не загружен';});
-        document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(f.size>5*1024*1024)return alert('Изображение должно быть меньше 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const url=await uploadImageToCloudinary(f,'profile-banners');await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert(`Не удалось загрузить банер в Cloudinary: ${e?.message||'ошибка загрузки'}`);}finally{b.disabled=false;}});
+        document.getElementById('uploadProfileBannerBtn')?.addEventListener('click',async()=>{const f=document.getElementById('profileBannerFile')?.files?.[0];if(!f)return alert('Сначала выбери изображение.');if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Банер профиля доступен только Premium.');if(!['image/jpeg','image/png','image/webp'].includes(f.type)||f.size>5*1024*1024)return alert('Выбери JPG, PNG или WebP размером до 5 МБ.');const b=document.getElementById('uploadProfileBannerBtn');b.disabled=true;try{const url=await uploadImageToCloudinary(f,'profile-banners');await updateDoc(doc(db,'users',state.user.uid),{bannerURL:url,updatedAt:Date.now()});state.userProfile.bannerURL=url;renderSocialProfile();alert('Банер установлен!');}catch(e){console.error(e);alert(`Не удалось загрузить банер в Cloudinary: ${e?.message||'ошибка загрузки'}`);}finally{b.disabled=false;}});
 
         // Groups are available only for people already in the user's friend list.
         const groupModal=document.getElementById('createGroupModal');
