@@ -1,21 +1,30 @@
 {
   "name": "VoiceVibe — голосовой чат и социальная сеть",
   "short_name": "VoiceVibe",
-  "start_url": "./app.html",
-  "scope": "./",
+  "start_url": "/voicevibe/app.html",
+  "scope": "/voicevibe/",
   "display": "standalone",
   "background_color": "#090b1a",
   "theme_color": "#090b1a",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "/voicevibe/android-chrome-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "/voicevibe/android-chrome-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/voicevibe/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "/voicevibe/"
 }
