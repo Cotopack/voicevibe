@@ -2266,7 +2266,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     // The server uses verified Firebase credentials and can recover groups
                     // even if the local Firestore query is denied by older published rules.
                     vvMergeGroups(serverGroups, uid);
-                    vvGroupLoadStatus(serverGroups.length ? '' : 'Сервер не нашёл групп, в которых твой аккаунт указан участником. Если тебя добавляли раньше, попроси создателя проверить список участников.', !serverGroups.length);
+                    vvGroupLoadStatus('', false);
                 } catch(err) {
                     console.warn('Server groups refresh (deploy updated worker.js):',err);
                     vvGroupLoadStatus('Ошибка загрузки групп: '+(err?.message||'проверь Cloudflare Worker и Firestore'), true);
