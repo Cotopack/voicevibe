@@ -314,3 +314,30 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor .vv-wave-selection{min-height:140px!important}
 .vv-immersive-story-editor .vv-wave-handle{width:12px!important}
 .vv-immersive-story-editor .vv-story-music-apply{display:none!important}
+
+/* Mobile chat redesign: full-height chat list starts directly below browser chrome. */
+@media(max-width:767px){
+ #socialChatsPanel:not(.chat-open){position:fixed!important;inset:0 0 var(--vv-nav-height,82px) 0!important;width:100%!important;height:auto!important;max-height:none!important;overflow:hidden!important;z-index:27!important;background:#0b0d1c!important;display:flex!important;flex-direction:column!important}
+ #socialChatsPanel:not(.chat-open)>div:not(#vvStoryMentionInbox){flex:1 1 auto!important;height:100%!important;min-height:0!important;display:flex!important;flex-direction:column!important;border:0!important;border-radius:0!important;background:#0b0d1c!important}
+ #socialChatsPanel:not(.chat-open) aside{flex:1 1 auto!important;min-height:0!important;max-height:none!important;padding:18px 14px 8px!important;border:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ #socialChatsPanel:not(.chat-open) aside>div:first-child{margin:0 0 17px!important;padding:0 3px!important}
+ #socialChatsPanel:not(.chat-open) aside h2{font-size:24px!important;line-height:1.25!important}
+ #createGroupBtn{font-size:13px!important;border-radius:15px!important;padding:12px 16px!important;background:linear-gradient(120deg,#7c3aed,#a32dec)!important}
+ #chatFriendsList{padding-bottom:26px!important}
+ #chatFriendsList>button{padding:15px 8px!important;min-height:77px!important;border-radius:0!important;border-bottom:1px solid rgba(155,148,194,.12)!important;gap:12px!important}
+ #chatFriendsList>button .vv-friend-call-button{min-width:44px!important;min-height:44px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;border-radius:15px!important;background:#24163f!important;border:1px solid #5d397f!important}
+ #chatFriendsList>button .h-10.w-10{width:51px!important;height:51px!important;flex-shrink:0!important}
+ #chatFriendsList>button .text-sm.font-semibold{font-size:16px!important}
+ #chatFriendsList>button .text-xs.text-slate-500{font-size:12px!important}
+ #socialChatsPanel.chat-open{z-index:35!important}
+}
+.vv-chat-controls{margin:0 0 12px}
+.vv-chat-search{display:flex;align-items:center;gap:12px;border:1px solid #37334f;background:#171729;color:#a9a4c0;border-radius:23px;padding:0 15px;height:49px}
+.vv-chat-search input{width:100%;min-width:0;background:transparent!important;color:#f7f4ff!important;outline:0!important;border:0!important;font-size:14px}
+.vv-chat-search input::placeholder{color:#9993b0}
+.vv-chat-filters{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:13px 0 4px;white-space:nowrap}
+.vv-chat-filters::-webkit-scrollbar{display:none}
+.vv-chat-filter{flex-shrink:0;border:1px solid #39334e;border-radius:18px;background:#181827;color:#b9b1d0;padding:9px 12px;font-size:12px;font-weight:600}
+.vv-chat-filter.active{background:linear-gradient(120deg,#7c3aed,#a42fe7);border-color:#bd64f7;color:white}
+.vv-filter-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;border-radius:50%;background:#9639ea;color:#fff;margin-left:4px}
+.vv-chat-empty{padding:25px 10px;color:#9993b0;text-align:center;font-size:14px}

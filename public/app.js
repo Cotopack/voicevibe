@@ -1905,7 +1905,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const friendsHtml = sortedFriends.map(f => {
                 const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0);
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
-                return `<button data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${presenceLabel(uid)}</span><span data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('<!--vv-chat-split-->');
             const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('');
             // One chronological list: groups must not remain pinned above recent private chats.
@@ -1914,10 +1914,40 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ...groupsCache.map((g, i) => ({ html: groupsHtml.split('<!--vv-chat-split-->')[i], time: Number(g.updatedAt?.toMillis?.() || g.updatedAt || 0) }))
             ].sort((a,b) => b.time-a.time);
             host.innerHTML = combined.map(x=>x.html).join('');
+            applyVvChatFilter();
             host.querySelectorAll('[data-callfriend]').forEach(b => { b.addEventListener('click', e => { e.stopPropagation(); startFriendCall(b.dataset.callfriend); }); b.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();startFriendCall(b.dataset.callfriend);}}); });
             host.querySelectorAll('[data-openchat]').forEach(b => b.addEventListener('click', () => openConversation(b.dataset.openchat)));
             host.querySelectorAll('[data-opengroup]').forEach(b => b.addEventListener('click', () => openGroupConversation(b.dataset.opengroup)));
         }
+        // Local search/filter does not change Firestore permissions or chat listeners.
+        let vvChatFilter = 'all';
+        function applyVvChatFilter() {
+            const host = document.getElementById('chatFriendsList');
+            if (!host) return;
+            const q = (document.getElementById('vvChatSearch')?.value || '').trim().toLocaleLowerCase();
+            let shown = 0;
+            host.querySelectorAll('[data-openchat], [data-opengroup]').forEach(el => {
+                const group = el.hasAttribute('data-opengroup');
+                const unread = Number(el.dataset.unread || 0);
+                const matchesType = vvChatFilter === 'all' || (vvChatFilter === 'private' && !group) || (vvChatFilter === 'groups' && group) || (vvChatFilter === 'unread' && unread > 0);
+                const matchesText = !q || el.textContent.toLocaleLowerCase().includes(q);
+                el.style.display = matchesType && matchesText ? '' : 'none';
+                if (matchesType && matchesText) shown++;
+            });
+            const totalUnread = [...host.querySelectorAll('[data-unread]')].reduce((n,el)=>n+(Number(el.dataset.unread)>0?1:0),0);
+            const count = document.getElementById('vvUnreadFilterCount');
+            if (count) { count.textContent = totalUnread; count.classList.toggle('hidden',totalUnread===0); }
+            let empty = document.getElementById('vvChatFilterEmpty');
+            if (!empty) { empty=document.createElement('p'); empty.id='vvChatFilterEmpty';empty.className='vv-chat-empty hidden';host.after(empty); }
+            empty.textContent = q ? 'По вашему запросу чаты не найдены' : 'В этой категории пока нет чатов';
+            empty.classList.toggle('hidden', shown > 0 || !host.querySelector('[data-openchat], [data-opengroup]'));
+        }
+        document.getElementById('vvChatSearch')?.addEventListener('input',applyVvChatFilter);
+        document.querySelectorAll('[data-chat-filter]').forEach(btn => btn.addEventListener('click',()=>{
+            vvChatFilter=btn.dataset.chatFilter;
+            document.querySelectorAll('[data-chat-filter]').forEach(b=>b.classList.toggle('active',b===btn));
+            applyVvChatFilter();
+        }));
         let friendSearchTimer = null;
         let searchGeneration = 0;
         const socialSearchInput = document.getElementById('socialSearchInput');
