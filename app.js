@@ -1276,9 +1276,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const res=await fetch(`${WORKER_BASE_URL}/api/music`);
                 const data=await res.json();
                 if(!res.ok||!data.ok||!Array.isArray(data.tracks))throw new Error(data.error||'Ошибка каталога');
-                vvCatalogTracks=data.tracks.filter(t=>t.url&&t.id);
+                vvCatalogTracks=data.tracks.filter(t=>t.url&&t.id).map(t=>({...t,category:(t.category&&t.category!=='Разное'&&t.category!=='Unknown' ? t.category : (/lo.?fi|chill|warm|sleep|dream/i.test(`${t.title} ${t.publicId||''}`)?'Lo-Fi / Chill':'Без жанра'))}));
                 document.getElementById('vvMusicCount').textContent=`${vvCatalogTracks.length} треков`;
-                const genres=[...new Set(vvCatalogTracks.map(t=>t.category).filter(Boolean))].sort();
+                const genres=[...new Set(vvCatalogTracks.map(t=>t.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
                 if(vvMusicGenre)vvMusicGenre.innerHTML='<option value="">Все жанры</option>'+genres.map(g=>`<option value="${storyEscape(g)}">${storyEscape(g)}</option>`).join('');
                 vvRenderCatalog();
             } catch(e) {
@@ -1329,28 +1329,58 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(time)time.textContent=`${Math.floor(start/60)}:${String(Math.floor(start%60)).padStart(2,'0')} — ${Math.floor((start+length)/60)}:${String(Math.floor((start+length)%60)).padStart(2,'0')}`;
         }
         const waveEditor=document.getElementById('storyMusicWave');
-        let waveDragging=false;
-        function setWavePosition(event){
-            if(!waveEditor||!vvSelectedTrack)return;
+        let waveDrag=null;
+        const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+        function setWaveDrag(event) {
+            if(!waveEditor||!waveDrag)return;
             const rect=waveEditor.getBoundingClientRect();
-            const length=Math.max(3,Number(musicLengthInput?.value)||10);
-            const maxStart=Math.max(0,sourceMusicDuration-length);
-            const ratio=Math.min(1,Math.max(0,(event.clientX-rect.left)/rect.width));
-            const start=Math.round(Math.min(maxStart,Math.max(0,ratio*sourceMusicDuration-length/2))*10)/10;
-            musicStartInput.value=String(start);
+            const delta=(event.clientX-waveDrag.x)/rect.width*Math.max(3,sourceMusicDuration);
+            let start=waveDrag.start, length=waveDrag.length;
+            if(waveDrag.mode==='move')start=clamp(waveDrag.start+delta,0,Math.max(0,sourceMusicDuration-length));
+            if(waveDrag.mode==='left'){
+                const end=waveDrag.start+waveDrag.length;
+                start=clamp(waveDrag.start+delta,0,end-3);
+                length=end-start;
+            }
+            if(waveDrag.mode==='right')length=clamp(waveDrag.length+delta,3,Math.min(10,sourceMusicDuration-start));
+            musicStartInput.value=String(Math.round(start*10)/10);
+            musicLengthInput.value=String(Math.round(length*10)/10);
             updateMusicTrimLabel();
         }
-        waveEditor?.addEventListener('pointerdown',event=>{if(!vvSelectedTrack)return;waveDragging=true;waveEditor.setPointerCapture(event.pointerId);setWavePosition(event);});
-        waveEditor?.addEventListener('pointermove',event=>{if(waveDragging)setWavePosition(event);});
-        waveEditor?.addEventListener('pointerup',()=>{waveDragging=false;});
-        waveEditor?.addEventListener('pointercancel',()=>{waveDragging=false;});
-        waveEditor?.addEventListener('keydown',event=>{if(!vvSelectedTrack||!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();musicStartInput.value=String(Math.max(0,Math.min(Number(musicStartInput.max),Number(musicStartInput.value)+(event.key==='ArrowRight'?1:-1))));updateMusicTrimLabel();});
+        waveEditor?.addEventListener('pointerdown',event=>{
+            if(!vvSelectedTrack||!musicStartInput||!musicLengthInput)return;
+            const rect=waveEditor.getBoundingClientRect();
+            const duration=Math.max(3,sourceMusicDuration);
+            const start=Number(musicStartInput.value)||0;
+            const length=Number(musicLengthInput.value)||10;
+            const x=(event.clientX-rect.left)/rect.width*duration;
+            const threshold=Math.max(1,14/rect.width*duration);
+            const mode=Math.abs(x-start)<threshold?'left':Math.abs(x-(start+length))<threshold?'right':'move';
+            waveDrag={x:event.clientX,start,length,mode};
+            if(x<start-threshold||x>start+length+threshold){
+                waveDrag.start=clamp(x-length/2,0,Math.max(0,duration-length));
+                musicStartInput.value=String(Math.round(waveDrag.start*10)/10);
+                updateMusicTrimLabel();
+            }
+            waveEditor.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        });
+        waveEditor?.addEventListener('pointermove',event=>{if(waveDrag)setWaveDrag(event);});
+        waveEditor?.addEventListener('pointerup',()=>{waveDrag=null;});
+        waveEditor?.addEventListener('pointercancel',()=>{waveDrag=null;});
+        waveEditor?.addEventListener('keydown',event=>{
+            if(!vvSelectedTrack||!['ArrowLeft','ArrowRight'].includes(event.key))return;
+            event.preventDefault();
+            const length=Number(musicLengthInput.value)||10;
+            musicStartInput.value=String(clamp((Number(musicStartInput.value)||0)+(event.key==='ArrowRight'?1:-1),0,Math.max(0,sourceMusicDuration-length)));
+            updateMusicTrimLabel();
+        });
         let sourceMusicDuration = 30;
         function updateMusicTrimLabel() {
-            const maxStart = Math.max(0, Math.floor(sourceMusicDuration - 3));
+            const maxStart = Math.max(0, sourceMusicDuration - 3);
             if (musicStartInput) { musicStartInput.max = String(maxStart); if (Number(musicStartInput.value) > maxStart) musicStartInput.value = String(maxStart); }
             const start=Math.max(0,Number(musicStartInput?.value)||0);
-            const maxLength=Math.max(3,Math.min(10,Math.floor(sourceMusicDuration-start)));
+            const maxLength=Math.max(3,Math.min(10,sourceMusicDuration-start));
             if(musicLengthInput){musicLengthInput.max=String(maxLength);if(Number(musicLengthInput.value)>maxLength)musicLengthInput.value=String(maxLength);}
             const length=Math.max(3,Math.min(maxLength,Number(musicLengthInput?.value)||10));
             const label=document.getElementById('storyMusicTrimLabel'); if(label) label.textContent=`Обрезка: ${start}–${start+length} сек. · в историю попадёт только этот фрагмент`; updateWaveSelection();

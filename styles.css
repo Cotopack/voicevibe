@@ -185,3 +185,9 @@ header, #appHeader, .app-header {isolation:isolate}
 
 /* Story gallery and interactive waveform editor */
 .vv-gallery-preview{margin-top:12px;max-height:250px;overflow:hidden;border-radius:14px;background:#101325;display:flex;justify-content:center}.vv-gallery-preview.hidden{display:none}.vv-gallery-preview img,.vv-gallery-preview video{max-height:250px;max-width:100%;object-fit:contain}.vv-wave-editor{height:100px!important;position:relative;touch-action:none;cursor:ew-resize;overflow:hidden;border-radius:14px;background:#141427!important;padding:0!important;display:block!important;outline-offset:3px}.vv-wave-bars{position:absolute;inset:10px 0 19px;display:flex;gap:2px;align-items:center;justify-content:space-around;pointer-events:none}.vv-wave-bars span{display:block;flex:1;min-width:1px;border-radius:4px;background:#e9e7f3;opacity:.85}.vv-wave-selection{position:absolute;top:4px;bottom:15px;left:0;width:30%;background:rgba(40,224,191,.25);border:2px solid #2ce6ca;border-radius:7px;box-shadow:0 0 0 1px rgba(0,0,0,.25);pointer-events:none}.vv-wave-handle{position:absolute;top:25%;bottom:25%;width:4px;border-radius:4px;background:#39f5d3}.vv-wave-handle-left{left:2px}.vv-wave-handle-right{right:2px}.vv-wave-time{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:10px;color:#fff;white-space:nowrap;pointer-events:none}
+
+/* VoiceVibe touch waveform editor */
+.vv-wave-editor{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
+.vv-wave-editor:active{cursor:grabbing}
+.vv-wave-selection{pointer-events:none}
+.vv-wave-handle{width:6px;background:#55ffe1}
