@@ -1162,6 +1162,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             });
         }
         function closeStoryViewer() {
+            document.getElementById('storyMusicPreview')?.pause();
             clearTimeout(storyAdvanceTimer);
             clearInterval(vvStoryMusicTimer);
             stopStoryMedia();
@@ -1252,7 +1253,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); closeStoryViewer(); await refreshStories(); });
         document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user || event.target.closest('#friendProfileModal')) return; const uid=avatar.dataset.storyAvatar; const hasStory=activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now()); if(hasStory){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();storiesModal?.classList.remove('hidden');storyCreateForm?.classList.add('hidden');storiesList?.classList.remove('hidden');openStoryByUser(uid);} else { event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.(); if(uid===state.user.uid) document.getElementById('profileBtn')?.click(); else openAnyUserProfile(uid); } }, true);
         document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
-        document.getElementById('storiesClose')?.addEventListener('click', () => { closeStoryViewer(); storiesModal?.classList.add('hidden'); });
+        document.getElementById('storiesClose')?.addEventListener('click', () => { closeStoryViewer(); document.getElementById('storyMusicPreview')?.pause(); storiesModal?.classList.add('hidden'); });
         storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) { closeStoryViewer(); storiesModal.classList.add('hidden'); } });
         // Mobile-first story flow: chooser -> native gallery -> editor.
         const vvStoryChoose = document.getElementById('vvStoryChoose');
@@ -1260,6 +1261,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let vvStoryFilter = 'none';
         const vvFilterCss = {none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'};
         function vvStoryScreen(screen){
+            if(screen!=='edit')document.getElementById('storyMusicPreview')?.pause();
             vvStoryChoose?.classList.toggle('hidden',screen!=='choose');
             storyCreateForm?.classList.toggle('hidden',screen!=='edit');
             storiesList?.classList.toggle('hidden',screen!=='list');
@@ -1292,7 +1294,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvDeleteText?.classList.remove('hidden');vvDragText?.classList.remove('hidden');
             }
         }
-        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvStoryPanel('text');});
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
         document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
         document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-trim')?'':'trim'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
@@ -1304,6 +1306,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(vvMusicPlayer.currentTime>=start+length-.08)vvMusicPlayer.currentTime=start;
         });
         document.addEventListener('visibilitychange',()=>{if(document.hidden)vvMusicPlayer?.pause();});
+        document.addEventListener('click',e=>{if(e.target.closest('#storiesClose,#vvStoryEditorBack,#vvStoryChooseClose,#chatsNavBtn,#chatNavBtn'))vvMusicPlayer?.pause();});
+        const vvStoryVisibilityObserver=new MutationObserver(()=>{if(storiesModal?.classList.contains('hidden'))vvMusicPlayer?.pause();});
+        if(storiesModal)vvStoryVisibilityObserver.observe(storiesModal,{attributes:true,attributeFilter:['class']});
         document.getElementById('vvStoryChangeMedia')?.addEventListener('click',()=>storyGalleryInput?.click());
         document.getElementById('vvStoryTapDismiss')?.addEventListener('click',()=>vvStoryPanel(''));
         function vvSyncCanvasText(){
@@ -1314,6 +1319,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             storyTextInput.dispatchEvent(new Event('input',{bubbles:true}));
         }
         vvCanvasText?.addEventListener('input',vvSyncCanvasText);
+        vvCanvasText?.addEventListener('click',()=>vvCanvasText.focus());
         vvCanvasText?.addEventListener('blur',()=>{if(!vvCanvasText?.innerText.trim()){vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');}});
         vvDeleteText?.addEventListener('click',()=>{
             vvCanvasText.textContent='';storyTextInput.value='';vvCanvasText.classList.add('hidden');vvDeleteText.classList.add('hidden');vvDragText.classList.add('hidden');vvMentionResults?.classList.add('hidden');vvStoryPanel('');
