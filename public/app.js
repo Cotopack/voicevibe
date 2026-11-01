@@ -1081,7 +1081,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             // Hide Premium-only controls from non-Premium accounts; keep the purchase button visible.
             ['profileBannerFile','uploadProfileBannerBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('[data-premium-only]') || el; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
             document.querySelectorAll('[data-premium-only]').forEach(el => el.classList.toggle('hidden', !premium));
-            const banner = document.getElementById('socialProfileBanner'); if (banner) { banner.style.backgroundImage = (p.bannerURL||p.bannerUrl||p.coverURL) ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(p.bannerURL||p.bannerUrl||p.coverURL).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !(p.bannerURL||p.bannerUrl||p.coverURL)); }
+            const banner = document.getElementById('socialProfileBanner'); if (banner) { const bannerUrl = premium ? (p.bannerURL||p.bannerUrl||p.coverURL||'') : ''; banner.style.backgroundImage = bannerUrl ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(bannerUrl).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !bannerUrl); }
         }
         function showTab(tab) {
             currentTab = tab;
@@ -1874,6 +1874,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.socialUnsubs.push(() => window.removeEventListener('pagehide', publishOffline));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friendRequests'), snap => {
                 friendRequestsCache = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => r.status === 'pending');
+                document.getElementById('vvRequestDot')?.classList.toggle('hidden', !friendRequestsCache.length);
                 renderFriendRequests();
             }, err => console.warn('Friend request listener:', err)));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
@@ -1952,8 +1953,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
             modal.querySelector('#friendProfileClose').addEventListener('click',()=>modal.remove());
             const content=modal.querySelector('#friendProfileContent');
-            const cover=profile.bannerURL ? `url("${String(profile.bannerURL).replace(/["\\]/g,'')}")` : 'linear-gradient(120deg,#211146,#6622aa,#12152e)';
-            content.innerHTML=`<div class="vv-visitor-cover" style="background-image:${escapeHTML(cover)}"></div><div class="vv-visitor-info"><div class="vv-visitor-identity"><div>${avatarMarkup(profile,'h-24 w-24')}</div><div class="min-w-0 flex-1 pb-2"><h2 class="text-xl font-bold break-words ${Number(profile.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(profile.displayName||'Пользователь')}${Number(profile.premiumUntil||0)>Date.now()?' 👑':''} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p></div></div><p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-300">${escapeHTML(profile.bio||'')}</p><div class="vv-visitor-actions"><button id="profileViewStories" class="rounded-xl border border-slate-700 px-3 py-3 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Добавить в друзья</button>`}</div></div>`;
+            // A profile banner is visible only while the profile owner's Premium is active.
+            const visitorPremium = Number(profile.premiumUntil || 0) > Date.now();
+            const cover = visitorPremium && profile.bannerURL ? `url("${String(profile.bannerURL).replace(/["\\]/g,'')}")` : '';
+            content.innerHTML=`${cover ? `<div class="vv-visitor-cover" style="background-image:${escapeHTML(cover)}"></div>` : ''}<div class="vv-visitor-info"><div class="vv-visitor-identity"><div>${avatarMarkup(profile,'h-24 w-24')}</div><div class="min-w-0 flex-1 pb-2"><h2 class="text-xl font-bold break-words ${Number(profile.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(profile.displayName||'Пользователь')}${Number(profile.premiumUntil||0)>Date.now()?' 👑':''} ${roleBadgeMarkup(uid)}</h2><p class="text-violet-300">@${escapeHTML(profile.username||'user')}</p></div></div><p class="mt-3 whitespace-pre-wrap break-words text-sm text-slate-300">${escapeHTML(profile.bio||'')}</p><div class="vv-visitor-actions"><button id="profileViewStories" class="rounded-xl border border-slate-700 px-3 py-3 text-sm">Истории</button>${friendsCache.some(f=>String(f.uid||f.id)===String(uid))?`<button id="profileMessageUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Написать</button>`:`<button id="profileAddUser" class="rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold">Добавить в друзья</button>`}</div></div>`;
             content.querySelector('#profileViewStories')?.addEventListener('click',()=>{const has=activeStoryItems.some(st=>st.uid===uid&&Number(st.expiresAt)>Date.now());if(has){modal.remove();storiesModal?.classList.remove('hidden');openStoryByUser(uid);}else{storiesModal?.classList.remove('hidden');refreshStories();}});
             content.querySelector('#profileMessageUser')?.addEventListener('click',()=>{modal.remove();openConversation(uid);});
             content.querySelector('#profileAddUser')?.addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='Отправляем…';try{await sendFriendRequest(uid);b.textContent='Заявка отправлена';}catch(err){b.disabled=false;b.textContent='Повторить';alert(err.message||'Не удалось отправить заявку.');}});
@@ -2573,3 +2576,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
   window.addEventListener('resize',sync,{passive:true});
   window.visualViewport?.addEventListener('resize',sync,{passive:true});
 })();
+
+// Friends overlay (preserves existing Firestore listeners and actions).
+document.getElementById('vvFriendsOpen')?.addEventListener('click',()=>document.getElementById('vvFriendsDrawer')?.classList.remove('hidden'));
+document.getElementById('vvFriendsClose')?.addEventListener('click',()=>document.getElementById('vvFriendsDrawer')?.classList.add('hidden'));

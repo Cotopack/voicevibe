@@ -32,7 +32,12 @@ service cloud.firestore {
         && request.resource.data.username is string && request.resource.data.username.size() <= 24
         && request.resource.data.photoURL is string
         && request.resource.data.bio is string && request.resource.data.bio.size() <= 160
-        && (!request.resource.data.keys().hasAny(['bannerURL']) || request.resource.data.bannerURL is string);
+        && (!request.resource.data.keys().hasAny(['bannerURL']) || (request.resource.data.bannerURL is string && request.resource.data.bannerURL.size() <= 2000))
+        // Prevent non-Premium users from writing bannerURL via SDK/REST, not only UI.
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['bannerURL'])
+            || (resource.data.keys().hasAny(['premiumUntil'])
+                && resource.data.premiumUntil is int
+                && resource.data.premiumUntil > request.time.toMillis()));
       allow delete: if false;
 
       match /stickers/{stickerId} {
