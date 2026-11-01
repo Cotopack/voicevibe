@@ -208,3 +208,19 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-favorite-btn.is-favorite{color:#fb7185;background:#4c2346;border-color:#be567b}
 .vv-file-name{display:inline-flex;align-items:center;gap:6px}
 .vv-file-name:not(:empty){font-weight:600}
+
+/* Story creation flow */
+.vv-story-choose{max-width:640px;margin:0 auto 20px;padding:18px;border-radius:24px;background:linear-gradient(150deg,#21133f,#11182c);color:#fff;box-shadow:0 12px 40px #1a104b35}
+.vv-story-choose-head{display:flex;align-items:center;justify-content:space-between;font-size:20px;margin-bottom:12px}
+.vv-story-choose-head button{border:0;background:#ffffff1c;color:white;border-radius:12px;padding:8px 13px}
+.vv-story-choose>p{color:#c9b7f9;margin:0 0 15px}
+.vv-story-choose-gallery{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-height:220px;border:2px dashed #a855f7;border-radius:22px;background:linear-gradient(130deg,#7c3aed30,#d946ef22);cursor:pointer;font-weight:700;font-size:18px}
+.vv-story-choose-gallery i{font-size:40px;color:#d8b4fe}.vv-story-choose-gallery small{font-weight:400;font-size:12px;color:#cbd5e1}
+.vv-story-text-only{display:block;width:100%;margin-top:14px;padding:15px;border:1px solid #a78bfa65;border-radius:15px;background:#ffffff12;color:white;font-weight:700}
+.vv-story-editor-title{display:flex;align-items:center;gap:16px;padding:5px 0 12px;color:#2e1b50}.vv-story-editor-title button{padding:8px 12px;border-radius:12px;background:#ede9fe;color:#6d28d9}
+.vv-story-filter-box{padding:12px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:16px}.vv-story-filter-box p{font-weight:700;margin:0 0 8px;color:#4c1d95}
+.vv-story-filters{display:flex;gap:8px;overflow-x:auto;padding-bottom:5px;scrollbar-width:thin}.vv-story-filters button{flex-shrink:0;border:1px solid #c4b5fd;background:white;color:#5b21b6;padding:9px 13px;border-radius:12px}.vv-story-filters button.active{background:#7c3aed;color:white}
+.vv-story-mentions{position:relative;z-index:5;max-height:210px;overflow-y:auto;background:white;border:1px solid #c4b5fd;border-radius:14px;box-shadow:0 12px 24px #2b175530}
+.vv-story-mention{display:block;width:100%;padding:11px 14px;text-align:left;color:#4c1d95;border-bottom:1px solid #eee7ff}.vv-story-mention:hover{background:#f5f3ff}
+#storyGalleryPreview img,#storyGalleryPreview video{max-height:50vh;object-fit:contain}
+@media(max-width:600px){.vv-story-choose{padding:14px}.vv-story-choose-gallery{min-height:190px}#storyCreateForm{padding:12px}}
