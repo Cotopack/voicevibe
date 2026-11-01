@@ -712,9 +712,7 @@ service cloud.firestore {
     match /groups/{groupId} {
       allow read: if signedIn()
         && resource.data.members is list
-        && resource.data.members.hasAny([
-          request.auth.uid
-        ]);
+        && request.auth.uid in resource.data.members;
 
       // Создание групп через сервер
       allow create: if false;

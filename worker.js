@@ -153,6 +153,28 @@ async function claimReferral(accessToken, uid, authUser, rawCode) {
 }
 
 
+// Server-backed member-specific group list (does not depend on published client Firestore query rules).
+async function myGroups(accessToken, uid) {
+  const endpoint = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents:runQuery`;
+  const query = { structuredQuery: {
+    from: [{collectionId:'groups'}],
+    where: {fieldFilter: {field:{fieldPath:'members'},op:'ARRAY_CONTAINS',value:{stringValue:uid}}},
+    limit: 150
+  }};
+  const res = await fetch(endpoint, {method:'POST',headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify(query)});
+  const data = await res.json().catch(()=>[]);
+  if (!res.ok) throw new Error(data?.error?.message || 'Не удалось получить группы.');
+  if (!Array.isArray(data)) throw new Error('Некорректный ответ Firestore.');
+  const groups = data.filter(row=>row.document?.name).map(row=>{
+    const d=row.document, f=d.fields||{};
+    const members=(f.members?.arrayValue?.values||[]).map(x=>x.stringValue).filter(Boolean);
+    if (!members.includes(uid)) return null;
+    return {id:d.name.split('/').pop(),name:stringField(f,'name'),createdBy:stringField(f,'createdBy'),members,
+      createdAt:numberField(f,'createdAt'),updatedAt:numberField(f,'updatedAt'),lastMessage:stringField(f,'lastMessage'),wallpaperURL:stringField(f,'wallpaperURL')};
+  }).filter(Boolean);
+  return {groups};
+}
+
 async function createGroup(accessToken, uid, body) {
   const name = String(body?.name || '').trim().slice(0, 40);
   const selected = [...new Set((Array.isArray(body?.members) ? body.members : []).filter(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(x) && x !== uid))];
@@ -407,7 +429,7 @@ export default {
     }
     if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405, origin);
     const route = url.pathname.replace(/\/$/, '');
-    if (!['/buy-premium', '/referral/ensure', '/referral/claim', '/create-group', '/claim-ad-coins', '/developer/grant', '/group/manage'].includes(route)) return response({ error: 'Not found' }, 404, origin);
+    if (!['/buy-premium', '/referral/ensure', '/referral/claim', '/create-group', '/claim-ad-coins', '/developer/grant', '/group/manage', '/my-groups'].includes(route)) return response({ error: 'Not found' }, 404, origin);
 
     try {
       const auth = request.headers.get('Authorization') || '';
@@ -434,7 +456,8 @@ export default {
         const body = await request.json().catch(() => ({}));
         return response(await developerGrant(accessToken, uid, body), 200, origin);
       }
-      if (route === '/group/manage') {
+      if (route === '/my-groups') return response(await myGroups(accessToken, uid), 200, origin);
+     if (route === '/group/manage') {
         const body = await request.json().catch(() => ({}));
         return response(await manageGroup(accessToken, uid, body), 200, origin);
       }

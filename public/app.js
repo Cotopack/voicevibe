@@ -1098,7 +1098,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 localStorage.setItem(unreadStorageKey(activeFriend), String(Date.now()));
                 state.unreadCounts.set(activeFriend, 0); updateUnreadBadge(); renderChatFriends();
             }
-            if (tab === 'chats') refreshGroupsOnce();
+            if (tab === 'chats') { refreshGroupsOnce(); refreshGroupsFromServer(); }
             const roulette = tab === 'roulette';
             const chatsTab = tab === 'chats';
             screenAgeSelect.classList.toggle('hidden', !roulette || !!state.selectedAge);
@@ -1221,7 +1221,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 ${storyContent}${repostBadge}<div class="story-top-gradient absolute inset-x-0 top-0 z-20 p-4 sm:p-6"><div class="mb-3 h-1 overflow-hidden rounded-full bg-slate-800/10"><div class="h-full w-full bg-violet-500"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-slate-500">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full border border-white/80 bg-white/80 px-3 py-2 text-slate-700 shadow-lg backdrop-blur-xl" aria-label="Закрыть">✕</button></div></div>
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
                 ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text).replace(/@([a-zA-Z0-9_.]{2,24})/g,'<button type="button" class="vv-story-profile-mention" data-mention-name="$1">@$1</button>')}</p></div></div>` : ''}
-                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
+                <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> <span class="vv-story-like-count">${isOwnStory ? (Array.isArray(st.likes)?st.likes.length:0) : ''}</span></button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
             if(Array.isArray(st.textLayers) && st.textLayers.length){
                 viewer.querySelector('.story-centered-text')?.remove();
                 for(const l of st.textLayers.slice(0,10)){
@@ -1283,7 +1283,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
             document.getElementById('storyPrev')?.addEventListener('click', () => { if (activeStoryIndex > 0) { activeStoryIndex--; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } });
             document.getElementById('storyNext')?.addEventListener('click', () => { if (activeStoryIndex < activeStoryItems.length - 1) { activeStoryIndex++; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); } });
-            document.getElementById('storyLikeBtn')?.addEventListener('click', async () => { try { const likedNow = (activeStoryItems[activeStoryIndex].likes || []).includes(state.user.uid); await updateDoc(doc(db,'stories',st.id), { likes: likedNow ? arrayRemove(state.user.uid) : arrayUnion(state.user.uid) }); st.likes = likedNow ? (st.likes||[]).filter(x=>x!==state.user.uid) : [...(st.likes||[]),state.user.uid]; renderStoryViewer(); } catch(e) { console.error(e); alert('Не удалось поставить лайк. Проверь Firestore Rules.'); } });
+            document.getElementById('storyLikeBtn')?.addEventListener('click', async () => {
+                const button = document.getElementById('storyLikeBtn');
+                if (!button || button.disabled || !state.user) return;
+                const uid = state.user.uid;
+                const wasLiked = (st.likes || []).includes(uid);
+                button.disabled = true;
+                try {
+                    await updateDoc(doc(db,'stories',st.id), { likes:wasLiked ? arrayRemove(uid) : arrayUnion(uid) });
+                    st.likes = wasLiked ? (st.likes || []).filter(x=>x!==uid) : [...(st.likes || []),uid];
+                    // Update the heart in place: do NOT recreate/restart the video or music.
+                    if (button.isConnected) {
+                        button.classList.toggle('text-rose-400',!wasLiked);
+                        const heart = button.querySelector('i');
+                        if (heart) heart.className = `fa-${wasLiked?'regular':'solid'} fa-heart`;
+                        const counter = button.querySelector('.vv-story-like-count');
+                        if (counter) counter.textContent = String(st.likes.length);
+                    }
+                } catch(err) { console.error('Story like:',err); alert('Не удалось поставить лайк. Проверь Firestore Rules.'); }
+                finally { if (button.isConnected) button.disabled = false; }
+            });
             document.getElementById('storyViewersBtn')?.addEventListener('click', () => document.getElementById('storyViewersList')?.classList.toggle('hidden'));
             document.getElementById('storyReplyForm')?.addEventListener('submit', async ev => { ev.preventDefault(); const input=document.getElementById('storyReplyInput'); const reply=(input?.value||'').trim(); if(!reply) return; try { await updateDoc(doc(db,'stories',st.id), { replies: arrayUnion({uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',text:reply.slice(0,300),createdAt:Date.now()}) }); if(st.uid!==state.user.uid) await addDoc(collection(db,'users',st.uid,'storyReplies'), {fromUid:state.user.uid,fromName:state.userProfile?.displayName||state.user.displayName||'Пользователь',storyId:st.id,text:reply.slice(0,300),createdAt:Date.now()}); input.value=''; input.placeholder='Ответ отправлен'; } catch(e) { console.error(e); alert('Не удалось отправить ответ. Проверь Firestore Rules.'); } });
         }
@@ -1757,7 +1776,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 alert('Репост опубликован!');storiesModal?.classList.remove('hidden');await refreshStories();
             }catch(e){console.error(e);alert('Не удалось сделать репост. Проверь Firestore Rules.');}
         }
-        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);setTimeout(()=>refreshGroupsOnce(user.uid),1200);});
+        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);setTimeout(()=>{refreshGroupsOnce(user.uid);refreshGroupsFromServer(user.uid,true);},1200);});
         // Cloudinary catalog: music URLs are stored directly, no re-upload required.
         let vvCatalogTracks = [];
         let vvSelectedTrack = null;
@@ -2065,9 +2084,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Groups are available only for people already in the user's friend list.
         const groupModal=document.getElementById('createGroupModal');
+        setInterval(() => { if (state.user && currentTab === 'chats') refreshGroupsFromServer(); }, 20000);
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
-        document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsOnce();const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
+        document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsFromServer(state.user.uid,true);const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
         async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
@@ -2110,6 +2130,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (state.groupUnsub) { state.groupUnsub(); state.groupUnsub = null; }
             /* Keep cached groups visible during temporary reconnects. */
         }
+        let groupsServerRefreshAt = 0;
+        let groupsServerRefreshPromise = null;
+        async function refreshGroupsFromServer(uid = state.user?.uid, force = false) {
+            if (!uid || state.user?.uid !== uid) return;
+            if (groupsServerRefreshPromise) return groupsServerRefreshPromise;
+            if (!force && Date.now() - groupsServerRefreshAt < 12000) return;
+            groupsServerRefreshAt = Date.now();
+            groupsServerRefreshPromise = (async () => {
+                try {
+                    const res = await workerPost('/my-groups');
+                    if (state.user?.uid !== uid || !Array.isArray(res?.data?.groups)) return;
+                    const serverGroups = res.data.groups.filter(g => Array.isArray(g.members) && g.members.includes(uid));
+                    // The server uses verified Firebase credentials and can recover groups
+                    // even if the local Firestore query is denied by older published rules.
+                    groupsCache = serverGroups.sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
+                    renderChatFriends();
+                } catch(err) {
+                    console.warn('Server groups refresh (deploy updated worker.js):',err);
+                }
+            })();
+            try { await groupsServerRefreshPromise; } finally { groupsServerRefreshPromise = null; }
+        }
         async function refreshGroupsOnce(uid = state.user?.uid) {
             if (!uid) return;
             try {
@@ -2118,6 +2160,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 renderChatFriends();
             } catch (err) {
                 console.warn('Groups refresh:', err);
+                await refreshGroupsFromServer(uid);
             }
         }
         function startSocialListeners() {
@@ -2128,6 +2171,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
             state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { groupsCache = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0)-Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0)); renderChatFriends(); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); refreshGroupsOnce(uid); });
             refreshGroupsOnce(uid);
+            refreshGroupsFromServer(uid, true);
             // Real-time conversation order: newest message (sent or received) appears first.
             state.socialUnsubs.push(onSnapshot(query(collection(db,'conversations'), where('participants','array-contains',uid)), snap => {
                 // Preserve optimistic ordering until Firestore confirms the newest update.
