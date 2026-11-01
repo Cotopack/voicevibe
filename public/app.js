@@ -1435,6 +1435,63 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(!vvSuppressTextClick&&e.type==='pointerup'&&vvCanvasText.getAttribute('contenteditable')==='true'){vvCanvasText.focus({preventScroll:true});}
         }
         ['pointerup','pointercancel','lostpointercapture'].forEach(n=>vvCanvasText?.addEventListener(n,vvEndTextDrag));
+
+        // Mobile touch fallback: the second finger may land outside the text itself.
+        // Track touches on the story canvas, while keeping normal text entry intact.
+        const vvTouchSurface=document.getElementById('storyGalleryPreview')?.parentElement || vvEditor;
+        let vvTouchGesture=null;
+        function vvTouchCoordinates(touches){
+            return Array.from(touches).map(t=>({x:t.clientX,y:t.clientY}));
+        }
+        function vvTouchBegin(ev){
+            if(!vvCanvasText || vvCanvasText.classList.contains('hidden') ||
+               vvCanvasText.getAttribute('contenteditable')==='true')return;
+            if(ev.target.closest('button,input,textarea,select,a'))return;
+            const points=vvTouchCoordinates(ev.touches);
+            if(!points.length)return;
+            const parent=vvCanvasText.offsetParent;
+            if(!parent)return;
+            const rect=vvCanvasText.getBoundingClientRect();
+            const bounds=parent.getBoundingClientRect();
+            const center=points.length>1?{x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2}:points[0];
+            if(points.length===1 && (center.x<rect.left-20 || center.x>rect.right+20 ||
+               center.y<rect.top-20 || center.y>rect.bottom+20))return;
+            vvTouchGesture={parent,center,left:rect.left-bounds.left-parent.clientLeft+parent.scrollLeft,
+              top:rect.top-bounds.top-parent.clientTop+parent.scrollTop,
+              size:Number(document.getElementById('vvTextSize').value)||28,
+              distance:points.length>1?Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y):0,
+              count:points.length};
+            ev.preventDefault();
+        }
+        function vvTouchMove(ev){
+            if(!vvTouchGesture)return;
+            const points=vvTouchCoordinates(ev.touches);
+            if(!points.length)return;
+            if(points.length!==vvTouchGesture.count){vvTouchBegin(ev);return;}
+            const g=vvTouchGesture;
+            const center=points.length>1?{x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2}:points[0];
+            if(points.length>1 && g.distance>0){
+                const dist=Math.hypot(points[1].x-points[0].x,points[1].y-points[0].y);
+                document.getElementById('vvTextSize').value=String(Math.round(Math.max(14,Math.min(120,g.size*dist/g.distance))));
+                applyTextSettings();
+            }
+            const parent=g.parent;
+            const dx=center.x-g.center.x,dy=center.y-g.center.y;
+            vvCanvasText.style.transform='none';
+            vvCanvasText.style.left=Math.max(0,Math.min(Math.max(0,parent.clientWidth-vvCanvasText.offsetWidth),g.left+dx))+'px';
+            vvCanvasText.style.top=Math.max(0,Math.min(Math.max(0,parent.clientHeight-vvCanvasText.offsetHeight),g.top+dy))+'px';
+            ev.preventDefault();
+        }
+        vvEditor?.addEventListener('touchstart',vvTouchBegin,{passive:false,capture:true});
+        vvEditor?.addEventListener('touchmove',vvTouchMove,{passive:false,capture:true});
+        ['touchend','touchcancel'].forEach(type=>vvEditor?.addEventListener(type,ev=>{
+            if(!ev.touches.length)vvTouchGesture=null;
+            else if(vvTouchGesture)vvTouchBegin(ev);
+        },{passive:false,capture:true}));
+        // Reset pointer bookkeeping after switching from typing to dragging.
+        document.getElementById('vvTextDone')?.addEventListener('click',()=>{
+            vvTextPointers.clear();vvGesture=null;vvTouchGesture=null;
+        });
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
