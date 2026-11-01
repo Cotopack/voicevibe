@@ -529,3 +529,88 @@ header, #appHeader, .app-header {isolation:isolate}
 /* Premium banner is never visible until its owner's Premium is confirmed. */
 #profileBannerPremiumSection.hidden { display: none !important; }
 #profileModal > div { max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; }
+
+/* VoiceVibe — сильное размытие Premium-баннера */
+
+#socialProfileBanner:not(.hidden),
+#friendProfileModal .vv-visitor-cover {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+}
+
+/* Сильное размытие нижней части */
+#socialProfileBanner:not(.hidden)::before,
+#friendProfileModal .vv-visitor-cover::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: -10px !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+
+  background-image: var(--vv-cover-image, none) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+
+  filter: blur(21px) !important;
+  -webkit-filter: blur(21px) !important;
+
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 62%,
+    rgba(0,0,0,0.36) 75%,
+    rgba(0,0,0,0.93) 93%,
+    black 100%
+  ) !important;
+
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 62%,
+    rgba(0,0,0,0.36) 75%,
+    rgba(0,0,0,0.93) 93%,
+    black 100%
+  ) !important;
+}
+
+/* Плавное слияние с фоном профиля */
+#socialProfileBanner:not(.hidden)::after,
+#friendProfileModal .vv-visitor-cover::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
+  pointer-events: none !important;
+
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 68%,
+    rgba(17,16,25,0.22) 81%,
+    rgba(17,16,25,0.65) 92%,
+    #111019 100%
+  ) !important;
+}
+
+/* Аватарка и ник остаются чёткими */
+#socialProfilePanel .vv-identity {
+  position: relative;
+  z-index: 3;
+  margin-top: -23px;
+}
+
+#socialProfilePanel .vv-identity-text {
+  padding-top: 22px;
+}
+
+#friendProfileModal .vv-visitor-info {
+  position: relative;
+  z-index: 3;
+  margin-top: -22px;
+}
+
