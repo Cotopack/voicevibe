@@ -1292,15 +1292,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvDeleteText?.classList.remove('hidden');vvDragText?.classList.remove('hidden');
             }
         }
-        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>vvStoryPanel('text'));
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvStoryPanel('text');});
         document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
         document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-trim')?'':'trim'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
-        document.getElementById('vvStoryMusicApply')?.addEventListener('click',()=>{
-            vvMusicApplied=!!vvSelectedTrack;vvEditor?.classList.toggle('vv-music-active',vvMusicApplied);
-            document.getElementById('vvStorySongChip').textContent=vvSelectedTrack?'♫ '+vvSelectedTrack.title:'♫ Добавить музыку';
-            vvStoryPanel('');vvPlayAppliedMusic();
-        });
+        
         vvMusicPlayer?.addEventListener('timeupdate',()=>{
             if(!vvMusicApplied||!vvSelectedTrack)return;
             const start=Number(document.getElementById('storyMusicStart')?.value)||0;
@@ -1455,7 +1451,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             updateMusicTrimLabel();
             vvMusicSelected.textContent=`Выбрано: ${vvSelectedTrack.title}`;
             vvMusicSelected.classList.remove('hidden');vvMusicClear.classList.remove('hidden');
-            vvRenderCatalog();
+            vvMusicApplied=true;vvEditor?.classList.add('vv-music-active');
+            document.getElementById('vvStorySongChip').textContent='♫ '+vvSelectedTrack.title;
+            vvRenderCatalog();vvPlayAppliedMusic();
         });
         vvMusicClear?.addEventListener('click',()=>{
             vvMusicApplied=false;vvEditor?.classList.remove('vv-music-active');vvMusicPlayer?.pause();document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvSelectedTrack=null;vvMusicSelected.classList.add('hidden');vvMusicClear.classList.add('hidden');vvRenderCatalog();
@@ -1515,13 +1513,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(x<start-threshold||x>start+length+threshold){
                 waveDrag.start=clamp(x-length/2,0,Math.max(0,duration-length));
                 musicStartInput.value=String(Math.round(waveDrag.start*10)/10);
-                updateMusicTrimLabel();
+                updateMusicTrimLabel();if(vvMusicApplied)vvPlayAppliedMusic();
             }
             waveEditor.setPointerCapture(event.pointerId);
             event.preventDefault();
         });
         waveEditor?.addEventListener('pointermove',event=>{if(waveDrag)setWaveDrag(event);});
-        waveEditor?.addEventListener('pointerup',()=>{waveDrag=null;});
+        waveEditor?.addEventListener('pointerup',()=>{waveDrag=null;if(vvMusicApplied)vvPlayAppliedMusic();});
         waveEditor?.addEventListener('pointercancel',()=>{waveDrag=null;});
         waveEditor?.addEventListener('keydown',event=>{
             if(!vvSelectedTrack||!['ArrowLeft','ArrowRight'].includes(event.key))return;

@@ -301,3 +301,16 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor .vv-story-canvas-text.hidden{display:none!important}
 .vv-immersive-story-editor .vv-story-side-tools{z-index:16!important}
 .vv-immersive-story-editor .vv-story-editor-title{z-index:16!important}
+
+/* Inline story text, larger music trimming UI */
+.vv-immersive-story-editor .vv-story-hidden-input{display:none!important}
+.vv-immersive-story-editor .vv-story-hidden-input textarea{display:none!important}
+.vv-immersive-story-editor .vv-story-side-tools #vvStoryMusicTool{display:none!important}
+.vv-immersive-story-editor.vv-music-active .vv-story-side-tools #vvStoryMusicTool{display:flex!important}
+.vv-immersive-story-editor.vv-panel-trim .story-upload-card{left:8px!important;right:8px!important;bottom:90px!important;max-height:70dvh!important;padding:18px!important}
+.vv-immersive-story-editor.vv-panel-trim #vvStoryTrimControls{padding:16px!important;width:100%!important}
+.vv-immersive-story-editor .vv-wave-editor{height:200px!important;min-height:200px!important;width:100%!important;touch-action:none}
+.vv-immersive-story-editor .vv-wave-bars{inset:16px 0 32px!important}
+.vv-immersive-story-editor .vv-wave-selection{min-height:140px!important}
+.vv-immersive-story-editor .vv-wave-handle{width:12px!important}
+.vv-immersive-story-editor .vv-story-music-apply{display:none!important}
