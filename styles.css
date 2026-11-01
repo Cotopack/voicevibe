@@ -481,10 +481,20 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-reaction-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
 .vv-reaction-initial{font-size:10px;font-weight:700;line-height:1}.vv-reaction-total{font-size:11px;opacity:.85}
 
-/* Premium banner blur: only the lower part is softly blurred and it slightly supports the nickname area. */
-#socialProfileBanner,#friendProfileModal .vv-visitor-cover{overflow:hidden;isolation:isolate}
-#socialProfileBanner::before,#friendProfileModal .vv-visitor-cover::before{content:'';position:absolute;left:-2%;right:-2%;bottom:-8%;height:54%;pointer-events:none;background-image:inherit;background-size:cover;background-position:center;background-repeat:no-repeat;transform:scale(1.1);transform-origin:center bottom;filter:blur(16px);opacity:.96;-webkit-mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.55) 32%,#000 72%,#000 100%);mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.55) 32%,#000 72%,#000 100%);z-index:1}
-#socialProfileBanner::after,#friendProfileModal .vv-visitor-cover::after{content:'';position:absolute;inset:auto 0 0;height:62%;pointer-events:none;background:linear-gradient(to bottom,rgba(8,6,18,0) 0%,rgba(8,6,18,.12) 36%,rgba(8,6,18,.34) 70%,rgba(8,6,18,.56) 100%);z-index:2}
+/* Soft, localized fade at the bottom of Premium profile banners.
+   backdrop-filter blurs the exact image underneath; no duplicated/misaligned image. */
+#socialProfileBanner,#friendProfileModal .vv-visitor-cover{position:relative;overflow:hidden;isolation:isolate}
+#socialProfileBanner::before,#friendProfileModal .vv-visitor-cover::before{
+ content:"";position:absolute;inset:auto 0 0;height:32%;pointer-events:none;
+ background:rgba(17,16,25,.045);
+ -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
+ -webkit-mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.3) 34%,#000 100%);
+ mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.3) 34%,#000 100%);z-index:1;
+}
+#socialProfileBanner::after,#friendProfileModal .vv-visitor-cover::after{
+ content:"";position:absolute;inset:auto 0 0;height:24%;pointer-events:none;
+ background:linear-gradient(to bottom,transparent 0%,rgba(17,16,25,.1) 50%,rgba(17,16,25,.32) 100%);z-index:2;
+}
 #socialProfilePanel .vv-identity{margin-top:-24px;position:relative;z-index:3}
 #socialProfilePanel .vv-identity-text{padding-top:22px}
 #friendProfileModal .vv-visitor-info{margin-top:-22px;position:relative;z-index:3}
