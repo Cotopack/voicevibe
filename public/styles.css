@@ -253,3 +253,23 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-immersive-story-editor.vv-panel-publish .vv-story-bottom-actions{display:none}
 .vv-immersive-story-editor>p:not(#storyCreateStatus){display:none!important}
 @media(min-width:700px){#storyCreateForm.vv-immersive-story-editor:not(.hidden){inset:3% calc(50% - 220px)!important;border-radius:24px!important;box-shadow:0 0 0 100vw #05020ccf}}
+
+.vv-immersive-story-editor .vv-gallery-picker{display:block!important;position:absolute!important;inset:0!important;pointer-events:none;background:transparent!important;border:0!important;padding:0!important}
+.vv-immersive-story-editor .vv-gallery-picker>p,.vv-immersive-story-editor .vv-gallery-picker>.vv-file-picker{display:none!important}
+.vv-immersive-story-editor .vv-gallery-preview{display:flex!important;position:absolute!important;inset:0!important;max-height:none!important;z-index:1;pointer-events:none;background:#100a1f!important}
+.vv-immersive-story-editor .vv-gallery-preview img,.vv-immersive-story-editor .vv-gallery-preview video{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;display:block!important}
+.vv-immersive-story-editor .vv-story-canvas-text{z-index:8!important;max-width:95%;width:max-content;min-width:90px;left:50%;top:46%;transform:translate(-50%,-50%);pointer-events:auto}
+.vv-immersive-story-editor .vv-story-editor-title{justify-content:center!important;pointer-events:none}
+.vv-immersive-story-editor #vvStoryEditorBack{position:absolute;left:0;pointer-events:auto}
+.vv-immersive-story-editor #vvStorySongChip{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:auto}
+.vv-immersive-story-editor .vv-story-side-tools{top:36%;gap:12px;right:9px}
+.vv-immersive-story-editor .vv-story-side-tools button{background:#211336b8;border:1px solid #ffffff29;border-radius:15px;width:52px;min-height:53px;padding:5px;backdrop-filter:blur(8px)}
+.vv-immersive-story-editor .vv-story-side-tools b{font-size:22px}
+.vv-immersive-story-editor .vv-story-side-tools small{font-size:9px}
+.vv-immersive-story-editor .vv-story-bottom-actions{left:10px!important;right:10px!important;bottom:calc(env(safe-area-inset-bottom,0px) + 12px)!important}
+.vv-immersive-story-editor .vv-story-bottom-actions button{width:100%;padding:17px!important;border-radius:18px!important;font-size:16px}
+.vv-immersive-story-editor #storyPublishBtn{display:none!important}
+.vv-immersive-story-editor .vv-story-tap-dismiss:not(.hidden){display:block;position:absolute;inset:0;z-index:13;background:transparent;cursor:default}
+.vv-immersive-story-editor.vv-panel-text .vv-story-text-input-label,.vv-immersive-story-editor.vv-panel-filters .vv-story-filter-box,.vv-immersive-story-editor.vv-panel-music .story-upload-card{z-index:22!important}
+.vv-immersive-story-editor .vv-wave-editor{height:155px!important}
+.vv-immersive-story-editor .vv-wave-bars{inset:12px 0 22px}

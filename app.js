@@ -1175,10 +1175,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const st = activeStoryItems[activeStoryIndex];
             const viewer = document.getElementById('storyViewer');
             if (!st || !viewer) return;
+            const storyMediaFilter={none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'}[st.storyFilter]||'none';
             const media = st.mediaType === 'video' && st.mediaURL
                 ? `<video src="${storyEscape(st.mediaURL)}" style="filter:${storyMediaFilter}" class="absolute inset-0 h-full w-full object-contain bg-transparent" autoplay playsinline controls preload="metadata"></video>`
                 : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" style="filter:${storyMediaFilter}" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain"/>` : '';
-            const storyMediaFilter={none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'}[st.storyFilter]||'none';
             const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
             const views = Array.isArray(st.views) ? st.views : [];
             const isOwnStory = st.uid === state.user?.uid;
@@ -1191,7 +1191,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             viewer.innerHTML = `<div class="relative flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-rose-100 via-violet-100 to-sky-100 text-slate-800">
                 ${media}<div class="story-top-gradient absolute inset-x-0 top-0 z-20 p-4 sm:p-6"><div class="mb-3 h-1 overflow-hidden rounded-full bg-slate-800/10"><div class="h-full w-full bg-violet-500"></div></div><div class="flex items-center gap-2">${storyAvatar(st)}<div class="min-w-0 flex-1"><button type="button" id="storyOwnerProfile" class="block max-w-full truncate text-left text-sm font-bold hover:text-violet-200">${storyEscape(st.displayName || 'Пользователь')}</button><small class="text-slate-500">${Math.max(1,Math.ceil((Number(st.expiresAt)-Date.now())/3600000))} ч. осталось</small></div><button id="storyViewerClose" class="rounded-full border border-white/80 bg-white/80 px-3 py-2 text-slate-700 shadow-lg backdrop-blur-xl" aria-label="Закрыть">✕</button></div></div>
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
-                ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text)}</p></div></div>` : ''}
+                ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text).replace(/@([a-zA-Z0-9_.]{2,24})/g,'<button type="button" class="vv-story-profile-mention" data-mention-name="$1">@$1</button>')}</p></div></div>` : ''}
                 <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
             viewer.classList.remove('hidden');
             const storyAudio=viewer.querySelector('audio');
@@ -1205,6 +1205,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (st.mediaType === 'video') { const video = viewer.querySelector('video'); video?.addEventListener('ended', advanceStory, { once:true }); video?.addEventListener('error', () => { chatStatusDesc.textContent = 'Не удалось загрузить видеоисторию.'; }, { once:true }); }
             else storyAdvanceTimer = setTimeout(advanceStory, 10000);
             document.getElementById('storyOwnerProfile')?.addEventListener('click', () => { const owner=st.uid; closeStoryViewer(); storiesModal?.classList.add('hidden'); openAnyUserProfile(owner); });
+            viewer.querySelectorAll('[data-mention-name]').forEach(button=>button.addEventListener('click',async()=>{try{const name=button.dataset.mentionName.toLowerCase();const snap=await getDocs(query(collection(db,'users'),where('username','==',name),limit(1)));if(snap.empty)return;closeStoryViewer();storiesModal?.classList.add('hidden');openAnyUserProfile(snap.docs[0].id);}catch(e){console.warn('Mention profile:',e);}}));
             document.getElementById('storyViewerClose')?.addEventListener('click', closeStoryViewer);
             let storyTouchStart = null;
             viewer.ontouchstart = (ev) => { if (ev.target.closest('button, form, input, textarea, audio, video, a')) return; const t=ev.changedTouches?.[0]; if(t) storyTouchStart={x:t.clientX,y:t.clientY}; };
@@ -1271,7 +1272,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const vvEditor=document.getElementById('storyCreateForm');
         const vvCanvasText=document.getElementById('vvStoryCanvasText');
         function vvStoryPanel(panel){
-            ['text','filters','music','publish'].forEach(n=>vvEditor?.classList.toggle('vv-panel-'+n,n===panel));
+            ['text','filters','music','publish'].forEach(n=>vvEditor?.classList.toggle('vv-panel-'+n,n===panel));document.getElementById('vvStoryTapDismiss')?.classList.toggle('hidden',!panel);
             if(panel==='text')storyTextInput?.focus({preventScroll:true});
         }
         document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-text')?'':'text'));
@@ -1279,7 +1280,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-music')?'':'music'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
         document.getElementById('vvStoryChangeMedia')?.addEventListener('click',()=>storyGalleryInput?.click());
-        document.getElementById('vvStoryNextBtn')?.addEventListener('click',()=>vvStoryPanel('publish'));
+        document.getElementById('vvStoryTapDismiss')?.addEventListener('click',()=>vvStoryPanel(''));
         storyTextInput?.addEventListener('input',()=>{if(vvCanvasText){vvCanvasText.textContent=storyTextInput.value;vvCanvasText.classList.toggle('hidden',!storyTextInput.value.trim());}});
         let vvDrag=null;
         vvCanvasText?.addEventListener('pointerdown',e=>{vvDrag={x:e.clientX,y:e.clientY,left:vvCanvasText.offsetLeft,top:vvCanvasText.offsetTop};vvCanvasText.setPointerCapture(e.pointerId);e.preventDefault();});
@@ -1513,7 +1514,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
-                if(file){vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=true;media.muted=true;}preview.appendChild(media);vvApplyStoryFilter();}
+                if(file){vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=false;media.muted=true;media.loop=true;media.autoplay=true;media.playsInline=true;}preview.appendChild(media);vvApplyStoryFilter();}
             }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
@@ -1564,7 +1565,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
-                await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
+                await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:{x:vvCanvasText?.offsetLeft||0,y:vvCanvasText?.offsetTop||0},mentions:[...new Set((text.match(/@[a-zA-Z0-9_.]{2,24}/g)||[]).map(v=>v.slice(1).toLowerCase()))],likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
                 storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();vvStoryScreen('list');vvStoryFilter='none';vvStoryFilterBox?.classList.add('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
