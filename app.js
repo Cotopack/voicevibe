@@ -2281,7 +2281,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvMergeGroups(snap.docs.map(d => ({ id:d.id, ...d.data() })), uid);
             } catch (err) {
                 console.warn('Groups refresh:', err);
-                await refreshGroupsFromServer(uid);
+                if (err?.code === 'permission-denied') vvGroupLoadStatus('Нет разрешения читать группы. Проверь Firestore Rules.', true);
+                else await refreshGroupsFromServer(uid);
             }
         }
         function startSocialListeners() {
@@ -2290,7 +2291,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const uid = state.user.uid;
             const generation = socialGeneration;
             try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
-            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') { console.warn('Проверь опубликованные Firestore Rules для groups: доступ к списку групп запрещён.'); refreshGroupsFromServer(uid); } else refreshGroupsOnce(uid); });
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') { console.warn('VoiceVibe: Firestore rules deny group membership list. Publish the supplied firestore.rules in Firebase Console.'); vvGroupLoadStatus('Нет доступа к группам: обнови Firestore Rules в Firebase Console.',true); } else refreshGroupsOnce(uid); });
             refreshGroupsOnce(uid);
             refreshGroupsFromServer(uid, true);
             // Real-time conversation order: newest message (sent or received) appears first.
@@ -2301,7 +2302,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     (data.participants||[]).filter(id=>id!==uid).forEach(id=>recentChatTimes.set(id, Math.max(recentChatTimes.get(id)||0, Number(data.updatedAt?.toMillis?.() || data.updatedAt || 0))));
                 });
                 renderChatFriends();
-            }, err => { console.warn('Conversation order listener:',err); renderChatFriends(); }));
+            }, err => { console.warn('Conversation order listener:',err); if(err?.code==='permission-denied') console.warn('Publish firestore.rules: conversations require a participants array containing the current uid.'); renderChatFriends(); }));
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
             // Approximate online users, measured by a heartbeat no older than 90 seconds.
