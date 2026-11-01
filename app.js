@@ -442,7 +442,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             setPeerStatus('connecting', 'Сеть...');
             const safeAgeTag = state.selectedAge.replace('+', 'plus');
-            const randomID = 'vr-' + safeAgeTag + '-' + Math.floor(100000 + Math.random() * 900000);
+            const randomID = 'vr-' + safeAgeTag + '-' + (crypto.randomUUID ? crypto.randomUUID().slice(0, 18) : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 
             state.peer = new Peer(randomID, {
                 debug: 1,
@@ -459,6 +459,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             state.peer.on('open', (id) => {
                 state.myPeerId = id;
+                if (state.peerReconnectTimer) { clearTimeout(state.peerReconnectTimer); state.peerReconnectTimer = null; }
+                if (state.pendingRouletteSearch) { state.pendingRouletteSearch = false; setTimeout(() => startSearch(), 0); }
                 if (state.user) setDoc(doc(db, 'peerSessions', id), { peerId:id, ownerUid:state.user.uid, updatedAt:Date.now() }).catch(e => console.warn('Peer session registration failed:', e));
                 setPeerStatus('ready', 'Готов к поиску');
             });
@@ -504,13 +506,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
                 state.peerReconnectTimer = setTimeout(() => {
                     if (state.peer && !state.peer.destroyed && state.peer.disconnected) {
-                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); }
+                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); initPeerJS(); }
                     }
                 }, 1200);
             });
             state.peer.on('error', (err) => {
                 console.error('PeerJS error:', err);
-                setPeerStatus('error', err?.type === 'network' ? 'Проблема сети' : 'Ошибка P2P');
+                setPeerStatus('error', err?.type === 'network' ? 'Проблема сети — повтор подключения' : 'Ошибка P2P — повторите поиск');
                 if (['network','socket-error','socket-closed'].includes(err?.type) && state.peer && !state.peer.destroyed) {
                     if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
                     state.peerReconnectTimer = setTimeout(() => { try { state.peer?.reconnect(); } catch (_) {} }, 1800);
@@ -527,7 +529,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // --- Realtime Firebase Matchmaker ---
         async function startSearch() {
-            if (!state.peer || !state.myPeerId || state.isConnected || state.isSearching || state.searchStarting) return;
+            if (state.isConnected || state.isSearching || state.searchStarting) return;
+            if (!state.peer || !state.myPeerId || state.peer.disconnected || state.peer.destroyed) {
+                state.pendingRouletteSearch = true;
+                setPeerStatus('connecting', 'Подключаем поиск…');
+                chatStatusTitle.textContent = 'Подключаемся к сети';
+                chatStatusDesc.textContent = 'Поиск начнётся автоматически после подключения.';
+                if (!state.peer || state.peer.destroyed) initPeerJS();
+                else if (state.peer.disconnected) { try { state.peer.reconnect(); } catch (_) { initPeerJS(); } }
+                return;
+            }
             state.searchStarting = true;
             if (btnStartSearch) { btnStartSearch.disabled = true; btnStartSearch.setAttribute('aria-busy','true'); }
 

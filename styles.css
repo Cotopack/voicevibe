@@ -533,3 +533,32 @@ header, #appHeader, .app-header {isolation:isolate}
 /* VoiceVibe: online count shown beneath mobile navigation */
 .vv-online-counter{display:flex;justify-content:center;align-items:center;gap:7px;font:600 11px/1.2 system-ui,sans-serif;color:#b9a9e9;padding:1px 0 3px;min-height:17px}
 .vv-online-dot{height:7px;width:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d3998a}
+
+/* VV mobile roulette controls: reserve actual bottom navigation height */
+@media (max-width: 767px) {
+  body { min-height: 100dvh; }
+  #screenChat:not(.hidden) {
+    box-sizing: border-box !important;
+    min-height: 0 !important;
+    height: auto !important;
+    flex: 1 0 auto !important;
+    justify-content: flex-start !important;
+    gap: 14px !important;
+    padding-bottom: calc(125px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  #screenChat:not(.hidden) > div:nth-child(2) {
+    margin-top: 24px !important;
+    margin-bottom: 24px !important;
+    flex: 1 0 auto !important;
+    min-height: 220px !important;
+  }
+  #screenChat:not(.hidden) > div:last-child {flex: 0 0 auto !important; margin-bottom: 0 !important;}
+  #screenChat #btnStartSearch {min-width: 0 !important; touch-action: manipulation;}
+  #screenChat #btnSkip {min-width: 0 !important;}
+  #bottomNav {z-index: 40 !important;}
+}
+@media (max-width: 380px) {
+  #screenChat:not(.hidden) {padding-inline: 10px !important;}
+  #screenChat > div:last-child {padding: 10px !important;}
+  #screenChat #btnStartSearch, #screenChat #btnSkip, #screenChat #btnPause {padding: 10px 8px !important; font-size: 12px !important;}
+}

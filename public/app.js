@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
-            getFirestore, 
+            getFirestore, getCountFromServer, 
             collection, 
             doc, 
             setDoc, 
@@ -249,6 +249,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.getElementById('profileNameInput').value = p.displayName || state.user?.displayName || '';
             document.getElementById('profileUsernameInput').value = p.username ? '@' + p.username : '';
             document.getElementById('profileBioInput').value = p.bio || '';
+            
             const preview = document.getElementById('profileEditAvatarPreview');
             if (preview) preview.innerHTML = avatarMarkup({...p,uid:state.user?.uid}, 'h-14 w-14');
             const removeAvatarButton = document.getElementById('btnRemoveAvatar');
@@ -441,7 +442,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             setPeerStatus('connecting', 'Сеть...');
             const safeAgeTag = state.selectedAge.replace('+', 'plus');
-            const randomID = 'vr-' + safeAgeTag + '-' + Math.floor(100000 + Math.random() * 900000);
+            const randomID = 'vr-' + safeAgeTag + '-' + (crypto.randomUUID ? crypto.randomUUID().slice(0, 18) : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 
             state.peer = new Peer(randomID, {
                 debug: 1,
@@ -458,6 +459,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
             state.peer.on('open', (id) => {
                 state.myPeerId = id;
+                if (state.peerReconnectTimer) { clearTimeout(state.peerReconnectTimer); state.peerReconnectTimer = null; }
+                if (state.pendingRouletteSearch) { state.pendingRouletteSearch = false; setTimeout(() => startSearch(), 0); }
                 if (state.user) setDoc(doc(db, 'peerSessions', id), { peerId:id, ownerUid:state.user.uid, updatedAt:Date.now() }).catch(e => console.warn('Peer session registration failed:', e));
                 setPeerStatus('ready', 'Готов к поиску');
             });
@@ -503,13 +506,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
                 state.peerReconnectTimer = setTimeout(() => {
                     if (state.peer && !state.peer.destroyed && state.peer.disconnected) {
-                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); }
+                        try { state.peer.reconnect(); } catch (e) { console.warn('Peer reconnect failed:', e); initPeerJS(); }
                     }
                 }, 1200);
             });
             state.peer.on('error', (err) => {
                 console.error('PeerJS error:', err);
-                setPeerStatus('error', err?.type === 'network' ? 'Проблема сети' : 'Ошибка P2P');
+                setPeerStatus('error', err?.type === 'network' ? 'Проблема сети — повтор подключения' : 'Ошибка P2P — повторите поиск');
                 if (['network','socket-error','socket-closed'].includes(err?.type) && state.peer && !state.peer.destroyed) {
                     if (state.peerReconnectTimer) clearTimeout(state.peerReconnectTimer);
                     state.peerReconnectTimer = setTimeout(() => { try { state.peer?.reconnect(); } catch (_) {} }, 1800);
@@ -526,7 +529,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // --- Realtime Firebase Matchmaker ---
         async function startSearch() {
-            if (!state.peer || !state.myPeerId || state.isConnected || state.isSearching || state.searchStarting) return;
+            if (state.isConnected || state.isSearching || state.searchStarting) return;
+            if (!state.peer || !state.myPeerId || state.peer.disconnected || state.peer.destroyed) {
+                state.pendingRouletteSearch = true;
+                setPeerStatus('connecting', 'Подключаем поиск…');
+                chatStatusTitle.textContent = 'Подключаемся к сети';
+                chatStatusDesc.textContent = 'Поиск начнётся автоматически после подключения.';
+                if (!state.peer || state.peer.destroyed) initPeerJS();
+                else if (state.peer.disconnected) { try { state.peer.reconnect(); } catch (_) { initPeerJS(); } }
+                return;
+            }
             state.searchStarting = true;
             if (btnStartSearch) { btnStartSearch.disabled = true; btnStartSearch.setAttribute('aria-busy','true'); }
 
@@ -1065,6 +1077,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             return `<span class="vv-avatar-story-wrap ${storyState ? `has-story ${storyState}` : ''}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="${storyState ? 'Открыть историю' : 'Аватар'}">${inner}</span>`;
         }
         document.getElementById('vvProfileEditAction')?.addEventListener('click',()=>document.getElementById('socialEditProfile')?.click());
+        // Chat avatars are decorative: do not intercept chat navigation to open a story/profile.
+        // Everywhere outside chats, avatarMarkup still retains its original click behavior.
+        function chatAvatarMarkup(profile, size='h-10 w-10') {
+            return avatarMarkup(profile, size)
+                .replace(/data-story-avatar=/g, 'data-chat-avatar=')
+                .replace(/role="button"/g, 'role="img"')
+                .replace(/tabindex="0"/g, 'tabindex="-1"');
+        }
+
         function renderSocialProfile() {
             if (!state.user) return;
             const rolePanel = document.getElementById('roleManagementPanel');
@@ -2203,6 +2224,34 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }, err => { console.warn('Conversation order listener:',err); renderChatFriends(); }));
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
+            // Approximate online users, measured by a heartbeat no older than 90 seconds.
+            const publicPresenceRef = doc(db, 'onlinePublic', uid);
+            const onlineCounterNode = document.getElementById('vvOnlineCountNumber');
+            const onlineCounterRefresh = async () => {
+                try {
+                    const cutoff = Date.now() - 90000;
+                    const snapshot = await getCountFromServer(query(collection(db, 'onlinePublic'), where('lastSeen', '>=', cutoff)));
+                    if (onlineCounterNode) onlineCounterNode.textContent = String(snapshot.data().count);
+                } catch (error) {
+                    console.warn('Online counter unavailable:', error);
+                    if (onlineCounterNode) onlineCounterNode.textContent = '—';
+                }
+            };
+            const publishPublicPresence = async () => {
+                try { await setDoc(publicPresenceRef, { uid, lastSeen: document.hidden ? 0 : Date.now() }); }
+                catch (error) { console.warn('Online heartbeat:', error); }
+                await onlineCounterRefresh();
+            };
+            publishPublicPresence();
+            const publicPresenceTimer = setInterval(publishPublicPresence, 30000);
+            const publicPresenceVisibility = () => publishPublicPresence();
+            document.addEventListener('visibilitychange', publicPresenceVisibility);
+            state.socialUnsubs.push(() => {
+                clearInterval(publicPresenceTimer);
+                document.removeEventListener('visibilitychange', publicPresenceVisibility);
+                setDoc(publicPresenceRef, { uid, lastSeen: 0 }).catch(() => {});
+                if (onlineCounterNode) onlineCounterNode.textContent = '—';
+            });
             const presenceRef = doc(db, 'presence', uid);
             const publishPresence = () => setDoc(presenceRef, { uid, online: !document.hidden, lastSeen: Date.now() }, { merge:true }).catch(err => console.warn('Presence update:', err));
             publishPresence();
@@ -2259,7 +2308,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function updateConversationPresence(uid) {
             const f = friendsCache.find(x => x.uid === uid) || {};
             const header = document.getElementById('conversationHeader');
-            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${avatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button><button type="button" id="vvChatCallButton" class="vv-friend-call-button ml-auto" aria-label="Позвонить другу" title="Позвонить другу"><i class="fa-solid fa-phone"></i><span class="hidden sm:inline">Позвонить</span></button></div>`;
+            if (header) header.innerHTML = `<div class="flex items-center gap-3"><button id="conversationBack" type="button" class="rounded-xl border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800" aria-label="Назад к друзьям"><i class="fa-solid fa-arrow-left"></i></button>${chatAvatarMarkup(f,'h-10 w-10')}<button type="button" id="conversationFriendProfile" class="min-w-0 text-left"><div class="font-semibold text-slate-100"><span class="${Number(f.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${Number(f.premiumUntil||0)>Date.now()?' 👑':''}</span> ${roleBadgeMarkup(uid)}</div><div class="text-xs text-violet-300">@${escapeHTML(f.username || 'user')}</div>${presenceLabel(uid)}</button><button type="button" id="vvChatCallButton" class="vv-friend-call-button ml-auto" aria-label="Позвонить другу" title="Позвонить другу"><i class="fa-solid fa-phone"></i><span class="hidden sm:inline">Позвонить</span></button></div>`;
             document.getElementById('conversationBack')?.addEventListener('click', closeConversation);
             document.getElementById('conversationFriendProfile')?.addEventListener('click', () => openFriendProfile(uid)); document.getElementById('vvChatCallButton')?.addEventListener('click',()=>startFriendCall(uid));
         }
@@ -2364,7 +2413,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const friendsHtml = sortedFriends.map(f => {
                 const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0)+vvMentionUnread(uid);
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
-                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${avatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${chatAvatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('<!--vv-chat-split-->');
             const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('<!--vv-chat-split-->');
             // One chronological list: groups must not remain pinned above recent private chats.
@@ -2798,7 +2847,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function vvReactionAvatarMarkup(uid){
             const profile=vvKnownReactionProfile(uid);
             const name=profile?.displayName||profile?.username||'Пользователь';
-            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" data-story-avatar="${escapeHTML(uid)}" role="button" tabindex="0" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
+            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
         }
         async function vvLoadReactionProfile(uid){
             const cached=vvReactionProfiles.get(uid);
@@ -2885,7 +2934,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             host.querySelectorAll('[data-playchallenge]').forEach(b=>b.addEventListener('click',()=>startSnake(b.dataset.playchallenge)));
             host.querySelectorAll('[data-message-id]').forEach(node=>{
                 let lastTap=0,touchStart=null,lastHeart=0;
-                const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',false);};
+                const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',true);};
                 node.addEventListener('dblclick',e=>{if(e.target.closest('button,a,input'))return;e.preventDefault();heart();});
                 node.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||e.target.closest('button,a,input'))return;touchStart={x:e.clientX,y:e.clientY,time:Date.now()};});
                 node.addEventListener('pointercancel',()=>{touchStart=null;lastTap=0;});
@@ -2896,7 +2945,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     if(lastTap&&now-lastTap<320){lastTap=0;heart();}else lastTap=now;
                 });
                 node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
-                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{node.querySelector('.vv-reaction-picker').hidden=true;vvSetMessageReaction(node,b.dataset.reaction);}));
+                node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{
+                    // A single tap on an existing reaction never removes it.
+                    // The picker can select/change an emoji, but only a double tap
+                    // on the message itself toggles the heart off.
+                    if(!b.closest('.vv-reaction-picker'))return;
+                    node.querySelector('.vv-reaction-picker').hidden=true;
+                    vvSetMessageReaction(node,b.dataset.reaction,false);
+                }));
             });
         }
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
