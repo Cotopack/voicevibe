@@ -1268,10 +1268,27 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(media)media.style.filter=vvFilterCss[vvStoryFilter]||'none';
             document.querySelectorAll('[data-vv-filter]').forEach(b=>b.classList.toggle('active',b.dataset.vvFilter===vvStoryFilter));
         }
+        const vvEditor=document.getElementById('storyCreateForm');
+        const vvCanvasText=document.getElementById('vvStoryCanvasText');
+        function vvStoryPanel(panel){
+            ['text','filters','music','publish'].forEach(n=>vvEditor?.classList.toggle('vv-panel-'+n,n===panel));
+            if(panel==='text')storyTextInput?.focus({preventScroll:true});
+        }
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-text')?'':'text'));
+        document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
+        document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-music')?'':'music'));
+        document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
+        document.getElementById('vvStoryChangeMedia')?.addEventListener('click',()=>storyGalleryInput?.click());
+        document.getElementById('vvStoryNextBtn')?.addEventListener('click',()=>vvStoryPanel('publish'));
+        storyTextInput?.addEventListener('input',()=>{if(vvCanvasText){vvCanvasText.textContent=storyTextInput.value;vvCanvasText.classList.toggle('hidden',!storyTextInput.value.trim());}});
+        let vvDrag=null;
+        vvCanvasText?.addEventListener('pointerdown',e=>{vvDrag={x:e.clientX,y:e.clientY,left:vvCanvasText.offsetLeft,top:vvCanvasText.offsetTop};vvCanvasText.setPointerCapture(e.pointerId);e.preventDefault();});
+        vvCanvasText?.addEventListener('pointermove',e=>{if(!vvDrag)return;const parent=vvCanvasText.offsetParent;if(!parent)return;vvCanvasText.style.left=Math.max(0,Math.min(parent.clientWidth-vvCanvasText.offsetWidth,vvDrag.left+e.clientX-vvDrag.x))+'px';vvCanvasText.style.top=Math.max(0,Math.min(parent.clientHeight-vvCanvasText.offsetHeight,vvDrag.top+e.clientY-vvDrag.y))+'px';vvCanvasText.style.transform='none';});
+        ['pointerup','pointercancel'].forEach(n=>vvCanvasText?.addEventListener(n,()=>vvDrag=null));
         document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
         document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
         document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
-        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');storyTextInput?.focus({preventScroll:true});});
+        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvStoryPanel('text');storyTextInput?.focus({preventScroll:true});});
         document.querySelectorAll('[data-vv-filter]').forEach(b=>b.addEventListener('click',()=>{vvStoryFilter=b.dataset.vvFilter;vvApplyStoryFilter();}));
         // Mention autocomplete; prefix search starts after two characters.
         let vvMentionSeq=0;
@@ -1496,7 +1513,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
-                if(file){vvStoryScreen('edit');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=true;media.muted=true;}preview.appendChild(media);vvApplyStoryFilter();}
+                if(file){vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=true;media.muted=true;}preview.appendChild(media);vvApplyStoryFilter();}
             }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {

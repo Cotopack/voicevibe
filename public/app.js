@@ -1070,7 +1070,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             // Hide Premium-only controls from non-Premium accounts; keep the purchase button visible.
             ['profileBannerFile','uploadProfileBannerBtn'].forEach(id => { const el=document.getElementById(id); if (!el) return; const wrapper=el.closest('[data-premium-only]') || el; if (wrapper && id !== 'buyPremiumBtn') wrapper.classList.toggle('hidden', !premium); });
             document.querySelectorAll('[data-premium-only]').forEach(el => el.classList.toggle('hidden', !premium));
-            const banner = document.getElementById('socialProfileBanner'); if (banner) { banner.style.backgroundImage = p.bannerURL ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(p.bannerURL).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !p.bannerURL); }
+            const banner = document.getElementById('socialProfileBanner'); if (banner) { banner.style.backgroundImage = (p.bannerURL||p.bannerUrl||p.coverURL) ? `linear-gradient(90deg,rgba(15,23,42,.08),rgba(15,23,42,.1)),url("${String(p.bannerURL||p.bannerUrl||p.coverURL).replace(/["\\]/g,'')}")` : ''; banner.classList.toggle('hidden', !(p.bannerURL||p.bannerUrl||p.coverURL)); }
         }
         function showTab(tab) {
             currentTab = tab;
@@ -1176,8 +1176,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const viewer = document.getElementById('storyViewer');
             if (!st || !viewer) return;
             const media = st.mediaType === 'video' && st.mediaURL
-                ? `<video src="${storyEscape(st.mediaURL)}" class="absolute inset-0 h-full w-full object-contain bg-transparent" autoplay playsinline controls preload="metadata"></video>`
-                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain"/>` : '';
+                ? `<video src="${storyEscape(st.mediaURL)}" style="filter:${storyMediaFilter}" class="absolute inset-0 h-full w-full object-contain bg-transparent" autoplay playsinline controls preload="metadata"></video>`
+                : st.mediaURL ? `<img src="${storyEscape(st.mediaURL)}" alt="История" style="filter:${storyMediaFilter}" decoding="async" fetchpriority="high" class="absolute inset-0 h-full w-full object-contain"/>` : '';
+            const storyMediaFilter={none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'}[st.storyFilter]||'none';
             const liked = Array.isArray(st.likes) && st.likes.includes(state.user.uid);
             const views = Array.isArray(st.views) ? st.views : [];
             const isOwnStory = st.uid === state.user?.uid;
@@ -1250,7 +1251,69 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
         document.getElementById('storiesClose')?.addEventListener('click', () => { closeStoryViewer(); storiesModal?.classList.add('hidden'); });
         storiesModal?.addEventListener('click', event => { if (event.target === storiesModal) { closeStoryViewer(); storiesModal.classList.add('hidden'); } });
-        document.getElementById('storyCreateToggle')?.addEventListener('click', () => { const opening=storyCreateForm?.classList.contains('hidden'); storyCreateForm?.classList.toggle('hidden'); storyStatus?.classList.add('hidden'); if (storiesList) storiesList.classList.toggle('hidden', !!opening); const btn=document.getElementById('storyCreateToggle'); if(btn) btn.innerHTML=opening ? '<i class="fa-solid fa-arrow-left"></i> Назад к историям' : '<i class="fa-solid fa-plus"></i> Добавить фото или видео'; if (opening) { storiesList?.classList.add('hidden'); storyTextInput?.focus({preventScroll:true}); } });
+        // Mobile-first story flow: chooser -> native gallery -> editor.
+        const vvStoryChoose = document.getElementById('vvStoryChoose');
+        const vvStoryFilterBox = document.getElementById('vvStoryFilterBox');
+        let vvStoryFilter = 'none';
+        const vvFilterCss = {none:'none',warm:'sepia(.25) saturate(1.35) contrast(1.05)',cool:'hue-rotate(18deg) saturate(1.15)',mono:'grayscale(1)',vivid:'saturate(1.8) contrast(1.12)',retro:'sepia(.55) contrast(.95)'};
+        function vvStoryScreen(screen){
+            vvStoryChoose?.classList.toggle('hidden',screen!=='choose');
+            storyCreateForm?.classList.toggle('hidden',screen!=='edit');
+            storiesList?.classList.toggle('hidden',screen!=='list');
+            const b=document.getElementById('storyCreateToggle');
+            if(b){b.classList.toggle('hidden',screen!=='list');b.innerHTML='<i class="fa-solid fa-plus"></i> Добавить историю';}
+        }
+        function vvApplyStoryFilter(){
+            const media=document.querySelector('#storyGalleryPreview img,#storyGalleryPreview video');
+            if(media)media.style.filter=vvFilterCss[vvStoryFilter]||'none';
+            document.querySelectorAll('[data-vv-filter]').forEach(b=>b.classList.toggle('active',b.dataset.vvFilter===vvStoryFilter));
+        }
+        const vvEditor=document.getElementById('storyCreateForm');
+        const vvCanvasText=document.getElementById('vvStoryCanvasText');
+        function vvStoryPanel(panel){
+            ['text','filters','music','publish'].forEach(n=>vvEditor?.classList.toggle('vv-panel-'+n,n===panel));
+            if(panel==='text')storyTextInput?.focus({preventScroll:true});
+        }
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-text')?'':'text'));
+        document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
+        document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-music')?'':'music'));
+        document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
+        document.getElementById('vvStoryChangeMedia')?.addEventListener('click',()=>storyGalleryInput?.click());
+        document.getElementById('vvStoryNextBtn')?.addEventListener('click',()=>vvStoryPanel('publish'));
+        storyTextInput?.addEventListener('input',()=>{if(vvCanvasText){vvCanvasText.textContent=storyTextInput.value;vvCanvasText.classList.toggle('hidden',!storyTextInput.value.trim());}});
+        let vvDrag=null;
+        vvCanvasText?.addEventListener('pointerdown',e=>{vvDrag={x:e.clientX,y:e.clientY,left:vvCanvasText.offsetLeft,top:vvCanvasText.offsetTop};vvCanvasText.setPointerCapture(e.pointerId);e.preventDefault();});
+        vvCanvasText?.addEventListener('pointermove',e=>{if(!vvDrag)return;const parent=vvCanvasText.offsetParent;if(!parent)return;vvCanvasText.style.left=Math.max(0,Math.min(parent.clientWidth-vvCanvasText.offsetWidth,vvDrag.left+e.clientX-vvDrag.x))+'px';vvCanvasText.style.top=Math.max(0,Math.min(parent.clientHeight-vvCanvasText.offsetHeight,vvDrag.top+e.clientY-vvDrag.y))+'px';vvCanvasText.style.transform='none';});
+        ['pointerup','pointercancel'].forEach(n=>vvCanvasText?.addEventListener(n,()=>vvDrag=null));
+        document.getElementById('storyCreateToggle')?.addEventListener('click',()=>vvStoryScreen('choose'));
+        document.getElementById('vvStoryChooseClose')?.addEventListener('click',()=>vvStoryScreen('list'));
+        document.getElementById('vvStoryEditorBack')?.addEventListener('click',()=>vvStoryScreen('choose'));
+        document.getElementById('vvStoryTextOnly')?.addEventListener('click',()=>{storyGalleryInput.value='';document.getElementById('storyGalleryPreview')?.classList.add('hidden');vvStoryFilterBox?.classList.add('hidden');vvStoryScreen('edit');vvStoryPanel('text');storyTextInput?.focus({preventScroll:true});});
+        document.querySelectorAll('[data-vv-filter]').forEach(b=>b.addEventListener('click',()=>{vvStoryFilter=b.dataset.vvFilter;vvApplyStoryFilter();}));
+        // Mention autocomplete; prefix search starts after two characters.
+        let vvMentionSeq=0;
+        const vvMentionResults=document.getElementById('vvStoryMentionResults');
+        storyTextInput?.addEventListener('input',async()=>{
+            const cursor=storyTextInput.selectionStart;
+            const before=storyTextInput.value.slice(0,cursor);
+            const match=before.match(/(?:^|\s)@([a-zA-Z0-9_.]{2,24})$/);
+            const seq=++vvMentionSeq;
+            if(!match){vvMentionResults?.classList.add('hidden');return;}
+            try{
+                const prefix=match[1].toLowerCase();
+                const q=query(collection(db,'users'),where('username','>=',prefix),where('username','<=',prefix+'\uf8ff'),limit(8));
+                const snap=await getDocs(q);
+                if(seq!==vvMentionSeq)return;
+                vvMentionResults.replaceChildren();
+                snap.docs.filter(d=>d.id!==state.user?.uid).forEach(d=>{
+                    const u=d.data(), name=String(u.username||'');if(!name)return;
+                    const button=document.createElement('button');button.type='button';button.className='vv-story-mention';button.textContent='@'+name+' · '+String(u.displayName||'Пользователь');
+                    button.addEventListener('click',()=>{const current=storyTextInput.value;const start=cursor-match[1].length-1;storyTextInput.value=current.slice(0,start)+'@'+name+' '+current.slice(cursor);const pos=start+name.length+2;storyTextInput.focus();storyTextInput.setSelectionRange(pos,pos);vvMentionResults.classList.add('hidden');});
+                    vvMentionResults.appendChild(button);
+                });
+                vvMentionResults.classList.toggle('hidden',!vvMentionResults.childElementCount);
+            }catch(e){console.warn('Story mention search:',e);vvMentionResults?.classList.add('hidden');}
+        });
         // Cloudinary catalog: music URLs are stored directly, no re-upload required.
         let vvCatalogTracks = [];
         let vvSelectedTrack = null;
@@ -1450,7 +1513,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if(preview){
                 if(preview.dataset.objectUrl)URL.revokeObjectURL(preview.dataset.objectUrl);
                 preview.replaceChildren();preview.classList.toggle('hidden',!file);
-                if(file){const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=true;media.muted=true;}preview.appendChild(media);}
+                if(file){vvStoryScreen('edit');vvStoryPanel('');vvStoryFilterBox?.classList.remove('hidden');const url=URL.createObjectURL(file);preview.dataset.objectUrl=url;const media=document.createElement(file.type.startsWith('video/')?'video':'img');media.src=url;if(media.tagName==='VIDEO'){media.controls=true;media.muted=true;}preview.appendChild(media);vvApplyStoryFilter();}
             }
         });
         document.getElementById('storyMusicPreviewPlay')?.addEventListener('click', async () => {
@@ -1501,8 +1564,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(vvSelectedTrack&&!music){musicURL=vvSelectedTrack.url;}
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
-                await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
-                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();storyCreateForm.classList.add('hidden');storiesList?.classList.remove('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
+                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();vvStoryScreen('list');vvStoryFilter='none';vvStoryFilterBox?.classList.add('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });
