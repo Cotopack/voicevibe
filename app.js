@@ -1208,6 +1208,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 <button id="storyPrev" class="absolute inset-y-24 left-0 z-10 w-1/5" aria-label="Предыдущая история"></button><button id="storyNext" class="absolute inset-y-24 right-0 z-10 w-1/5" aria-label="Следующая история"></button>
                 ${st.text ? `<div class="story-centered-text absolute inset-0 z-10 flex items-center justify-center px-6 py-24 sm:px-12 pointer-events-none"><div class="story-text-card mx-auto max-w-2xl whitespace-pre-wrap break-words text-center"><span class="story-text-card-label"><i class="fa-solid fa-sparkles mr-1"></i>История</span><p>${storyEscape(st.text).replace(/@([a-zA-Z0-9_.]{2,24})/g,'<button type="button" class="vv-story-profile-mention" data-mention-name="$1">@$1</button>')}</p></div></div>` : ''}
                 <div class="story-bottom-gradient absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">${music}<div class="mt-3 flex items-center justify-between gap-3">${ownerStats}<button id="storyLikeBtn" class="rounded-full bg-white/15 px-4 py-2 text-lg ${liked?'text-rose-400':''}" aria-label="Нравится"><i class="fa-${liked?'solid':'regular'} fa-heart"></i> ${likeCount}</button></div><form id="storyReplyForm" class="mt-3 flex gap-2"><input id="storyReplyInput" maxlength="300" placeholder="Написать что-то пользователю…" class="min-w-0 flex-1 rounded-full border border-white/30 bg-white/15 px-4 py-3 text-sm text-white placeholder:text-white/65 outline-none backdrop-blur-md"/><button class="rounded-full bg-white/20 px-4" aria-label="Отправить ответ"><i class="fa-solid fa-paper-plane"></i></button></form>${viewersList}</div></div>`;
+            if(Array.isArray(st.textLayers) && st.textLayers.length){
+                viewer.querySelector('.story-centered-text')?.remove();
+                for(const l of st.textLayers.slice(0,10)){
+                    if(typeof l.text!=='string')continue;
+                    const el=document.createElement('div');el.className='vv-published-text vv-published-layer';
+                    el.textContent=l.text;el.style.left=vvLimit(Number(l.x)||0,0,90)+'%';
+                    el.style.top=vvLimit(Number(l.y)||0,0,90)+'%';
+                    el.style.fontSize=vvLimit(Number(l.size)||28,14,140)+'px';
+                    el.style.color=/^#[a-f0-9]{6}$/i.test(l.color)?l.color:'#ffffff';
+                    el.style.fontWeight=l.bold?'700':'400';el.style.textAlign=l.align||'center';
+                    decorateStoryText(el,l.font,l.background,el.style.color);viewer.firstElementChild.append(el);
+                }
+            }
             const textCard = viewer.querySelector('.story-centered-text');
             if (textCard && st.textPosition?.version === 2) {
                 const cfg = st.textPosition;
@@ -1317,6 +1330,87 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         const vvEditor=document.getElementById('storyCreateForm');
         const vvCanvasText=document.getElementById('vvStoryCanvasText');
+        // Each finished text becomes an independent, editable layer.
+        const vvTextLayers=[];
+        let vvEditingLayer=-1;
+        const vvLayerHolder=document.createElement('div');
+        vvLayerHolder.id='vvStoryTextLayers';
+        vvEditor?.append(vvLayerHolder);
+        const vvLimit=(n,a,b)=>Math.max(a,Math.min(b,n));
+        function vvLayerSnapshot(node,layerIndex){
+            const rect=node.getBoundingClientRect(),base=vvEditor.getBoundingClientRect();
+            const cfg=layerIndex>=0?vvTextLayers[layerIndex]:vvTextSettings();
+            return {text:node.innerText.trim().slice(0,500),x:vvLimit(100*(rect.left-base.left)/base.width,0,90),
+              y:vvLimit(100*(rect.top-base.top)/base.height,0,90),size:vvLimit(Number(cfg.size)||28,14,140),
+              color:cfg.color||'#ffffff',bold:!!cfg.bold,align:cfg.align||'center',
+              font:cfg.font||'classic',background:!!cfg.background};
+        }
+        function vvRenderLayers(){
+            vvLayerHolder.replaceChildren();
+            vvTextLayers.forEach((layer,i)=>{
+                const node=document.createElement('div');node.className='vv-story-layer';
+                node.textContent=layer.text;node.dataset.layer=String(i);
+                node.style.left=layer.x+'%';node.style.top=layer.y+'%';
+                node.style.fontSize=layer.size+'px';node.style.color=layer.color;
+                node.style.fontWeight=layer.bold?'700':'400';node.style.textAlign=layer.align;
+                decorateStoryText(node,layer.font,layer.background,layer.color);
+                vvLayerHolder.append(node);
+                let gesture=null;
+                const coord=ts=>Array.from(ts).slice(0,2).map(t=>({x:t.clientX,y:t.clientY}));
+                const midpoint=pts=>({x:pts.reduce((sum,p)=>sum+p.x,0)/pts.length,y:pts.reduce((sum,p)=>sum+p.y,0)/pts.length});
+                const begin=e=>{const points=coord(e.touches);if(!points.length)return;
+                    const rect=node.getBoundingClientRect(),base=vvEditor.getBoundingClientRect(),center=midpoint(points);
+                    gesture={points:points.length,c:center,x:100*(rect.left-base.left)/base.width,
+                      y:100*(rect.top-base.top)/base.height,size:layer.size,
+                      dist:points.length===2?Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y):1,moved:false};
+                    e.preventDefault();};
+                node.addEventListener('touchstart',begin,{passive:false});
+                node.addEventListener('touchmove',e=>{if(!gesture)return;const points=coord(e.touches);
+                    if(points.length!==gesture.points){begin(e);return;}const c=midpoint(points),b=vvEditor.getBoundingClientRect();
+                    const dx=c.x-gesture.c.x,dy=c.y-gesture.c.y;
+                    const size=points.length===2?vvLimit(gesture.size*Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y)/gesture.dist,14,140):layer.size;
+                    layer.size=Math.round(size);node.style.fontSize=layer.size+'px';
+                    const safeTop=100*vvSafeTextTop(vvEditor)/b.height;
+                    const safeBottom=100*(vvSafeTextBottom(vvEditor)-node.offsetHeight)/b.height;
+                    layer.x=vvLimit(gesture.x+100*dx/b.width,0,Math.max(0,100-100*node.offsetWidth/b.width));
+                    layer.y=vvLimit(gesture.y+100*dy/b.height,safeTop,Math.max(safeTop,safeBottom));
+                    node.style.left=layer.x+'%';node.style.top=layer.y+'%';gesture.moved=true;e.preventDefault();
+                },{passive:false});
+                node.addEventListener('touchend',e=>{if(e.touches.length)begin(e);else gesture=null;},{passive:false});
+                node.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'||e.button!==0)return;
+                    const startX=e.clientX,startY=e.clientY,b=vvEditor.getBoundingClientRect(),x=layer.x,y=layer.y;
+                    node.setPointerCapture(e.pointerId);const move=ev=>{layer.x=vvLimit(x+100*(ev.clientX-startX)/b.width,0,90);
+                      layer.y=vvLimit(y+100*(ev.clientY-startY)/b.height,10,80);node.style.left=layer.x+'%';node.style.top=layer.y+'%';};
+                    node.addEventListener('pointermove',move);node.addEventListener('pointerup',()=>{node.removeEventListener('pointermove',move);},{once:true});
+                });
+                node.addEventListener('dblclick',()=>vvEditLayer(i));
+            });
+        }
+        function vvEditLayer(i){
+            const layer=vvTextLayers.splice(i,1)[0];if(!layer)return;
+            vvRenderLayers();vvEditingLayer=i;
+            vvCanvasText.textContent=layer.text;
+            vvCanvasText.style.transform='none';vvCanvasText.style.left=layer.x+'%';vvCanvasText.style.top=layer.y+'%';
+            document.getElementById('vvTextSize').value=String(layer.size);
+            document.getElementById('vvTextColor').value=layer.color;
+            document.getElementById('vvTextBold').checked=layer.bold;
+            document.getElementById('vvTextAlign').value=layer.align;
+            vvTextFont=layer.font;vvTextBackground=layer.background;
+            vvCanvasText.setAttribute('contenteditable','true');vvStoryPanel('text');applyTextSettings();
+        }
+        function vvCommitCurrentText(){
+            const text=vvCanvasText?.innerText.trim();
+            if(text && vvTextLayers.length<10){vvCanvasText.blur();const layer=vvLayerSnapshot(vvCanvasText,-1);
+                if(vvEditingLayer>=0)vvTextLayers.splice(Math.min(vvEditingLayer,vvTextLayers.length),0,layer);
+                else vvTextLayers.push(layer);
+            }
+            vvEditingLayer=-1;vvCanvasText.textContent='';vvCanvasText.classList.add('hidden');
+            vvCanvasText.setAttribute('contenteditable','false');
+            vvCanvasText.style.removeProperty('left');vvCanvasText.style.removeProperty('top');
+            vvCanvasText.style.removeProperty('transform');
+            vvRenderLayers();vvStoryPanel('');
+        }
+        function vvAllStoryText(){return vvTextLayers.map(l=>l.text).concat(vvCanvasText?.innerText.trim()||'').filter(Boolean).join('\n').slice(0,500);}
         const vvDeleteText=document.getElementById('vvStoryTextDelete');
         const vvDragText=document.getElementById('vvStoryTextDrag');
         const vvMusicPlayer=document.getElementById('storyMusicPreview');
@@ -1336,7 +1430,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvDeleteText?.classList.remove('hidden');vvDragText?.classList.remove('hidden');
             }
         }
-        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
+        document.getElementById('vvStoryTextTool')?.addEventListener('click',()=>{vvCanvasText.textContent='';vvCanvasText.style.removeProperty('left');vvCanvasText.style.removeProperty('top');vvCanvasText.style.removeProperty('transform');vvCanvasText?.setAttribute('contenteditable','true');vvStoryPanel('text');vvCanvasText?.focus({preventScroll:true});});
         document.getElementById('vvStoryFilterTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-filters')?'':'filters'));
         document.getElementById('vvStoryMusicTool')?.addEventListener('click',()=>vvStoryPanel(vvEditor.classList.contains('vv-panel-trim')?'':'trim'));
         document.getElementById('vvStorySongChip')?.addEventListener('click',()=>vvStoryPanel('music'));
@@ -1385,7 +1479,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvColorsTab')?.addEventListener('click',()=>{document.getElementById('vvFontChoices').hidden=true;document.getElementById('vvColorChoices').hidden=false;});
         document.getElementById('vvAlignCycle')?.addEventListener('click',()=>{const el=document.getElementById('vvTextAlign'),values=['center','left','right'];el.value=values[(values.indexOf(el.value)+1)%3];applyTextSettings();});
         document.getElementById('vvTextBackground')?.addEventListener('click',()=>{vvTextBackground=!vvTextBackground;applyTextSettings();});
-        document.getElementById('vvTextDone')?.addEventListener('click',()=>{vvSyncCanvasText();vvCanvasText.blur();vvCanvasText.setAttribute('contenteditable','false');vvCanvasText.style.touchAction='none';vvStoryPanel('');vvCanvasText.classList.toggle('hidden',!vvCanvasText.innerText.trim());vvKeepTextInSafeArea();});
+        document.getElementById('vvTextDone')?.addEventListener('click',vvCommitCurrentText);
         document.querySelector('.vv-text-settings')?.addEventListener('pointerdown',e=>{if(e.target.closest('button'))e.preventDefault();});
         function vvKeyboardPosition(){const v=window.visualViewport;document.documentElement.style.setProperty('--vv-keyboard',v?Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px':'0px');}
         window.visualViewport?.addEventListener('resize',vvKeyboardPosition);
@@ -1515,6 +1609,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('vvTextDone')?.addEventListener('click',()=>{storyTouch=null;vvTextPointers.clear();vvGesture=null;});
         // Each story is a fresh draft: never reuse text from the previous story.
         function vvResetStoryDraftText(){
+            vvTextLayers.length=0;vvLayerHolder.replaceChildren();vvEditingLayer=-1;
             if(storyTextInput)storyTextInput.value='';
             if(vvCanvasText){
                 vvCanvasText.textContent='';
@@ -1843,7 +1938,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         });
         storyCreateForm?.addEventListener('submit', async event => {
             event.preventDefault(); if (!state.user) return;
-            const text=(storyTextInput?.value||'').trim(); const gallery=storyGalleryInput?.files?.[0]||null; const image=gallery?.type.startsWith('image/')?gallery:null; const video=gallery?.type.startsWith('video/')?gallery:null; const music=null;
+            if(vvCanvasText?.innerText.trim())vvCommitCurrentText();
+            const text=vvAllStoryText(); const gallery=storyGalleryInput?.files?.[0]||null; const image=gallery?.type.startsWith('image/')?gallery:null; const video=gallery?.type.startsWith('video/')?gallery:null; const music=null;
             if(gallery&&!image&&!video){storyStatus.textContent='Выбери фото или видео из галереи.';storyStatus.classList.remove('hidden');return;}
             if(!text&&!image&&!video){storyStatus.textContent='Добавь текст, фото или видео.';storyStatus.classList.remove('hidden');return;}
             if(video&&!video.type.startsWith('video/')){storyStatus.textContent='Выбери видеофайл.';storyStatus.classList.remove('hidden');return;}
@@ -1859,12 +1955,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if(music) { storyStatus.textContent='Обрезаем выбранный фрагмент музыки…'; const start=Math.max(0,Number(musicStartInput?.value)||0); const length=Math.max(3,Math.min(10,Number(musicLengthInput?.value)||10)); const trimmedMusic=await trimMusicFile(music,start,length); storyStatus.textContent='Загружаем готовый аудиофрагмент…'; musicURL=await uploadStoryMedia(trimmedMusic,'audio'); }
                 const now=Date.now();
                 const taggedUsers=await vvResolveMentionUids(text);
-                const storyRef = await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:vvTextSettings(),mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
+                const storyRef = await addDoc(collection(db,'stories'),{uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||'',photoURL:state.userProfile?.photoURL||state.user.photoURL||'',text:text.slice(0,500),mediaURL,mediaType,musicURL,musicStart:vvSelectedTrack&&!music?Math.max(0,Number(musicStartInput?.value)||0):0,musicLength:vvSelectedTrack&&!music?Math.max(3,Number(musicLengthInput?.value)||10):10,musicFade:!!vvMusicFade?.checked,storyFilter:vvStoryFilter,textPosition:{x:0,y:0},textLayers:vvTextLayers.slice(0,10),mentions:taggedUsers.map(x=>x.username),mentionedUids:taggedUsers.map(x=>x.uid),likes:[],views:[],replies:[],createdAt:now,expiresAt:now+24*60*60*1000});
                 for(const target of taggedUsers){
                     try{await setDoc(doc(db,'users',target.uid,'storyMentions',storyRef.id),{storyId:storyRef.id,fromUid:state.user.uid,fromUsername:state.userProfile?.username||'',recipientUid:target.uid,createdAt:now,expiresAt:now+86400000});}
                     catch(e){console.warn('Could not notify tagged user',target.uid,e);}
                 }
-                storyTextInput.value='';storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicApplied=false;vvMusicPlayer?.pause();vvCanvasText.textContent='';vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();vvStoryScreen('list');vvStoryFilter='none';vvStoryFilterBox?.classList.add('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
+                vvResetStoryDraftText();storyGalleryInput.value='';document.getElementById('storyGalleryName').textContent='Файл не загружен';const galleryPreview=document.getElementById('storyGalleryPreview');if(galleryPreview){if(galleryPreview.dataset.objectUrl)URL.revokeObjectURL(galleryPreview.dataset.objectUrl);galleryPreview.replaceChildren();galleryPreview.classList.add('hidden');}if(musicStartInput)musicStartInput.value='0';if(musicLengthInput)musicLengthInput.value='10';setMusicPreviewFile(null);vvSelectedTrack=null;vvMusicApplied=false;vvMusicPlayer?.pause();vvCanvasText.textContent='';vvCanvasText.classList.add('hidden');vvDeleteText?.classList.add('hidden');vvDragText?.classList.add('hidden');document.getElementById('vvStorySongChip').textContent='♫ Музыка';vvMusicSelected?.classList.add('hidden');vvMusicClear?.classList.add('hidden');vvRenderCatalog();updateMusicTrimLabel();vvStoryScreen('list');vvStoryFilter='none';vvStoryFilterBox?.classList.add('hidden');const createBtn=document.getElementById('storyCreateToggle');if(createBtn)createBtn.innerHTML='<i class="fa-solid fa-plus"></i> Добавить фото или видео';await refreshStories();
             } catch(err){console.error('Publish story failed:',err);storyStatus.textContent=err?.message||'Не удалось опубликовать. Проверь настройки Cloudinary и Firestore Rules.';storyStatus.classList.remove('hidden');}
             finally{state.storyUploading=false;storyPublishBtn.disabled=false;storyPublishBtn.removeAttribute('aria-busy');storyPublishBtn.classList.remove('vv-loading-button');storyPublishBtn.textContent='Опубликовать';}
         });

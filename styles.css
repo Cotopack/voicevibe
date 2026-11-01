@@ -449,3 +449,5 @@ header, #appHeader, .app-header {isolation:isolate}
 #storyCreateForm #vvStoryCanvasText{max-height:calc(100dvh - 235px)!important;overflow-wrap:anywhere!important;}
 #storyCreateForm .vv-story-editor-title{z-index:120!important;pointer-events:auto!important;}
 #storyCreateForm #vvStorySongChip{position:relative;z-index:121!important;pointer-events:auto!important;}
+
+#vvStoryTextLayers{position:absolute;inset:0;pointer-events:none;z-index:32}#vvStoryTextLayers .vv-story-layer{position:absolute;max-width:85%;width:max-content;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:auto;touch-action:none!important;user-select:none!important;-webkit-user-select:none!important;line-height:1.2;cursor:grab}.vv-published-layer{max-width:85%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.2;pointer-events:none}#vvStoryTextTool small{display:block}
