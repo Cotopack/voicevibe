@@ -1331,7 +1331,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         const vvEditor=document.getElementById('storyCreateForm');
         const vvCanvasText=document.getElementById('vvStoryCanvasText');
-        // VoiceVibe story build: 20261101-chat-reactions-6.
+        // VoiceVibe story build: 20261101-reaction-avatars-7.
         // Each finished text becomes an independent, editable layer.
         const vvTextLayers=[];
         let vvEditingLayer=-1;
@@ -1735,7 +1735,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 alert('Репост опубликован!');storiesModal?.classList.remove('hidden');await refreshStories();
             }catch(e){console.error(e);alert('Не удалось сделать репост. Проверь Firestore Rules.');}
         }
-        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];return;}setTimeout(vvWatchMentionInbox,1500);});
+        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);});
         // Cloudinary catalog: music URLs are stored directly, no re-upload required.
         let vvCatalogTracks = [];
         let vvSelectedTrack = null;
@@ -2671,6 +2671,61 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             for(const emoji of Object.values(reactions||{}))if(vvReactionEmojis.includes(emoji))counts.set(emoji,(counts.get(emoji)||0)+1);
             return [...counts];
         }
+        const vvReactionProfiles=new Map();
+        const vvReactionProfileLoads=new Map();
+        function vvKnownReactionProfile(uid){
+            if(uid===state.user?.uid)return state.userProfile||state.user;
+            return vvReactionProfiles.get(uid)||friendsCache.find(f=>(f.uid||f.id)===uid)||null;
+        }
+        function vvReactionAvatarContent(profile){
+            const name=profile?.displayName||profile?.username||'Пользователь';
+            const url=String(profile?.photoURL||'');
+            const initial=Array.from(name.trim())[0]||'?';
+            return /^https?:\/\//i.test(url)
+                ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" referrerpolicy="no-referrer"><span class="vv-reaction-initial" aria-hidden="true">${escapeHTML(initial.toUpperCase())}</span>`
+                : `<span class="vv-reaction-initial">${escapeHTML(initial.toUpperCase())}</span>`;
+        }
+        function vvReactionAvatarMarkup(uid){
+            const profile=vvKnownReactionProfile(uid);
+            const name=profile?.displayName||profile?.username||'Пользователь';
+            return `<span class="vv-reaction-avatar" data-reaction-user="${escapeHTML(uid)}" title="${escapeHTML(name)}" aria-label="${escapeHTML(name)}">${vvReactionAvatarContent(profile)}</span>`;
+        }
+        async function vvLoadReactionProfile(uid){
+            const cached=vvReactionProfiles.get(uid);
+            if(cached)return cached;
+            if(!vvReactionProfileLoads.has(uid)){
+                const load=getDoc(doc(db,'users',uid)).then(snap=>{
+                    const profile=snap.exists()?snap.data():{displayName:'Пользователь'};
+                    vvReactionProfiles.set(uid,profile);return profile;
+                }).finally(()=>vvReactionProfileLoads.delete(uid));
+                vvReactionProfileLoads.set(uid,load);
+            }
+            return vvReactionProfileLoads.get(uid);
+        }
+        async function vvHydrateReactionAvatars(host){
+            const owner=state.user?.uid;if(!owner)return;
+            const nodes=[...host.querySelectorAll('[data-reaction-user]')];
+            const byUser=new Map();
+            for(const node of nodes){const uid=node.dataset.reactionUser;if(!byUser.has(uid))byUser.set(uid,[]);byUser.get(uid).push(node);}
+            const queue=[...byUser.keys()];
+            const decorate=node=>node.querySelector('img')?.addEventListener('error',e=>e.currentTarget.remove(),{once:true});
+            nodes.forEach(decorate);
+            async function worker(){
+                while(queue.length&&state.user?.uid===owner){
+                    const uid=queue.shift();
+                    try{
+                        const profile=uid===owner?vvKnownReactionProfile(uid):await vvLoadReactionProfile(uid);
+                        if(state.user?.uid!==owner)return;
+                        for(const node of byUser.get(uid)){
+                            if(!node.isConnected)continue;
+                            const name=profile?.displayName||profile?.username||'Пользователь';
+                            node.innerHTML=vvReactionAvatarContent(profile);node.title=name;node.setAttribute('aria-label',name);decorate(node);
+                        }
+                    }catch(e){console.warn('Reaction avatar unavailable:',e?.code||'network');}
+                }
+            }
+            await Promise.all(Array.from({length:Math.min(4,queue.length)},()=>worker()));
+        }
         function vvRenderChatMessage(m,scope,chatId){
             const mine=m.senderUid===state.user.uid;
             const sender=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);
@@ -2678,7 +2733,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const reactions=m.reactions||{};
             let body=m.type==='sticker'?`<img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain">`:`<p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p>`;
             if(m.type==='snake-challenge')body+=`<button data-playchallenge="${escapeHTML(m.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2">🎮 Играть</button>`;
-            return `<div class="vv-message-row ${mine?'vv-message-mine':''}"><div class="vv-message-bubble" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionCounts(reactions).map(([e,n])=>`<button type="button" data-reaction="${e}" class="${reactions[state.user.uid]===e?'selected':''}">${e} ${n}</button>`).join('')}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div></div></div>`;
+            return `<div class="vv-message-row ${mine?'vv-message-mine':''}"><div class="vv-message-bubble" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionCounts(reactions).map(([e,n])=>`<button type="button" data-reaction="${e}" class="${reactions[state.user.uid]===e?'selected':''}"><span>${e}</span><span class="vv-reaction-avatars">${Object.entries(reactions).filter(([,emoji])=>emoji===e).map(([uid])=>vvReactionAvatarMarkup(uid)).join('')}</span>${n>1?`<span class="vv-reaction-total">${n}</span>`:''}</button>`).join('')}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div></div></div>`;
         }
         function vvRenderMention(m){
             const expired=Number(m.expiresAt)<=Date.now();
@@ -2714,6 +2769,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             finally{vvReactionBusy.delete(key);}
         }
         function vvBindMessageActions(host){
+            void vvHydrateReactionAvatars(host);
             host.querySelectorAll('[data-chat-story]').forEach(b=>b.addEventListener('click',()=>vvOpenMentionStory(b.dataset.chatStory)));
             host.querySelectorAll('[data-chat-repost]').forEach(b=>b.addEventListener('click',()=>vvRepostMention(b.dataset.chatRepost)));
             host.querySelectorAll('[data-playchallenge]').forEach(b=>b.addEventListener('click',()=>startSnake(b.dataset.playchallenge)));

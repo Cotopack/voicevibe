@@ -473,3 +473,10 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-reaction-counts{display:flex;gap:5px;flex-wrap:wrap}.vv-reaction-counts button{padding:3px 8px;background:#ffffff15;border:1px solid #ffffff30;border-radius:20px;font-size:12px}.vv-reaction-counts button.selected{background:#f5d0fe33;border-color:#f0abfc}
 .vv-reaction-picker:not([hidden]){display:flex;gap:3px;flex-wrap:wrap;margin-top:8px;padding:6px;background:#100c25;border-radius:14px}.vv-reaction-picker button{font-size:22px;padding:5px;min-width:36px;min-height:38px}
 .vv-chat-mention{margin:12px 0;padding:16px;max-width:90%;border:1px solid #a78bfa55;background:linear-gradient(135deg,#2d1b50,#17132d);border-radius:18px;color:#ede9fe}.vv-chat-mention p{font-size:13px;margin:7px 0}.vv-chat-mention small{display:block;margin-top:10px;opacity:.6;font-size:10px}.vv-mention-hint{font-size:12px;padding:12px;color:#c4b5fd}
+
+/* Reaction authors: real profile photos, with initials as a fallback. */
+.vv-reaction-counts button{display:inline-flex;align-items:center;gap:5px;max-width:100%;min-height:30px}
+.vv-reaction-avatars{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px;min-width:0}
+.vv-reaction-avatar{position:relative;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:0 0 22px;overflow:hidden;border-radius:50%;border:1px solid #ffffffa0;background:#5b21b6;color:white;vertical-align:middle}
+.vv-reaction-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.vv-reaction-initial{font-size:10px;font-weight:700;line-height:1}.vv-reaction-total{font-size:11px;opacity:.85}
