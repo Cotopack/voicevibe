@@ -614,3 +614,30 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-composer-action{min-width:48px;height:48px;display:grid;place-items:center;border-radius:14px}.vv-composer-action.is-voice-mode{background:linear-gradient(135deg,#6d28d9,#9333ea)}.vv-composer-action.is-send-mode{background:linear-gradient(135deg,#7c3aed,#ec4899)}.vv-composer-action.is-recording{background:linear-gradient(135deg,#be123c,#e11d48)}
 
 @media(max-width:400px){.vv-voice-message{max-width:245px}.vv-voice-play{width:34px;height:34px}#messageForm{gap:6px!important;padding:8px!important}.vv-composer-action{min-width:44px;height:44px}}
+
+/* Chat layout 2026-11-02: maximize message space without overlapping controls. */
+#socialChatsPanel.chat-open #conversationPane{display:flex!important;flex-direction:column!important;min-height:0!important;overflow:hidden!important}
+#socialChatsPanel.chat-open #conversationHeader{flex:0 0 auto!important;padding:9px 12px!important;min-height:54px!important}
+#socialChatsPanel.chat-open #messagesList{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;scroll-behavior:auto!important;padding:10px 12px 14px!important;overscroll-behavior:contain!important}
+#socialChatsPanel.chat-open #messageForm{flex:0 0 auto!important;min-width:0!important;align-items:center!important;padding:8px 12px 10px!important;gap:8px!important;margin:0!important;background:#101025!important}
+#socialChatsPanel.chat-open #messageInput{flex:1 1 auto!important;min-width:0!important;height:44px!important;box-sizing:border-box!important;padding:10px 12px!important;font-size:16px!important}
+#socialChatsPanel.chat-open #sendMessageBtn{flex:0 0 46px!important;min-width:46px!important;width:46px!important;height:44px!important;padding:0!important;touch-action:none!important;user-select:none!important}
+#socialChatsPanel.chat-open #stickersPanel{flex:0 0 auto!important;max-height:min(150px,28dvh)!important;overflow-y:auto!important}
+#socialChatsPanel.chat-open #vvVoicePanel:not(.hidden){flex:0 0 auto!important}
+#socialChatsPanel.chat-open .vv-chat-tools{flex:0 0 auto;border-top:1px solid rgba(148,163,184,.18);background:#101025;color:#d8b4fe}
+#socialChatsPanel.chat-open .vv-chat-tools summary{display:flex;gap:8px;align-items:center;justify-content:center;min-height:30px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:650;list-style:none;user-select:none}
+#socialChatsPanel.chat-open .vv-chat-tools summary::-webkit-details-marker{display:none}
+#socialChatsPanel.chat-open .vv-chat-tools .vv-chat-tools-chevron{font-size:9px;transition:transform .15s}
+#socialChatsPanel.chat-open .vv-chat-tools[open] .vv-chat-tools-chevron{transform:rotate(180deg)}
+#socialChatsPanel.chat-open .vv-chat-tools-items{display:flex;gap:7px;flex-wrap:wrap;align-items:center;justify-content:flex-start;padding:8px 12px 10px;border-top:1px solid rgba(148,163,184,.12);max-height:min(108px,20dvh);overflow-y:auto;overscroll-behavior:contain}
+#socialChatsPanel.chat-open .vv-chat-tools-items input[type="file"]{display:none!important}
+#socialChatsPanel.chat-open .vv-chat-tools-items>button,
+#socialChatsPanel.chat-open .vv-chat-tools-items>label{display:inline-flex;align-items:center;min-height:34px;max-width:100%;padding:6px 9px;border-radius:10px;font-size:11px;white-space:normal;line-height:1.25}
+#socialChatsPanel.chat-open .vv-chat-tools-items .hidden{display:none!important}
+#socialChatsPanel.chat-open #vvVoiceHoldBtn{display:none!important}
+@media(max-width:400px){
+ #socialChatsPanel.chat-open #conversationHeader{padding:7px 9px!important;min-height:50px!important}
+ #socialChatsPanel.chat-open #messagesList{padding:7px 8px 12px!important}
+ #socialChatsPanel.chat-open #messageForm{padding:7px 8px 9px!important;gap:6px!important}
+ #socialChatsPanel.chat-open #sendMessageBtn{flex-basis:42px!important;width:42px!important;min-width:42px!important;height:42px!important}
+}
