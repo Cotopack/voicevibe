@@ -42,7 +42,7 @@ service cloud.firestore {
       return m.type == 'voice'
         && m.keys().hasOnly([
           'senderUid', 'text', 'type', 'createdAt',
-          'clientMessageId', 'audioURL', 'durationSec', 'waveform'
+          'clientMessageId', 'audioURL', 'durationSec', 'waveform', 'replyTo'
         ])
         && m.keys().hasAll([
           'senderUid', 'text', 'type', 'createdAt',
@@ -58,6 +58,7 @@ service cloud.firestore {
         && m.audioURL is string
         && m.audioURL.size() <= 2048
         && m.audioURL.matches('https://res[.]cloudinary[.]com/yvoqyrj8/video/upload/.*')
+        && validReplyFields()
         && (
           !m.keys().hasAny(['clientMessageId'])
           || (
@@ -67,8 +68,73 @@ service cloud.firestore {
         );
     }
 
+    function validReplyFields() {
+      let m=request.resource.data;
+      return !m.keys().hasAny(['replyTo']) || (
+        m.replyTo is map
+        && m.replyTo.keys().hasOnly(['id','senderName','text','senderUid'])
+        && m.replyTo.keys().hasAll(['id','senderName','text','senderUid'])
+        && m.replyTo.id is string && m.replyTo.id.size() <= 200
+        && m.replyTo.senderName is string && m.replyTo.senderName.size() <= 80
+        && m.replyTo.senderUid is string && m.replyTo.senderUid.size() <= 128
+        && m.replyTo.text is string && m.replyTo.text.size() <= 160
+      );
+    }
+    function validForwardFields() {
+      let m=request.resource.data;
+      return !m.keys().hasAny(['forwardedFrom']) || (
+        m.forwardedFrom is string && m.forwardedFrom.size() <= 80
+      );
+    }
+    function validEdit() {
+      return signedIn()
+        && resource.data.senderUid == request.auth.uid
+        && resource.data.type == 'text'
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.editedAt is int
+        && request.resource.data.editedAt >= resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text','editedAt']);
+    }
+    function validPin() {
+      let p=request.resource.data.pinnedMessage;
+      return p == null || (
+        p is map && p.keys().hasOnly(['id','text','senderUid'])
+        && p.keys().hasAll(['id','text','senderUid'])
+        && p.id is string && p.id.size() <= 200
+        && p.text is string && p.text.size() <= 160
+        && p.senderUid is string && p.senderUid.size() <= 128
+      );
+    }
+    function validSelfReceipt() {
+      let b=resource.data.get('readAt',{});
+      let a=request.resource.data.readAt;
+      return a is map && b is map
+        && a.diff(b).affectedKeys().hasOnly([request.auth.uid])
+        && a[request.auth.uid] is int && a[request.auth.uid] >= 0
+        && a[request.auth.uid] <= request.time.toMillis() + 60000;
+    }
+
+    function validSelfDelivery() {
+      let b=resource.data.get('deliveredAt',{});
+      let a=request.resource.data.deliveredAt;
+      return a is map && b is map
+        && a.diff(b).affectedKeys().hasOnly([request.auth.uid])
+        && a[request.auth.uid] is int && a[request.auth.uid] >= 0
+        && a[request.auth.uid] <= request.time.toMillis() + 60000;
+    }
+
     function isMe(uid) {
       return signedIn() && request.auth.uid == uid;
+    }
+    function isModerator() {
+      return signedIn() && (
+        request.auth.uid == 'NL0ho7jXHmSswotGoe5H5wpA5X43'
+        || (
+          exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == 'admin'
+        )
+      );
     }
 
     function isAdmin() {
@@ -909,6 +975,22 @@ service cloud.firestore {
           || request.resource.data.wallpaperURL is string
         );
 
+      // Дополнительные ограниченные изменения: закрепление и отметка прочтения.
+      allow update: if signedIn()
+        && resource.data.participants is list
+        && request.auth.uid in resource.data.participants
+        && request.resource.data.participants == resource.data.participants
+        && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinnedMessage'])
+            && request.resource.data.keys().hasAny(['pinnedMessage']) && validPin())
+          ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+            && validSelfReceipt())
+          ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deliveredAt'])
+            && validSelfDelivery())
+        );
+
       // ПРАВИЛО ДОСТУПА: delete.
       // Проверка выполняется сервером Firestore для каждого запроса.
       // Условия ниже определяют, кому разрешена эта операция.
@@ -929,6 +1011,13 @@ service cloud.firestore {
               request.auth.uid
             ]);
         }
+        function blockedConversation() {
+          let members=get(/databases/$(database)/documents/conversations/$(chatId)).data.participants;
+          let other=members[0] == request.auth.uid ? members[1] : members[0];
+          return exists(/databases/$(database)/documents/users/$(request.auth.uid)/blocked/$(other))
+            || exists(/databases/$(database)/documents/users/$(other)/blocked/$(request.auth.uid));
+        }
+
 
         // ПРАВИЛО ДОСТУПА: read.
         // Проверка выполняется сервером Firestore для каждого запроса.
@@ -940,7 +1029,7 @@ service cloud.firestore {
         // Проверка выполняется сервером Firestore для каждого запроса.
         // Условия ниже определяют, кому разрешена эта операция.
         // Отказ в доступе не обходится изменением интерфейса сайта.
-        allow create: if participant()
+        allow create: if participant() && !blockedConversation()
           && (!request.resource.data.keys().hasAny(['reactions']) || request.resource.data.reactions == {})
           && request.resource.data.senderUid
             == request.auth.uid
@@ -954,6 +1043,9 @@ service cloud.firestore {
             'voice'
           ]
           && (request.resource.data.type != 'voice' || validVoiceNote())
+          && validReplyFields()
+          && validForwardFields()
+          && (!request.resource.data.keys().hasAny(['forwardedFrom']) || request.resource.data.type in ['text','sticker'])
           && (
             request.resource.data.type != 'sticker'
             || get(
@@ -965,7 +1057,7 @@ service cloud.firestore {
         // Проверка выполняется сервером Firestore для каждого запроса.
         // Условия ниже определяют, кому разрешена эта операция.
         // Отказ в доступе не обходится изменением интерфейса сайта.
-        allow update: if participant() && validReactionUpdate();
+        allow update: if participant() && (validReactionUpdate() || validEdit());
         // ПРАВИЛО ДОСТУПА: delete.
         // Проверка выполняется сервером Firestore для каждого запроса.
         // Условия ниже определяют, кому разрешена эта операция.
@@ -1037,6 +1129,16 @@ service cloud.firestore {
           || request.resource.data.wallpaperURL is string
         );
 
+      // Участник может закреплять сообщение, но не менять состав группы.
+      allow update: if signedIn() && resource.data.members is list
+        && request.auth.uid in resource.data.members
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinnedMessage'])
+        && request.resource.data.keys().hasAny(['pinnedMessage'])
+        && validPin();
+
       // ПРАВИЛО ДОСТУПА: delete.
       // Проверка выполняется сервером Firestore для каждого запроса.
       // Условия ниже определяют, кому разрешена эта операция.
@@ -1082,6 +1184,9 @@ service cloud.firestore {
           ]
           && request.resource.data.createdAt is int
           && (request.resource.data.type != 'voice' || validVoiceNote())
+          && validReplyFields()
+          && validForwardFields()
+          && (!request.resource.data.keys().hasAny(['forwardedFrom']) || request.resource.data.type in ['text','sticker'])
           && (
             request.resource.data.type != 'sticker'
             || get(
@@ -1093,7 +1198,7 @@ service cloud.firestore {
         // Проверка выполняется сервером Firestore для каждого запроса.
         // Условия ниже определяют, кому разрешена эта операция.
         // Отказ в доступе не обходится изменением интерфейса сайта.
-        allow update: if groupMember() && validReactionUpdate();
+        allow update: if groupMember() && (validReactionUpdate() || validEdit());
         // ПРАВИЛО ДОСТУПА: delete.
         // Проверка выполняется сервером Firestore для каждого запроса.
         // Условия ниже определяют, кому разрешена эта операция.
@@ -1140,6 +1245,98 @@ service cloud.firestore {
       // Условия ниже определяют, кому разрешена эта операция.
       // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update, delete: if false;
+    }
+
+    // Дополнительные безопасные подколлекции пользовательских настроек.
+    match /users/{ownerUid}/blocked/{targetUid} {
+      allow get, list: if isMe(ownerUid);
+      allow create, update: if isMe(ownerUid)
+        && ownerUid != targetUid
+        && request.resource.data.keys().hasOnly(['targetUid','createdAt'])
+        && request.resource.data.targetUid == targetUid
+        && request.resource.data.createdAt is int;
+      allow delete: if isMe(ownerUid);
+    }
+    match /users/{ownerUid}/settings/{settingId} {
+      allow get: if isMe(ownerUid);
+      allow list: if false;
+      allow create, update: if isMe(ownerUid) && settingId == 'privacy'
+        && request.resource.data.keys().hasOnly(['readReceipts'])
+        && request.resource.data.readReceipts is bool;
+      allow delete: if false;
+    }
+    match /conversations/{chatId}/typing/{userId} {
+      function typeMember() {
+        return signedIn() && get(/databases/$(database)/documents/conversations/$(chatId)).data.participants.hasAny([request.auth.uid]);
+      }
+      allow get: if typeMember();
+      allow list: if false;
+      allow create, update: if typeMember() && isMe(userId)
+        && request.resource.data.keys().hasOnly(['active','updatedAt'])
+        && request.resource.data.active is bool
+        && request.resource.data.updatedAt is int
+        && request.resource.data.updatedAt <= request.time.toMillis()+60000;
+      allow delete: if typeMember() && isMe(userId);
+    }
+    match /reports/{reportId} {
+      allow get, list: if isModerator();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['reporterUid','targetUid','reason','createdAt','scope','chatId','messageId'])
+        && request.resource.data.keys().hasAll(['reporterUid','targetUid','reason','createdAt','scope','chatId','messageId'])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.targetUid is string
+        && request.resource.data.targetUid.size() <= 128
+        && request.resource.data.targetUid != request.auth.uid
+        && request.resource.data.reason in ['spam','harassment','inappropriate','other']
+        && request.resource.data.createdAt is int
+        && request.resource.data.createdAt <= request.time.toMillis()+60000
+        && request.resource.data.scope in ['conversations','groups']
+        && request.resource.data.chatId is string
+        && request.resource.data.chatId.size() <= 200
+        && request.resource.data.messageId is string
+        && request.resource.data.messageId.size() <= 200;
+      allow update, delete: if false;
+    }
+
+    // ==============================
+    // ОБРАЩЕНИЯ В ПОДДЕРЖКУ: ПОЛЬЗОВАТЕЛЬ + МОДЕРАТОРЫ
+    // ==============================
+    match /supportThreads/{userId} {
+      allow get: if isMe(userId) || isModerator();
+      // Users must not list other people's support conversations.
+      allow list: if isModerator();
+      allow create: if (isMe(userId) || isModerator())
+        && request.resource.data.keys().hasOnly(['userUid','createdAt','updatedAt','lastMessage'])
+        && request.resource.data.keys().hasAll(['userUid','createdAt','updatedAt','lastMessage'])
+        && request.resource.data.userUid == userId
+        && request.resource.data.createdAt is int
+        && request.resource.data.updatedAt is int
+        && request.resource.data.updatedAt >= request.resource.data.createdAt
+        && request.resource.data.createdAt <= request.time.toMillis() + 60000
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessage.size() <= 140;
+      allow update: if (isMe(userId) || isModerator())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt','lastMessage'])
+        && request.resource.data.updatedAt is int
+        && request.resource.data.updatedAt >= resource.data.updatedAt
+        && request.resource.data.updatedAt <= request.time.toMillis() + 60000
+        && request.resource.data.lastMessage is string
+        && request.resource.data.lastMessage.size() <= 140;
+      allow delete: if false;
+      match /messages/{messageId} {
+        allow get, list: if isMe(userId) || isModerator();
+        allow create: if (isMe(userId) || isModerator())
+          && exists(/databases/$(database)/documents/supportThreads/$(userId))
+          && request.resource.data.keys().hasOnly(['senderUid','text','createdAt'])
+          && request.resource.data.keys().hasAll(['senderUid','text','createdAt'])
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt is int
+          && request.resource.data.createdAt <= request.time.toMillis() + 60000;
+        allow update, delete: if false;
+      }
     }
 
     // ==============================

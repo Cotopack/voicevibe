@@ -2190,7 +2190,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsFromServer(state.user.uid,true);const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.dataset.loadedChat='';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();vvComposerSyncActions();let previousGroupDocs=null;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const first=previousGroupDocs===null;const stickToBottom=first||host.scrollHeight-host.scrollTop-host.clientHeight<96;const previousScroll=host.scrollTop;const nextDocs=snap.docs.map(d=>({id:d.id,...d.data()}));const reactionOnly=!first&&vvPatchReactionChanges(host,previousGroupDocs,nextDocs,'groups',groupId);previousGroupDocs=nextDocs;vvGroupMessageCache.set(groupId,nextDocs);if(vvGroupMessageCache.size>12)vvGroupMessageCache.delete(vvGroupMessageCache.keys().next().value);host.dataset.loadedChat='group:'+groupId;if(!reactionOnly){host.innerHTML=nextDocs.length?nextDocs.map(m=>vvRenderChatMessage(m,'groups',groupId)).join(''):'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>';vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;}if(first)vvJumpToNewestMessage(host,'group:'+groupId);},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();vvExtraExit();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>{vvExtraExit();socialChatsPanel.classList.remove('chat-open');});const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.dataset.loadedChat='';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();vvComposerSyncActions();vvExtraEnter('groups',groupId);let previousGroupDocs=null;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const first=previousGroupDocs===null;const stickToBottom=first||host.scrollHeight-host.scrollTop-host.clientHeight<96;const previousScroll=host.scrollTop;const nextDocs=snap.docs.map(d=>({id:d.id,...d.data()}));const reactionOnly=!first&&vvPatchReactionChanges(host,previousGroupDocs,nextDocs,'groups',groupId);previousGroupDocs=nextDocs;vvGroupMessageCache.set(groupId,nextDocs);if(vvGroupMessageCache.size>12)vvGroupMessageCache.delete(vvGroupMessageCache.keys().next().value);host.dataset.loadedChat='group:'+groupId;if(!reactionOnly){host.innerHTML=nextDocs.length?nextDocs.map(m=>vvRenderChatMessage(m,'groups',groupId)).join(''):'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>';vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;}vvExtraAfterMessages();if(first)vvJumpToNewestMessage(host,'group:'+groupId);},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -2395,7 +2395,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function closeConversation() {
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
-            vvVoiceAbort();
+            vvVoiceAbort();vvExtraExit();
             activeFriend = null; activeConversationId = null; activeGroupId = null;
             socialChatsPanel.classList.remove('chat-open');
             const pane = document.getElementById('conversationPane');
@@ -2624,11 +2624,142 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
 
         const vvMenu=document.getElementById('vvProfileMenu');
-        function setVVMenuOpen(open){if(!vvMenu)return;vvMenu.classList.toggle('hidden',!open);document.getElementById('vvMenuToggle')?.setAttribute('aria-expanded',String(open));document.body.classList.toggle('vv-menu-open',open);if(open)document.getElementById('vvMenuClose')?.focus();else document.getElementById('vvMenuToggle')?.focus();}
+        function setVVMenuOpen(open){if(!vvMenu)return;if(open&&state.user)void vvSupportRole();vvMenu.classList.toggle('hidden',!open);document.getElementById('vvMenuToggle')?.setAttribute('aria-expanded',String(open));document.body.classList.toggle('vv-menu-open',open);if(open)document.getElementById('vvMenuClose')?.focus();else document.getElementById('vvMenuToggle')?.focus();}
         document.getElementById('vvMenuToggle')?.addEventListener('click',()=>setVVMenuOpen(true));
         document.getElementById('vvMenuClose')?.addEventListener('click',()=>setVVMenuOpen(false));
         vvMenu?.addEventListener('click',e=>{if(e.target===vvMenu)setVVMenuOpen(false)});
         document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!vvMenu?.classList.contains('hidden'))setVVMenuOpen(false)});
+
+        // Support is an isolated conversation per user, not a normal friend chat.
+        // Firestore Rules protect all support messages and report records.
+        const vvSupport={open:false,moderator:false,uid:null,unsub:null,listUnsub:null,roleUid:null};
+        function vvSupportSetStatus(text){const el=document.getElementById('vvSupportStatus');if(el)el.textContent=text||'';}
+        function vvSupportStopMessages(){vvSupport.unsub?.();vvSupport.unsub=null;}
+        async function vvSupportRole(){
+            if(!state.user)return false;
+            const uid=state.user.uid;
+            let role='user';
+            if(uid===DEVELOPER_UID)role='developer';
+            else{
+                try{
+                    const snap=await getDoc(doc(db,'roles',uid));
+                    role=snap.exists()&&snap.data().role==='admin'?'admin':'user';
+                    roleCache.set(uid,role);
+                }catch(error){console.warn('Moderator role check:',error?.code||error);vvSupport.moderator=false;document.getElementById('vvOpenModeration')?.classList.add('hidden');return false;}
+            }
+            if(state.user?.uid!==uid)return false;
+            const moderator=uid===DEVELOPER_UID||role==='admin';
+            vvSupport.moderator=moderator;vvSupport.roleUid=uid;
+            document.getElementById('vvOpenModeration')?.classList.toggle('hidden',!moderator);
+            return moderator;
+        }
+        function vvSupportExit(){
+            vvSupport.open=false;vvSupport.uid=null;vvSupportStopMessages();vvSupport.listUnsub?.();vvSupport.listUnsub=null;
+            document.getElementById('vvSupportDialog')?.classList.add('hidden');
+            vvSupportSetStatus('');
+        }
+        async function vvSupportSelect(uid){
+            if(!state.user||!vvSupport.open||(!vvSupport.moderator&&uid!==state.user.uid))return;
+            vvSupportStopMessages();vvSupport.uid=uid;
+            const title=document.getElementById('vvSupportChatTitle');
+            if(title)title.textContent=vvSupport.moderator?`Чат поддержки · ${uid}`:'Ваш чат с поддержкой';
+            if(vvSupport.moderator){
+                void getDoc(doc(db,'users',uid)).then(snapshot=>{
+                    if(!vvSupport.open||vvSupport.uid!==uid||!title||!snapshot.exists())return;
+                    const p=snapshot.data();
+                    title.textContent=`Чат поддержки · ${p.displayName||'Пользователь'}${p.username?' (@'+p.username+')':''}`;
+                }).catch(()=>{});
+            }
+            const host=document.getElementById('vvSupportMessages');host.textContent='Загрузка переписки…';
+            vvSupportSetStatus('');
+            const threadRef=doc(db,'supportThreads',uid);
+            try{
+                if(!(await getDoc(threadRef)).exists()){
+                    await setDoc(threadRef,{userUid:uid,createdAt:Date.now(),updatedAt:Date.now(),lastMessage:''});
+                }
+                if(!vvSupport.open||vvSupport.uid!==uid)return;
+                vvSupport.unsub=onSnapshot(query(collection(threadRef,'messages'),orderBy('createdAt','asc'),limitToLast(100)),snap=>{
+                    if(!vvSupport.open||vvSupport.uid!==uid)return;
+                    host.replaceChildren();
+                    if(snap.empty){const empty=document.createElement('p');empty.className='vv-support-empty';empty.textContent='Сообщений пока нет. Напишите первое сообщение.';host.appendChild(empty);}
+                    for(const d of snap.docs){
+                        const m=d.data(),row=document.createElement('div');row.className='vv-support-bubble '+(m.senderUid===state.user?.uid?'mine':'');
+                        const label=document.createElement('small');label.textContent=m.senderUid===uid?'Пользователь':'Поддержка VoiceVibe';
+                        const text=document.createElement('p');text.textContent=String(m.text||'');
+                        row.append(label,text);host.appendChild(row);
+                    }
+                    host.scrollTop=host.scrollHeight;
+                },e=>vvSupportSetStatus('Не удалось открыть чат: '+(e?.message||'доступ запрещён')));
+            }catch(e){console.error('Support thread:',e);vvSupportSetStatus('Не удалось открыть чат поддержки. Проверь Firestore Rules.');}
+        }
+        async function vvSupportLoadReports(){
+            const el=document.getElementById('vvSupportReports');if(!el||!vvSupport.moderator)return;
+            el.textContent='Загрузка жалоб…';
+            try{
+                const snap=await getDocs(query(collection(db,'reports'),orderBy('createdAt','desc'),limit(50)));
+                el.replaceChildren();
+                if(snap.empty){el.textContent='Новых жалоб нет.';return;}
+                for(const d of snap.docs){
+                    const m=d.data(),card=document.createElement('article');card.className='vv-support-report';
+                    const text=document.createElement('p');text.textContent=`${new Date(Number(m.createdAt)||0).toLocaleString()} · ${m.reason} · ${m.scope}/${m.chatId}`;
+                    card.appendChild(text);
+                    for(const [label,uid] of [['Написать заявителю',m.reporterUid],['Написать пользователю',m.targetUid]]){
+                        if(typeof uid!=='string'||!uid)continue;
+                        const btn=document.createElement('button');btn.type='button';btn.textContent=label;
+                        btn.addEventListener('click',()=>void vvSupportSelect(uid));card.append(btn);
+                    }
+                    el.append(card);
+                }
+            }catch(e){el.textContent='Нет доступа к жалобам. Опубликуй обновлённые Firestore Rules.';}
+        }
+        async function vvSupportLoadThreads(){
+            const target=document.getElementById('vvSupportThreads');if(!target||!vvSupport.moderator)return;
+            vvSupport.listUnsub?.();
+            vvSupport.listUnsub=onSnapshot(query(collection(db,'supportThreads'),orderBy('updatedAt','desc'),limit(50)),snap=>{
+                target.replaceChildren();
+                if(snap.empty){target.textContent='Пока нет обращений.';return;}
+                for(const d of snap.docs){
+                    const item=document.createElement('button');item.type='button';item.className='vv-support-thread';
+                    const u=d.data();item.textContent=`Пользователь ${d.id} · ${String(u.lastMessage||'').slice(0,70)}`;
+                    item.addEventListener('click',()=>void vvSupportSelect(d.id));target.appendChild(item);
+                }
+            },e=>{target.textContent='Не удалось прочитать обращения.';});
+        }
+        async function vvSupportOpen(moderation=false){
+            if(!state.user)return;
+            const moderator=await vvSupportRole();
+            if(moderation&&!moderator)return;
+            setVVMenuOpen(false);
+            vvSupport.open=true;
+            vvSupport.uid=null;
+            document.getElementById('vvSupportDialog')?.classList.remove('hidden');
+            document.getElementById('vvSupportSidebar')?.classList.toggle('hidden',!moderator);
+            vvSupportSetStatus('');
+            const host=document.getElementById('vvSupportMessages');host.textContent=moderator?'Выбери обращение слева или открой свой чат.':'Открываем переписку…';
+            if(moderator){await vvSupportLoadReports();await vvSupportLoadThreads();if(!moderation)await vvSupportSelect(state.user.uid);}
+            else await vvSupportSelect(state.user.uid);
+        }
+        document.getElementById('vvOpenSupport')?.addEventListener('click',()=>void vvSupportOpen(false));
+        document.getElementById('vvOpenModeration')?.addEventListener('click',()=>void vvSupportOpen(true));
+        document.getElementById('vvSupportClose')?.addEventListener('click',vvSupportExit);
+        document.addEventListener('keydown',e=>{if(e.key==='Escape'&&vvSupport.open)vvSupportExit();});
+        document.getElementById('vvSupportDialog')?.addEventListener('click',e=>{if(e.target.id==='vvSupportDialog')vvSupportExit();});
+        document.getElementById('vvSupportForm')?.addEventListener('submit',async e=>{
+            e.preventDefault();
+            const uid=vvSupport.uid,author=state.user?.uid;
+            if(!vvSupport.open||!uid||!author||(!vvSupport.moderator&&uid!==author))return;
+            const input=document.getElementById('vvSupportInput');const value=input.value.trim();if(!value)return;
+            const send=document.getElementById('vvSupportSend');send.disabled=true;
+            try{
+                const time=Date.now(),ref=doc(db,'supportThreads',uid),batch=writeBatch(db);
+                batch.set(doc(collection(ref,'messages')),{senderUid:author,text:value.slice(0,2000),createdAt:time});
+                batch.update(ref,{updatedAt:time,lastMessage:value.slice(0,140)});
+                await batch.commit();input.value='';vvSupportSetStatus('');
+            }catch(err){console.error('Support send:',err);vvSupportSetStatus('Ошибка отправки. Проверь Firestore Rules и подключение к сети.');}
+            finally{send.disabled=false;}
+        });
+        onAuthStateChanged(auth,user=>{vvSupportExit();if(user)void vvSupportRole();else{vvSupport.moderator=false;document.getElementById('vvOpenModeration')?.classList.add('hidden');}});
+
         async function developerGrant(type) {
           const status=document.getElementById('devGrantStatus');
           const username=document.getElementById('devGrantUsername').value.trim();
@@ -2872,7 +3003,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     }
                 }
 
-                const freshConversation = await getDoc(conversationRef); if (!stillOpening()) return; const wallpaperURL = freshConversation.exists() ? freshConversation.data().wallpaperURL : ''; const messageArea = document.getElementById('messagesList'); if(messageArea){messageArea.style.backgroundImage=wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${wallpaperURL}")`:'';messageArea.style.backgroundSize='cover';}
+                const freshConversation = await getDoc(conversationRef); if (!stillOpening()) return;
+                vvExtraEnter('conversations',openingId,uid); const wallpaperURL = freshConversation.exists() ? freshConversation.data().wallpaperURL : ''; const messageArea = document.getElementById('messagesList'); if(messageArea){messageArea.style.backgroundImage=wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${wallpaperURL}")`:'';messageArea.style.backgroundSize='cover';}
                 const messagesCol = collection(db, 'conversations', openingId, 'messages');
                 let firstMessageSnapshot=true;
                 state.messageUnsub = onSnapshot(
@@ -2889,6 +3021,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                             vvRenderDirectMessages(uid);
                             host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;
                         }
+                        vvExtraAfterMessages();
                         if(firstMessageSnapshot){
                             firstMessageSnapshot=false;
                             vvJumpToNewestMessage(host,openingId);
@@ -2908,7 +3041,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvComposerSyncActions();
                 vvVoiceSyncAvailability();
                 renderChatFriends();
-                showTab('chats');
+                showTab('chats');vvExtraReadNewest();
             } catch (e) {
                 if (!stillOpening()) return;
                 console.error('Conversation open failed:', e);
@@ -2918,6 +3051,296 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (game) game.disabled = true;
             }
         }
+        // VoiceVibe messaging upgrades: replies, typing, receipts, pins, editing, forwarding and safety.
+        const vvExtra={scope:null,chatId:null,peer:null,unsubs:[],reply:null,pinned:null,readAt:{},readEnabled:true,
+            blocked:false,deliveredAt:{},typingTimer:0,typingLast:0,typingTimeout:0,lastReceipt:0,readSettingUid:null};
+        function vvExtraChatValid(scope=vvExtra.scope,id=vvExtra.chatId){
+            return !!state.user && !!id && vvExtra.scope===scope && vvExtra.chatId===id
+              && ((scope==='groups'&&activeGroupId===id)||(scope==='conversations'&&activeConversationId===id));
+        }
+        function vvExtraCurrentMessages(){
+            return vvExtra.scope==='groups'?(vvGroupMessageCache.get(vvExtra.chatId)||[]):vvDirectDocs;
+        }
+        function vvExtraMessage(node){
+            const targetId=node?.dataset.messageId;
+            return vvExtraCurrentMessages().find(m=>m.id===targetId)||null;
+        }
+        function vvExtraText(m){
+            if(!m)return '';
+            if(m.type==='voice')return '🎤 Голосовое сообщение';
+            if(m.type==='sticker')return '✨ Стикер';
+            return String(m.text||'').replace(/\s+/g,' ').trim().slice(0,150)||'Сообщение';
+        }
+        function vvClearDraft(){
+            vvExtra.reply=null;
+            const bar=document.getElementById('vvChatDraft');if(bar)bar.classList.add('hidden');
+            const text=document.getElementById('vvChatDraftText');if(text)text.textContent='';
+        }
+        function vvOutgoingReply(){
+            return vvExtra.reply?{replyTo:{...vvExtra.reply}}:{};
+        }
+        function vvSetReply(node){
+            const m=vvExtraMessage(node);if(!m||!vvExtraChatValid(node.dataset.messageScope,node.dataset.messageChat))return;
+            vvExtra.reply={id:m.id,senderUid:m.senderUid,senderName:m.senderUid===state.user.uid?'Вы':(friendsCache.find(f=>(f.uid||f.id)===m.senderUid)?.displayName||'Участник'),text:vvExtraText(m).slice(0,160)};
+            document.getElementById('vvChatDraftText').textContent=`↪ ${vvExtra.reply.senderName}: ${vvExtra.reply.text}`;
+            document.getElementById('vvChatDraft')?.classList.remove('hidden');
+            document.getElementById('messageInput')?.focus();
+        }
+        function vvExtraJump(id){
+            if(!id)return;
+            const node=[...document.querySelectorAll('#messagesList .vv-message-bubble')].find(n=>n.dataset.messageId===id);
+            if(node){node.scrollIntoView({behavior:'smooth',block:'center'});node.classList.add('vv-msg-highlight');setTimeout(()=>node.classList.remove('vv-msg-highlight'),1750);}
+            else alert('Сообщение вне загруженной части переписки.');
+        }
+        function vvExtraPinnedView(){
+            const host=document.getElementById('vvChatPinned');if(!host)return;
+            const p=vvExtra.pinned;
+            host.classList.toggle('hidden',!p?.id);
+            if(p?.id){host.innerHTML=`<i class="fa-solid fa-thumbtack"></i><span>Закреплено: ${escapeHTML(String(p.text||'Сообщение'))}</span><button type="button" data-vv-unpin title="Открепить">✕</button>`;}
+            else host.replaceChildren();
+        }
+
+        const vvDeliveryAcks=new Map();
+        function vvExtraAcknowledgeDelivery(chatId,peer,createdAt){
+            const uid=state.user?.uid;if(!uid||!chatId||!createdAt)return;
+            const key=uid+':'+chatId;
+            if(createdAt<=Number(vvDeliveryAcks.get(key)||0))return;
+            vvDeliveryAcks.set(key,createdAt);
+            void updateDoc(doc(db,'conversations',chatId),{[`deliveredAt.${uid}`]:Date.now()}).catch(e=>{
+                console.warn('Delivery status:',e?.code||e);
+                if(vvDeliveryAcks.get(key)===createdAt)vvDeliveryAcks.delete(key);
+            });
+        }
+        function vvExtraReceiptPaint(){
+            if(vvExtra.scope!=='conversations'||!vvExtra.peer)return;
+            const readAt=Number(vvExtra.readAt?.[vvExtra.peer]||0);
+            document.querySelectorAll('#messagesList [data-sent-at]').forEach(mark=>{
+                const read=readAt>=Number(mark.dataset.sentAt)&&readAt>0;
+                mark.textContent=read?'✓✓':'✓';
+                mark.title=read?'Прочитано':'Доставлено';
+                mark.classList.toggle('is-read',read);
+            });
+        }
+        function vvExtraApplySearch(){
+            const q=(document.getElementById('vvChatSearchInput')?.value||'').trim().toLocaleLowerCase();
+            let count=0;
+            document.querySelectorAll('#messagesList .vv-message-row').forEach(row=>{
+                const matched=!q||row.textContent.toLocaleLowerCase().includes(q);
+                row.hidden=!matched;if(matched)count++;
+            });
+            const target=document.getElementById('vvChatSearchCount');
+            if(target)target.textContent=q?`${count} найдено (среди загруженных сообщений)`:'';
+        }
+        function vvExtraAfterMessages(){
+            vvExtraReceiptPaint();vvExtraApplySearch();
+            if(vvExtra.scope==='conversations')vvExtraReadNewest();
+        }
+        function vvExtraExit(){
+            if(vvExtra.scope==='conversations')vvExtraSetTyping(false);
+            for(const unsub of vvExtra.unsubs.splice(0))try{unsub();}catch(_){}
+            clearTimeout(vvExtra.typingTimer);clearTimeout(vvExtra.typingTimeout);
+            vvExtra.scope=null;vvExtra.chatId=null;vvExtra.peer=null;vvExtra.pinned=null;vvExtra.readAt={};vvExtra.deliveredAt={};vvExtra.blocked=false;vvExtra.typingLast=0;vvExtra.lastReceipt=0;
+            document.getElementById('vvChatPinned')?.classList.add('hidden');
+            document.getElementById('vvChatTyping')?.classList.add('hidden');
+            document.getElementById('vvChatBlock')?.classList.add('hidden');
+            document.getElementById('vvChatReport')?.classList.add('hidden');
+            document.getElementById('vvChatSearchBar')?.classList.add('hidden');
+            document.getElementById('vvChatOptionsMenu')?.classList.add('hidden');
+            document.getElementById('vvChatFindToggle')?.setAttribute('aria-expanded','false');
+            vvCloseDeleteMenus();
+            const search=document.getElementById('vvChatSearchInput');if(search)search.value='';
+            vvClearDraft();
+        }
+        async function vvExtraLoadReadSetting(){
+            const uid=state.user?.uid;if(!uid)return;
+            if(vvExtra.readSettingUid===uid)return;
+            vvExtra.readSettingUid=uid;vvExtra.readEnabled=true;
+            try{const d=await getDoc(doc(db,'users',uid,'settings','privacy'));if(state.user?.uid!==uid)return;
+                vvExtra.readEnabled=d.exists()?d.data().readReceipts!==false:true;
+            }catch(e){console.warn('Privacy preference:',e);}
+            const checkbox=document.getElementById('vvReadReceiptsSetting');if(checkbox)checkbox.checked=vvExtra.readEnabled;
+        }
+        function vvExtraEnter(scope,id,peer=null){
+            vvExtraExit();vvExtra.scope=scope;vvExtra.chatId=id;vvExtra.peer=peer;vvExtra.readAt={};
+            const block=document.getElementById('vvChatBlock'),report=document.getElementById('vvChatReport');
+            if(block)block.classList.toggle('hidden',scope!=='conversations');
+            if(report)report.classList.toggle('hidden',scope!=='conversations');
+            void vvExtraLoadReadSetting();
+            const path=doc(db,scope,id);
+            vvExtra.unsubs.push(onSnapshot(path,snap=>{
+                if(!vvExtraChatValid(scope,id)||!snap.exists())return;
+                vvExtra.pinned=snap.data().pinnedMessage||null;vvExtra.readAt=snap.data().readAt||{};vvExtra.deliveredAt=snap.data().deliveredAt||{};
+                vvExtraPinnedView();vvExtraReceiptPaint();
+            },err=>console.warn('Chat extras:',err?.code||err)));
+            if(scope==='conversations'&&peer){
+                vvExtra.unsubs.push(onSnapshot(doc(db,scope,id,'typing',peer),snap=>{
+                    if(!vvExtraChatValid(scope,id))return;
+                    const last=Number(snap.data()?.updatedAt||0);
+                    const active=!!snap.data()?.active&&last>Date.now()-8500;
+                    document.getElementById('vvChatTyping')?.classList.toggle('hidden',!active);
+                    clearTimeout(vvExtra.typingTimeout);
+                    if(active)vvExtra.typingTimeout=setTimeout(()=>document.getElementById('vvChatTyping')?.classList.add('hidden'),Math.max(800,8500-(Date.now()-last)));
+                },err=>console.warn('Typing watch:',err?.code||err)));
+                void vvExtraCheckBlock();
+            }
+        }
+        async function vvExtraCheckBlock(){
+            const chat=vvExtra.chatId,friend=vvExtra.peer,uid=state.user?.uid;if(!chat||!friend||!uid)return;
+            try{const snap=await getDoc(doc(db,'users',uid,'blocked',friend));
+                if(!vvExtraChatValid('conversations',chat))return;
+                vvExtra.blocked=snap.exists();vvExtraBlockView();
+            }catch(e){console.warn('Blocked user check:',e);}
+        }
+        function vvExtraBlockView(){
+            const btn=document.getElementById('vvChatBlock');if(btn)btn.textContent=vvExtra.blocked?'✓ Разблокировать':'⛔ Блокировать';
+            const input=document.getElementById('messageInput');
+            if(input&&vvExtra.scope==='conversations'){
+                input.disabled=vvExtra.blocked;
+                input.placeholder=vvExtra.blocked?'Вы заблокировали пользователя':'Написать сообщение…';
+            }
+            if(!vvExtra.blocked)vvComposerSyncActions();
+            else{const btnSend=document.getElementById('sendMessageBtn');if(btnSend)btnSend.disabled=true;}
+        }
+        function vvExtraReadNewest(){
+            if(!vvExtra.readEnabled||currentTab!=='chats'||document.hidden||!vvExtraChatValid('conversations',vvExtra.chatId))return;
+            const last=Math.max(0,...vvDirectDocs.filter(m=>m.senderUid!==state.user.uid).map(m=>Number(m.createdAt)||0));
+            if(!last||last<=vvExtra.lastReceipt)return;
+            vvExtra.lastReceipt=last;
+            const chatId=vvExtra.chatId,uid=state.user.uid;
+            void updateDoc(doc(db,'conversations',chatId),{[`readAt.${uid}`]:Date.now()}).catch(e=>{
+                console.warn('Read receipt write:',e?.code||e);if(vvExtraChatValid('conversations',chatId))vvExtra.lastReceipt=0;
+            });
+        }
+        function vvExtraSetTyping(active){
+            const id=vvExtra.chatId,uid=state.user?.uid;if(vvExtra.scope!=='conversations'||!id||!uid||vvExtra.blocked)return;
+            const now=Date.now();if(active&&now-vvExtra.typingLast<2600)return;
+            vvExtra.typingLast=active?now:0;
+            void setDoc(doc(db,'conversations',id,'typing',uid),{active,updatedAt:now}).catch(e=>console.warn('Typing update:',e?.code||e));
+        }
+        async function vvExtraChangePin(node,remove=false){
+            if(!vvExtraChatValid())return;
+            const m=remove?null:vvExtraMessage(node);if(!remove&&!m)return;
+            const pin=remove?null:{id:m.id,senderUid:m.senderUid,text:vvExtraText(m).slice(0,160)};
+            try{await updateDoc(doc(db,vvExtra.scope,vvExtra.chatId),{pinnedMessage:pin});
+                vvExtra.pinned=pin;vvExtraPinnedView();
+            }catch(e){console.error(e);alert('Не удалось закрепить сообщение. Проверь опубликованные Firestore Rules.');}
+        }
+        function vvExtraModal(title,help,mode='text',initial=''){
+            return new Promise(resolve=>{
+                const modal=document.getElementById('vvChatModal');
+                const header=document.getElementById('vvChatModalTitle');const info=document.getElementById('vvChatModalHelp');
+                const input=document.getElementById('vvChatModalInput');const select=document.getElementById('vvChatModalSelect');
+                const friends=document.getElementById('vvChatModalFriends');const ok=document.getElementById('vvChatModalConfirm');const cancel=document.getElementById('vvChatModalCancel');
+                header.textContent=title;info.textContent=help;input.value=initial;
+                input.classList.toggle('hidden',mode!=='text');select.classList.toggle('hidden',mode!=='reason');
+                friends.classList.toggle('hidden',mode!=='forward');friends.replaceChildren();
+                const clean=()=>{modal.classList.add('hidden');ok.removeEventListener('click',confirm);cancel.removeEventListener('click',dismiss);modal.removeEventListener('click',outside);};
+                const confirm=()=>{const value=mode==='reason'?select.value:input.value.trim();clean();resolve(value);};
+                const dismiss=()=>{clean();resolve(null);};
+                const outside=e=>{if(e.target===modal)dismiss();};
+                if(mode==='forward'){
+                    for(const f of friendsCache){const uid=String(f.uid||f.id||'');if(!uid||uid===state.user?.uid)continue;
+                        const b=document.createElement('button');b.type='button';b.textContent=f.displayName||f.username||'Друг';
+                        b.addEventListener('click',()=>{clean();resolve(uid);});friends.append(b);
+                    }
+                }
+                ok.classList.toggle('hidden',mode==='forward');
+                ok.addEventListener('click',confirm);cancel.addEventListener('click',dismiss);modal.addEventListener('click',outside);
+                modal.classList.remove('hidden');if(mode==='text')input.focus();
+            });
+        }
+        async function vvExtraReport(targetUid,messageId=''){
+            if(!state.user||!targetUid||targetUid===state.user.uid)return;
+            const reason=await vvExtraModal('Пожаловаться','Выбери причину. Жалоба будет доступна только модератору.','reason');if(!reason)return;
+            try{await addDoc(collection(db,'reports'),{reporterUid:state.user.uid,targetUid,reason,createdAt:Date.now(),scope:vvExtra.scope,chatId:vvExtra.chatId,messageId});
+                alert('Жалоба отправлена. Спасибо!');
+            }catch(e){console.error('Report error',e);alert('Не удалось отправить жалобу.');}
+        }
+        async function vvExtraForward(m){
+            if(!m||!['text','sticker'].includes(m.type))return alert('Пересылка пока доступна для текста и стикеров.');
+            if(m.type==='sticker'&&Number(state.userProfile?.premiumUntil||0)<Date.now())return alert('Пересылка стикеров доступна с Premium.');
+            const uid=await vvExtraModal('Переслать сообщение','Выбери друга, которому отправить сообщение.','forward');if(!uid)return;
+            try{
+                if((await getDoc(doc(db,'users',state.user.uid,'blocked',uid))).exists())return alert('Сначала разблокируй друга.');
+                const members=[state.user.uid,uid].sort(),id=members.join('_');
+                const conv=doc(db,'conversations',id);const stamp=Date.now();
+                // Validate friendship before writing to protect against stale user lists.
+                const friendship=await getDoc(doc(db,'users',state.user.uid,'friends',uid));if(!friendship.exists())throw new Error('Пользователь больше не в друзьях.');
+                const payload={senderUid:state.user.uid,type:m.type,text:String(m.text||'').slice(0,1000),createdAt:stamp,clientMessageId:globalThis.crypto?.randomUUID?.()||`${stamp}-${Math.random().toString(36).slice(2)}`,forwardedFrom:friendsCache.find(f=>(f.uid||f.id)===m.senderUid)?.displayName||(m.senderUid===state.user.uid?'Вас':'пользователя')};
+                const batch=writeBatch(db);batch.set(conv,{participants:members,updatedAt:stamp,lastMessage:vvExtraText(m).slice(0,100)},{merge:true});batch.set(doc(collection(conv,'messages')),payload);await batch.commit();alert('Сообщение переслано.');
+            }catch(e){console.error(e);alert('Не удалось переслать сообщение: '+(e.message||'ошибка'));}
+        }
+        async function vvDoMessageAction(node,action){
+            const m=vvExtraMessage(node);if(!m||!vvExtraChatValid(node.dataset.messageScope,node.dataset.messageChat))return;
+            const mine=m.senderUid===state.user.uid;
+            if(action==='reply'){vvSetReply(node);return;}
+            if(action==='forward'){await vvExtraForward(m);return;}
+            if(action==='pin'){await vvExtraChangePin(node);return;}
+            if(action==='report'){if(!mine)await vvExtraReport(m.senderUid,m.id);return;}
+            if(action==='edit'&&mine&&m.type==='text'){
+                const value=await vvExtraModal('Редактировать сообщение','Новый текст будет виден всем участникам.','text',m.text||'');
+                if(!value||value===m.text)return;
+                try{await updateDoc(doc(db,vvExtra.scope,vvExtra.chatId,'messages',m.id),{text:value.slice(0,1000),editedAt:Date.now()});}
+                catch(e){console.error(e);alert('Не удалось изменить сообщение. Проверь Firestore Rules.');}
+            }
+        }
+        document.getElementById('vvChatDraftCancel')?.addEventListener('click',vvClearDraft);
+        const vvOptions=document.getElementById('vvChatOptionsMenu');
+        function vvOptionsClose(){vvOptions?.classList.add('hidden');document.getElementById('vvChatFindToggle')?.setAttribute('aria-expanded','false');}
+        document.getElementById('vvChatFindToggle')?.addEventListener('click',()=>{
+            const open=vvOptions?.classList.contains('hidden');vvOptions?.classList.toggle('hidden',!open);
+            document.getElementById('vvChatFindToggle')?.setAttribute('aria-expanded',String(open));
+        });
+        document.getElementById('vvChatSearchOption')?.addEventListener('click',()=>{
+            vvOptionsClose();
+            const bar=document.getElementById('vvChatSearchBar');bar?.classList.remove('hidden');
+            document.getElementById('vvChatSearchInput')?.focus();
+        });
+        document.addEventListener('pointerdown',e=>{if(!e.target.closest?.('.vv-options-holder'))vvOptionsClose();});
+        document.addEventListener('keydown',e=>{if(e.key==='Escape')vvOptionsClose();});
+        document.getElementById('vvChatSearchClose')?.addEventListener('click',()=>{document.getElementById('vvChatSearchBar')?.classList.add('hidden');document.getElementById('vvChatSearchInput').value='';vvExtraApplySearch();});
+        document.getElementById('vvChatSearchInput')?.addEventListener('input',vvExtraApplySearch);
+        document.getElementById('vvChatPinned')?.addEventListener('click',e=>{if(e.target.closest('[data-vv-unpin]'))void vvExtraChangePin(null,true);else vvExtraJump(vvExtra.pinned?.id);});
+        document.getElementById('vvChatPinned')?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.target.closest('button'))vvExtraJump(vvExtra.pinned?.id);});
+        document.getElementById('vvChatBlock')?.addEventListener('click',async()=>{
+            const friend=vvExtra.peer,uid=state.user?.uid;if(!friend||!uid)return;
+            if(!vvExtra.blocked&&!confirm('Заблокировать пользователя? Вы не сможете отправлять ему личные сообщения.'))return;
+            try{const ref=doc(db,'users',uid,'blocked',friend);
+                if(vvExtra.blocked)await deleteDoc(ref);
+                else await setDoc(ref,{targetUid:friend,createdAt:Date.now()});
+                vvExtra.blocked=!vvExtra.blocked;vvExtraBlockView();
+            }catch(e){console.error(e);alert('Не удалось изменить блокировку.');}
+        });
+        document.getElementById('vvChatReport')?.addEventListener('click',()=>vvExtraReport(vvExtra.peer));
+        document.getElementById('vvReadReceiptsSetting')?.addEventListener('change',async e=>{
+            const desired=!!e.target.checked,uid=state.user?.uid;if(!uid)return;
+            try{await setDoc(doc(db,'users',uid,'settings','privacy'),{readReceipts:desired});vvExtra.readEnabled=desired;}
+            catch(error){e.target.checked=!desired;alert('Не удалось сохранить настройку.');}
+        });
+        document.getElementById('messageInput')?.addEventListener('input',()=>{
+            if(vvExtra.scope!=='conversations'||vvExtra.blocked)return;
+            const typing=!!document.getElementById('messageInput')?.value.trim();
+            vvExtraSetTyping(typing);clearTimeout(vvExtra.typingTimer);
+            if(typing)vvExtra.typingTimer=setTimeout(()=>vvExtraSetTyping(false),4500);
+        });
+
+        document.addEventListener('visibilitychange',()=>{if(!document.hidden)vvExtraReadNewest();});
+
+        document.getElementById('vvReviewReports')?.addEventListener('click',async()=>{
+            if(!state.user||state.user.uid!==DEVELOPER_UID)return;
+            const target=document.getElementById('vvReportsList');target.textContent='Загружаем жалобы…';
+            try{const snap=await getDocs(query(collection(db,'reports'),orderBy('createdAt','desc'),limit(50)));
+                target.replaceChildren();if(snap.empty){target.textContent='Новых жалоб нет.';return;}
+                for(const row of snap.docs){const d=row.data(),item=document.createElement('div');item.className='rounded-xl border border-slate-700 my-2 p-2';
+                    item.textContent=`${new Date(d.createdAt).toLocaleString()} • ${d.reason} • на ${d.targetUid} • от ${d.reporterUid} • ${d.scope}/${d.chatId}/${d.messageId||''}`;target.append(item);}
+            }catch(e){console.error(e);target.textContent='Не удалось загрузить жалобы. Проверь опубликованные Firestore Rules.';}
+        });
+
+        onAuthStateChanged(auth,user=>{
+            if(user){setTimeout(()=>{if(state.user?.uid===user.uid)void vvExtraLoadReadSetting();},0);}
+            else{vvExtra.readSettingUid=null;vvExtra.readEnabled=true;vvExtraExit();}
+        });
+
         const vvGroupMessageCache=new Map();
         const vvReactionEmojis=['❤️','👍','😂','🔥','😮','😢'];
         const vvReactionBusy=new Set();
@@ -3058,8 +3481,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const bars=Array.from({length:28},(_,i)=>`<span style="height:${Math.min(100,Math.max(12,Math.round(Number(levels[i])||18)))}%"></span>`).join('');
                 body=safeUrl?`<div class="vv-voice-message"><button type="button" class="vv-voice-play" aria-label="${escapeHTML(vvVoiceT('play'))}" title="${escapeHTML(vvVoiceT('play'))}"><i class="fa-solid fa-play"></i></button><div class="vv-voice-player"><div class="vv-voice-waveform" aria-hidden="true">${bars}</div><div class="vv-voice-meta"><span class="vv-voice-length">${stamp}</span></div><audio class="vv-voice-audio" preload="none" playsinline src="${escapeHTML(safeUrl)}" aria-label="${escapeHTML(vvVoiceT('message'))}"></audio></div><button type="button" class="vv-voice-speed" aria-label="${escapeHTML(vvVoiceT('speed'))}" title="${escapeHTML(vvVoiceT('speed'))}">1×</button></div>`:`<p class="text-rose-300">${escapeHTML(vvVoiceT('unavailable'))}</p>`;
             }
+            if(m.replyTo?.id)body=`<button type="button" class="vv-msg-quote" data-jump-message="${escapeHTML(m.replyTo.id)}"><small>↳ ${escapeHTML(m.replyTo.senderName||'Сообщение')}</small><span>${escapeHTML(m.replyTo.text||'Вложение')}</span></button>`+body;
+            if(m.forwardedFrom)body=`<div class="vv-forwarded-label">↪ Переслано от ${escapeHTML(m.forwardedFrom)}</div>`+body;
             if(m.type==='snake-challenge')body+=`<button data-playchallenge="${escapeHTML(m.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2">🎮 Играть</button>`;
-            return `<div class="vv-message-row ${mine?'vv-message-mine':''} ${m.type==='sticker'?'vv-sticker-row':''}"><div class="vv-message-bubble ${m.type==='sticker'?'vv-sticker-bubble':''}" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}" data-message-owner="${mine?'yes':'no'}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionBadgeHTML(reactions)}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div>${mine?`<div class="vv-message-delete-menu" hidden><button type="button" class="vv-delete-action" data-delete-message><i class="fa-solid fa-trash-can" aria-hidden="true"></i> ${escapeHTML(vvVoiceT('deleteForAll'))}</button></div>`:''}</div></div>`;
+            return `<div class="vv-message-row ${mine?'vv-message-mine':''} ${m.type==='sticker'?'vv-sticker-row':''}"><div class="vv-message-bubble ${m.type==='sticker'?'vv-sticker-bubble':''}" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}" data-message-owner="${mine?'yes':'no'}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}${m.editedAt?'<small class="vv-edited-mark">изменено</small>':''}<div class="vv-message-footer"><time>${mine&&scope==='conversations'?`<span class="vv-msg-read" data-sent-at="${Number(m.createdAt)||0}" title="Доставлено">✓</span>`:''}${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionBadgeHTML(reactions)}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div><div class="vv-message-delete-menu vv-message-actions" hidden><button type="button" data-vv-action="pin"><i class="fa-solid fa-thumbtack"></i> Закрепить</button>${mine&&m.type==='text'?'<button type="button" data-vv-action="edit"><i class="fa-solid fa-pen"></i> Изменить</button>':''}${mine?`<button type="button" class="vv-delete-action" data-delete-message><i class="fa-solid fa-trash-can"></i> ${escapeHTML(vvVoiceT('deleteForAll'))}</button>`:''}<button type="button" data-vv-action="reply"><i class="fa-solid fa-reply"></i> Ответить</button><button type="button" data-vv-action="forward"><i class="fa-solid fa-share"></i> Переслать</button>${!mine?'<button type="button" data-vv-action="report"><i class="fa-solid fa-flag"></i> Жалоба</button>':''}</div></div></div>`;
         }
         function vvRenderMention(m){
             const expired=Number(m.expiresAt)<=Date.now();
@@ -3098,8 +3523,23 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             document.querySelectorAll('.vv-message-delete-menu:not([hidden])').forEach(menu=>{
                 if(menu===except)return;
                 menu.hidden=true;
-                menu.closest('.vv-message-bubble')?.classList.remove('vv-message-menu-active');
+                menu.__vvParent?.appendChild(menu);
+                menu.style.top='';menu.style.left='';menu.style.right='';
+                menu.__vvParent?.classList.remove('vv-message-menu-active');
             });
+        }
+        function vvPlaceMessageMenu(menu,node){
+            // The popup lives at document level: chat overflow, bottom tabs and keyboards cannot clip it.
+            const rect=node.getBoundingClientRect(),margin=12;
+            menu.style.position='fixed';menu.style.zIndex='2147482500';
+            menu.style.maxHeight=`${Math.max(140,window.innerHeight-24)}px`;
+            const width=Math.min(menu.getBoundingClientRect().width||208,window.innerWidth-2*margin);
+            const height=menu.getBoundingClientRect().height||240;
+            const x=Math.max(margin,Math.min(window.innerWidth-width-margin,rect.right-width));
+            const preferredTop=rect.top-height-9;
+            const y=preferredTop>=margin?preferredTop:Math.min(window.innerHeight-height-margin,rect.bottom+9);
+            menu.style.left=`${Math.round(x)}px`;
+            menu.style.top=`${Math.round(Math.max(margin,y))}px`;
         }
         function vvMessagePreview(message){
             if(!message)return '';
@@ -3115,8 +3555,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const key=`${scope}/${chatId}/${id}`;
             if(vvDeletingMessages.has(key))return;
             vvDeletingMessages.add(key);
-            const menu=node.querySelector('.vv-message-delete-menu');
-            if(menu)menu.hidden=true;
+            vvCloseDeleteMenus();
             node.classList.remove('vv-message-menu-active');
             const row=node.closest('.vv-message-row');
             row?.classList.add('vv-message-delete-pending');
@@ -3152,16 +3591,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }finally{vvDeletingMessages.delete(key);}
         }
         function vvBindMessageHold(node){
-            if(node.dataset.messageOwner!=='yes')return;
             const menu=node.querySelector('.vv-message-delete-menu');
             if(!menu)return;
             let timer=null,start=null,openedByHold=false;
             const clear=()=>{if(timer!==null){clearTimeout(timer);timer=null;}start=null;};
             const show=()=>{
                 clear();openedByHold=true;
-                vvCloseDeleteMenus(menu);
+                vvCloseDeleteMenus();
+                menu.__vvParent=node;
+                document.body.appendChild(menu);
                 menu.hidden=false;
                 node.classList.add('vv-message-menu-active');
+                vvPlaceMessageMenu(menu,node);
                 if(navigator.vibrate)try{navigator.vibrate(12);}catch(_){ }
             };
             node.addEventListener('pointerdown',e=>{
@@ -3171,7 +3612,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 timer=setTimeout(show,520);
             });
             node.addEventListener('pointermove',e=>{
-                if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>11)clear();
+                if(!start)return;
+                const dx=e.clientX-start.x,dy=e.clientY-start.y;
+                if(e.pointerType==='touch'&&dx>68&&Math.abs(dy)<33){clear();vvSetReply(node);return;}
+                if(Math.hypot(dx,dy)>11)clear();
             });
             node.addEventListener('pointerup',clear);
             node.addEventListener('pointercancel',clear);
@@ -3179,9 +3623,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             node.addEventListener('contextmenu',e=>{if(e.target.closest('button,a,input,textarea,audio'))return;e.preventDefault();show();});
             node.addEventListener('click',e=>{
                 // Do not swallow the Delete button's own click after a long hold.
-                if(e.target.closest?.('[data-delete-message]')){openedByHold=false;return;}
+                if(e.target.closest?.('[data-delete-message],[data-vv-action]')){openedByHold=false;return;}
                 if(openedByHold){e.preventDefault();e.stopPropagation();openedByHold=false;}
             },true);
+            menu.querySelectorAll('[data-vv-action]').forEach(button=>button.addEventListener('click',e=>{
+                e.preventDefault();e.stopPropagation();vvCloseDeleteMenus();void vvDoMessageAction(node,button.dataset.vvAction);
+            }));
             menu.querySelector('[data-delete-message]')?.addEventListener('click',e=>{
                 e.preventDefault();e.stopPropagation();
                 void vvDeleteChatMessage(node);
@@ -3190,11 +3637,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.addEventListener?.('pointerdown',e=>{
             if(!e.target.closest?.('.vv-message-delete-menu'))vvCloseDeleteMenus();
         });
+        document.getElementById('messagesList')?.addEventListener('scroll',()=>vvCloseDeleteMenus(),{passive:true});
+        window.addEventListener('resize',()=>vvCloseDeleteMenus());
         function vvBindMessageActions(host){
             void vvHydrateReactionAvatars(host);
             host.querySelectorAll('[data-chat-story]').forEach(b=>b.addEventListener('click',()=>vvOpenMentionStory(b.dataset.chatStory)));
             host.querySelectorAll('[data-chat-repost]').forEach(b=>b.addEventListener('click',()=>vvRepostMention(b.dataset.chatRepost)));
             host.querySelectorAll('[data-playchallenge]').forEach(b=>b.addEventListener('click',()=>startSnake(b.dataset.playchallenge)));
+            host.querySelectorAll('[data-jump-message]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();vvExtraJump(b.dataset.jumpMessage);}));
             host.querySelectorAll('.vv-voice-speed').forEach(button=>button.addEventListener('click',()=>{
                 const player=button.closest('.vv-voice-message')?.querySelector('audio');
                 if(!player)return;
@@ -3306,7 +3756,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function vvComposerSyncActions(){
             const hasTarget=!!vvVoiceTarget();
             const mode=(vvVoice.phase==='recording'||vvVoice.phase==='requesting'||vvVoice.phase==='uploading'||vvVoice.phase==='finishing')?'voice':(vvComposerHasText()?'send':'voice');
-            const disabled=!hasTarget||(mode==='voice'&&vvVoice.phase==='uploading');
+            const disabled=!hasTarget||(mode==='voice'&&vvVoice.phase==='uploading')||(vvExtra.scope==='conversations'&&vvExtra.blocked);
             vvComposerSetButton(mode,disabled);
         }
 
@@ -3396,7 +3846,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const controller=new AbortController();vvVoice.abortController=controller;
             const audioURL=await vvVoiceUpload(blob,controller.signal);
             if(!vvVoiceSameTarget(target,vvVoiceTarget())||controller.signal.aborted)throw new Error(vvVoiceT('context'));
-            const stamp=Date.now(),payload={senderUid:target.user,text:'',type:'voice',audioURL,durationSec,waveform,createdAt:stamp};
+            const stamp=Date.now(),payload={senderUid:target.user,text:'',type:'voice',audioURL,durationSec,waveform,createdAt:stamp,...vvOutgoingReply()};
             const chatRef=doc(db,target.scope,target.id);
             const batch=writeBatch(db);
             if(target.scope==='groups'){
@@ -3407,7 +3857,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 batch.set(doc(collection(chatRef,'messages')),payload);
                 batch.set(chatRef,{participants:[target.user,target.friend].sort(),updatedAt:stamp,lastMessage:'🎤 Голосовое сообщение'},{merge:true});
             }
-            await batch.commit();
+            await batch.commit();vvClearDraft();
             if(target.scope==='conversations')bumpRecentChat(target.friend);
         }
         async function vvVoiceFinalize(session){
@@ -3530,13 +3980,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const clearSentInput = () => { if (activeConversationId === sendingConversation && activeGroupId === sendingGroup && messageField.value === originalValue) messageField.value = ''; };
             const text = originalValue.trim();
             if (!text || !state.user) return;
+            if(activeConversationId && vvExtra.blocked)return alert('Пользователь заблокирован.');
             if (activeGroupId) {
                 const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
-                try { const groupId=activeGroupId; const batch=writeBatch(db); batch.set(doc(collection(db,'groups',groupId,'messages')), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now()}); batch.update(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); await batch.commit(); clearSentInput(); vvComposerSyncActions(); } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false; vvComposerSyncActions();} return;
+                try { const groupId=activeGroupId; const batch=writeBatch(db); batch.set(doc(collection(db,'groups',groupId,'messages')), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now(),...vvOutgoingReply()}); batch.update(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); await batch.commit(); clearSentInput(); vvClearDraft(); vvExtraSetTyping(false); vvComposerSyncActions(); } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false; vvComposerSyncActions();} return;
             }
             if (!activeConversationId || !activeFriend) return;
             const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
-            const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now(), clientMessageId: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`) };
+            const payload = { senderUid:state.user.uid, text:text.slice(0,1000), type:'text', createdAt:Date.now(), ...vvOutgoingReply(), clientMessageId: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`) };
             try {
                 const conversationRef = doc(db,'conversations',activeConversationId);
                 const sendingFriend = activeFriend;
@@ -3546,6 +3997,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 await batch.commit();
                 bumpRecentChat(sendingFriend);
                 clearSentInput();
+                vvClearDraft();
+                vvExtraSetTyping(false);
                 vvComposerSyncActions();
             } catch (err) { console.error('Message send failed',err); alert('Сообщение не отправлено. Проверь Firestore Rules.'); } finally { sendBtn.disabled = false; vvComposerSyncActions(); }
         });
