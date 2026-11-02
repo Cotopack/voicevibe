@@ -2190,7 +2190,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsFromServer(state.user.uid,true);const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.dataset.loadedChat='';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();vvComposerSyncActions();let previousGroupDocs=null;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const first=previousGroupDocs===null;const stickToBottom=first||host.scrollHeight-host.scrollTop-host.clientHeight<96;const previousScroll=host.scrollTop;const nextDocs=snap.docs.map(d=>({id:d.id,...d.data()}));const reactionOnly=!first&&vvPatchReactionChanges(host,previousGroupDocs,nextDocs,'groups',groupId);previousGroupDocs=nextDocs;host.dataset.loadedChat='group:'+groupId;if(!reactionOnly){host.innerHTML=nextDocs.length?nextDocs.map(m=>vvRenderChatMessage(m,'groups',groupId)).join(''):'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>';vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;}if(first)vvJumpToNewestMessage(host,'group:'+groupId);},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.dataset.loadedChat='';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();vvComposerSyncActions();let previousGroupDocs=null;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const first=previousGroupDocs===null;const stickToBottom=first||host.scrollHeight-host.scrollTop-host.clientHeight<96;const previousScroll=host.scrollTop;const nextDocs=snap.docs.map(d=>({id:d.id,...d.data()}));const reactionOnly=!first&&vvPatchReactionChanges(host,previousGroupDocs,nextDocs,'groups',groupId);previousGroupDocs=nextDocs;vvGroupMessageCache.set(groupId,nextDocs);if(vvGroupMessageCache.size>12)vvGroupMessageCache.delete(vvGroupMessageCache.keys().next().value);host.dataset.loadedChat='group:'+groupId;if(!reactionOnly){host.innerHTML=nextDocs.length?nextDocs.map(m=>vvRenderChatMessage(m,'groups',groupId)).join(''):'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>';vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;}if(first)vvJumpToNewestMessage(host,'group:'+groupId);},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -2918,6 +2918,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (game) game.disabled = true;
             }
         }
+        const vvGroupMessageCache=new Map();
         const vvReactionEmojis=['❤️','👍','😂','🔥','😮','😢'];
         const vvReactionBusy=new Set();
         function vvReactionCounts(reactions){
@@ -2928,20 +2929,25 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         function vvReactionBadgeHTML(reactions){
             return vvReactionCounts(reactions).map(([emoji,count])=>`<button type="button" data-reaction="${emoji}" class="${reactions[state.user.uid]===emoji?'selected':''}"><span>${emoji}</span><span class="vv-reaction-avatars">${Object.entries(reactions).filter(([,value])=>value===emoji).map(([uid])=>vvReactionAvatarMarkup(uid)).join('')}</span>${count>1?`<span class="vv-reaction-total">${count}</span>`:''}</button>`).join('');
         }
-        // When only a reaction changes, keep every message and audio element in place.
-        // Replacing all message HTML causes the blink and restarts voice playback.
+        // Reconcile reaction changes and deletions without reconstructing existing bubbles.
+        // Keeping old DOM nodes prevents voice playback from stopping or messages blinking.
         function vvPatchReactionChanges(host,previous,next,scope,chatId){
-            if(!host||!Array.isArray(previous)||previous.length!==next.length)return false;
-            const bubbles=[...host.querySelectorAll('.vv-message-bubble[data-message-id]')];
-            if(bubbles.length!==next.length)return false;
-            const byId=new Map(bubbles.map(node=>[node.dataset.messageId,node]));
+            if(!host||!Array.isArray(previous))return false;
+            const nextById=new Map(next.map(m=>[m.id,m]));
+            if(nextById.size!==next.length)return false;
+            const oldById=new Map(previous.map(m=>[m.id,m]));
+            // A newly arriving message still uses the normal, full render path.
+            if(next.some(m=>!oldById.has(m.id)))return false;
+            const liveBubbles=[...host.querySelectorAll('.vv-message-bubble[data-message-id]')]
+                .filter(node=>!node.closest('.vv-message-row')?.classList.contains('vv-message-removing'));
+            if(liveBubbles.length!==previous.length)return false;
+            const nodesById=new Map(liveBubbles.map(node=>[node.dataset.messageId,node]));
+            if(nodesById.size!==previous.length)return false;
             const updates=[];
-            for(let i=0;i<next.length;i++){
-                const old=previous[i],current=next[i];
-                if(!old||old.id!==current.id)return false;
-                if(JSON.stringify({...old,reactions:null})!==JSON.stringify({...current,reactions:null}))return false;
-                const node=byId.get(current.id);
+            for(const current of next){
+                const old=oldById.get(current.id),node=nodesById.get(current.id);
                 if(!node||node.dataset.messageScope!==scope||node.dataset.messageChat!==chatId)return false;
+                if(JSON.stringify({...old,reactions:null})!==JSON.stringify({...current,reactions:null}))return false;
                 if(JSON.stringify(old.reactions||{})!==JSON.stringify(current.reactions||{}))updates.push({node,reactions:current.reactions||{}});
             }
             for(const {node,reactions} of updates){
@@ -2951,7 +2957,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 badgeArea.querySelectorAll('[data-reaction]').forEach(button=>button.addEventListener('click',()=>vvSetMessageReaction(node,button.dataset.reaction,true)));
                 void vvHydrateReactionAvatars(badgeArea);
             }
+            const removed=previous.filter(m=>!nextById.has(m.id));
+            for(const old of removed){
+                const row=nodesById.get(old.id)?.closest('.vv-message-row');
+                if(!row)continue;
+                vvAnimateMessageRemoval(row);
+            }
+            if(!next.length&&removed.length){
+                setTimeout(()=>{
+                    if(host.isConnected&&!host.querySelector('.vv-message-bubble')&&!host.querySelector('.vv-chat-mention')){
+                        host.innerHTML='<p class="text-sm text-slate-500">Пока нет сообщений. Напиши первым 👋</p>';
+                    }
+                },300);
+            }
             return true;
+        }
+        function vvAnimateMessageRemoval(row){
+            if(!row||row.classList.contains('vv-message-removing'))return;
+            row.style.setProperty('--vv-message-delete-height',`${row.getBoundingClientRect().height}px`);
+            row.classList.add('vv-message-removing');
+            setTimeout(()=>{if(row.isConnected)row.remove();},290);
         }
         function vvJumpToNewestMessage(host,chatKey){
             // Firestore may deliver the first snapshot before the chat layout has its final height.
@@ -3024,7 +3049,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const sender=mine?state.userProfile:friendsCache.find(f=>(f.uid||f.id)===m.senderUid);
             const name=sender?.displayName||(mine?'Вы':'Участник');
             const reactions=m.reactions||{};
-            let body=m.type==='sticker'?`<img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain">`:`<p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p>`;
+            let body=m.type==='sticker'?`<img src="${escapeHTML(m.text||'')}" alt="Стикер" class="vv-sticker-art" loading="lazy" decoding="async">`:`<p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p>`;
             if(m.type==='voice'){
                 const safeUrl=vvVoiceSafeURL(m.audioURL);
                 const seconds=Math.max(1,Math.min(60,Number(m.durationSec)||1));
@@ -3034,7 +3059,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 body=safeUrl?`<div class="vv-voice-message"><button type="button" class="vv-voice-play" aria-label="${escapeHTML(vvVoiceT('play'))}" title="${escapeHTML(vvVoiceT('play'))}"><i class="fa-solid fa-play"></i></button><div class="vv-voice-player"><div class="vv-voice-waveform" aria-hidden="true">${bars}</div><div class="vv-voice-meta"><span class="vv-voice-length">${stamp}</span></div><audio class="vv-voice-audio" preload="none" playsinline src="${escapeHTML(safeUrl)}" aria-label="${escapeHTML(vvVoiceT('message'))}"></audio></div><button type="button" class="vv-voice-speed" aria-label="${escapeHTML(vvVoiceT('speed'))}" title="${escapeHTML(vvVoiceT('speed'))}">1×</button></div>`:`<p class="text-rose-300">${escapeHTML(vvVoiceT('unavailable'))}</p>`;
             }
             if(m.type==='snake-challenge')body+=`<button data-playchallenge="${escapeHTML(m.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2">🎮 Играть</button>`;
-            return `<div class="vv-message-row ${mine?'vv-message-mine':''}"><div class="vv-message-bubble" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionBadgeHTML(reactions)}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div></div></div>`;
+            return `<div class="vv-message-row ${mine?'vv-message-mine':''} ${m.type==='sticker'?'vv-sticker-row':''}"><div class="vv-message-bubble ${m.type==='sticker'?'vv-sticker-bubble':''}" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}" data-message-owner="${mine?'yes':'no'}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionBadgeHTML(reactions)}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div>${mine?`<div class="vv-message-delete-menu" hidden><button type="button" class="vv-delete-action" data-delete-message><i class="fa-solid fa-trash-can" aria-hidden="true"></i> ${escapeHTML(vvVoiceT('deleteForAll'))}</button></div>`:''}</div></div>`;
         }
         function vvRenderMention(m){
             const expired=Number(m.expiresAt)<=Date.now();
@@ -3069,6 +3094,102 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }catch(e){console.error('Message reaction:',e);alert('Реакция не сохранена. Опубликуй обновлённые Firestore Rules и попробуй снова.');}
             finally{vvReactionBusy.delete(key);}
         }
+        function vvCloseDeleteMenus(except){
+            document.querySelectorAll('.vv-message-delete-menu:not([hidden])').forEach(menu=>{
+                if(menu===except)return;
+                menu.hidden=true;
+                menu.closest('.vv-message-bubble')?.classList.remove('vv-message-menu-active');
+            });
+        }
+        function vvMessagePreview(message){
+            if(!message)return '';
+            if(message.type==='voice')return '🎤 Голосовое сообщение';
+            if(message.type==='sticker')return '✨ Стикер';
+            if(message.type==='snake-challenge')return '🎮 Вызов в Змейку';
+            return String(message.text||'').slice(0,100);
+        }
+        const vvDeletingMessages=new Set();
+        async function vvDeleteChatMessage(node){
+            const scope=node?.dataset.messageScope,chatId=node?.dataset.messageChat,id=node?.dataset.messageId;
+            if(!state.user||node?.dataset.messageOwner!=='yes'||!['conversations','groups'].includes(scope)||!chatId||!id)return;
+            const key=`${scope}/${chatId}/${id}`;
+            if(vvDeletingMessages.has(key))return;
+            vvDeletingMessages.add(key);
+            const menu=node.querySelector('.vv-message-delete-menu');
+            if(menu)menu.hidden=true;
+            node.classList.remove('vv-message-menu-active');
+            const row=node.closest('.vv-message-row');
+            row?.classList.add('vv-message-delete-pending');
+            const candidates=scope==='groups'?vvGroupMessageCache.get(chatId)||[]:vvDirectDocs;
+            const known=candidates.find(m=>m.id===id);
+            const last=candidates.length?candidates[candidates.length-1]:null;
+            const prev=candidates.filter(m=>m.id!==id).at(-1);
+            try{
+                const messageRef=doc(db,scope,chatId,'messages',id);
+                const chatRef=doc(db,scope,chatId);
+                await runTransaction(db,async tx=>{
+                    const message=await tx.get(messageRef);
+                    if(!message.exists())return;
+                    if(message.data().senderUid!==state.user.uid)throw new Error('Удалять можно только свои сообщения.');
+                    const chat=await tx.get(chatRef);
+                    tx.delete(messageRef);
+                    // Repair the chat preview only if this was still the latest message.
+                    // A concurrent new message must never be overwritten by deletion.
+                    const oldTime=Number(message.data().createdAt||0);
+                    const parentTime=Number(chat.exists()?chat.data().updatedAt:0);
+                    if(chat.exists()&&last?.id===id&&Math.abs(parentTime-oldTime)<3500){
+                        tx.update(chatRef,{
+                            lastMessage:vvMessagePreview(prev),
+                            updatedAt:prev?Number(prev.createdAt||0):Number(chat.data().createdAt||0)
+                        });
+                    }
+                });
+                // The message listener removes this row on every connected device.
+            }catch(error){
+                row?.classList.remove('vv-message-delete-pending');
+                console.error('Delete message:',error);
+                alert('Не удалось удалить сообщение. Опубликуй новые Firestore Rules и попробуй снова.');
+            }finally{vvDeletingMessages.delete(key);}
+        }
+        function vvBindMessageHold(node){
+            if(node.dataset.messageOwner!=='yes')return;
+            const menu=node.querySelector('.vv-message-delete-menu');
+            if(!menu)return;
+            let timer=null,start=null,openedByHold=false;
+            const clear=()=>{if(timer!==null){clearTimeout(timer);timer=null;}start=null;};
+            const show=()=>{
+                clear();openedByHold=true;
+                vvCloseDeleteMenus(menu);
+                menu.hidden=false;
+                node.classList.add('vv-message-menu-active');
+                if(navigator.vibrate)try{navigator.vibrate(12);}catch(_){ }
+            };
+            node.addEventListener('pointerdown',e=>{
+                if(e.button!==0||e.target.closest('button,a,input,textarea,audio')||node.closest('.vv-message-removing'))return;
+                clear();openedByHold=false;
+                start={x:e.clientX,y:e.clientY};
+                timer=setTimeout(show,520);
+            });
+            node.addEventListener('pointermove',e=>{
+                if(start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>11)clear();
+            });
+            node.addEventListener('pointerup',clear);
+            node.addEventListener('pointercancel',clear);
+            node.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')clear();});
+            node.addEventListener('contextmenu',e=>{if(e.target.closest('button,a,input,textarea,audio'))return;e.preventDefault();show();});
+            node.addEventListener('click',e=>{
+                // Do not swallow the Delete button's own click after a long hold.
+                if(e.target.closest?.('[data-delete-message]')){openedByHold=false;return;}
+                if(openedByHold){e.preventDefault();e.stopPropagation();openedByHold=false;}
+            },true);
+            menu.querySelector('[data-delete-message]')?.addEventListener('click',e=>{
+                e.preventDefault();e.stopPropagation();
+                void vvDeleteChatMessage(node);
+            });
+        }
+        document.addEventListener?.('pointerdown',e=>{
+            if(!e.target.closest?.('.vv-message-delete-menu'))vvCloseDeleteMenus();
+        });
         function vvBindMessageActions(host){
             void vvHydrateReactionAvatars(host);
             host.querySelectorAll('[data-chat-story]').forEach(b=>b.addEventListener('click',()=>vvOpenMentionStory(b.dataset.chatStory)));
@@ -3125,13 +3246,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 paint();
             });
             host.querySelectorAll('[data-message-id]').forEach(node=>{
+                vvBindMessageHold(node);
                 let lastTap=0,touchStart=null,lastHeart=0;
                 const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',true);};
                 node.addEventListener('dblclick',e=>{if(e.target.closest('button,a,input'))return;e.preventDefault();heart();});
-                node.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||e.target.closest('button,a,input'))return;touchStart={x:e.clientX,y:e.clientY,time:Date.now()};});
+                node.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch'||node.classList?.contains('vv-message-menu-active')||e.target.closest('button,a,input'))return;touchStart={x:e.clientX,y:e.clientY,time:Date.now()};});
                 node.addEventListener('pointercancel',()=>{touchStart=null;lastTap=0;});
                 node.addEventListener('pointerup',e=>{
-                    if(e.pointerType!=='touch'||!touchStart)return;
+                    if(e.pointerType!=='touch'||!touchStart||node.classList?.contains('vv-message-menu-active'))return;
                     const start=touchStart;touchStart=null;const now=Date.now();
                     if(Math.hypot(e.clientX-start.x,e.clientY-start.y)>12||now-start.time>350){lastTap=0;return;}
                     if(lastTap&&now-lastTap<320){lastTap=0;heart();}else lastTap=now;
@@ -3158,9 +3280,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         const vvVoice={phase:'idle',recorder:null,stream:null,chunks:[],startTime:0,timer:null,pointerId:null,pointerActive:false,
             target:null,userUid:null,cancelRequested:false,abortController:null,session:0,audioContext:null,analyser:null,peaks:[]};
         const vvVoiceWords={
-            ru:{hold:'Удерживай для записи',recording:'Запись',uploading:'Отправка голосового…',preparing:'Подключаем микрофон…',cancel:'Запись отменена',tooShort:'Слишком короткая запись',noMic:'Разреши доступ к микрофону в браузере.',tooLarge:'Голосовое слишком большое (максимум 5 МБ).',noSupport:'Этот браузер не поддерживает запись голосовых.',fail:'Не удалось отправить голосовое',context:'Чат изменился — запись отменена',release:'Удерживай микрофон для записи',duration:'До 60 секунд',cancelButton:'Отмена',message:'Голосовое сообщение',speed:'Скорость воспроизведения',unavailable:'Голосовое сообщение недоступно',play:'Слушать голосовое'},
-            uk:{hold:'Утримуй для запису',recording:'Запис',uploading:'Надсилання голосового…',preparing:'Підключаємо мікрофон…',cancel:'Запис скасовано',tooShort:'Запис надто короткий',noMic:'Дозволь доступ до мікрофона у браузері.',tooLarge:'Голосове завелике (максимум 5 МБ).',noSupport:'Цей браузер не підтримує запис голосових.',fail:'Не вдалося надіслати голосове',context:'Чат змінився — запис скасовано',release:'Утримуй мікрофон для запису',duration:'До 60 секунд',cancelButton:'Скасувати',message:'Голосове повідомлення',speed:'Швидкість відтворення',unavailable:'Голосове повідомлення недоступне',play:'Слухати голосове'},
-            en:{hold:'Hold to record',recording:'Recording',uploading:'Sending voice note…',preparing:'Requesting microphone…',cancel:'Recording canceled',tooShort:'Recording too short',noMic:'Allow microphone access in your browser.',tooLarge:'Voice note is too large (5 MB max).',noSupport:'Voice recording is not supported in this browser.',fail:'Could not send voice note',context:'Chat changed — recording canceled',release:'Hold microphone to record',duration:'Up to 60 seconds',cancelButton:'Cancel',message:'Voice message',speed:'Playback speed',unavailable:'Voice message unavailable',play:'Play voice note'}
+            ru:{hold:'Удерживай для записи',recording:'Запись',uploading:'Отправка голосового…',preparing:'Подключаем микрофон…',cancel:'Запись отменена',tooShort:'Слишком короткая запись',noMic:'Разреши доступ к микрофону в браузере.',tooLarge:'Голосовое слишком большое (максимум 5 МБ).',noSupport:'Этот браузер не поддерживает запись голосовых.',fail:'Не удалось отправить голосовое',context:'Чат изменился — запись отменена',release:'Удерживай микрофон для записи',duration:'До 60 секунд',cancelButton:'Отмена',message:'Голосовое сообщение',speed:'Скорость воспроизведения',unavailable:'Голосовое сообщение недоступно',play:'Слушать голосовое',deleteForAll:'Удалить для всех'},
+            uk:{hold:'Утримуй для запису',recording:'Запис',uploading:'Надсилання голосового…',preparing:'Підключаємо мікрофон…',cancel:'Запис скасовано',tooShort:'Запис надто короткий',noMic:'Дозволь доступ до мікрофона у браузері.',tooLarge:'Голосове завелике (максимум 5 МБ).',noSupport:'Цей браузер не підтримує запис голосових.',fail:'Не вдалося надіслати голосове',context:'Чат змінився — запис скасовано',release:'Утримуй мікрофон для запису',duration:'До 60 секунд',cancelButton:'Скасувати',message:'Голосове повідомлення',speed:'Швидкість відтворення',unavailable:'Голосове повідомлення недоступне',play:'Слухати голосове',deleteForAll:'Видалити для всіх'},
+            en:{hold:'Hold to record',recording:'Recording',uploading:'Sending voice note…',preparing:'Requesting microphone…',cancel:'Recording canceled',tooShort:'Recording too short',noMic:'Allow microphone access in your browser.',tooLarge:'Voice note is too large (5 MB max).',noSupport:'Voice recording is not supported in this browser.',fail:'Could not send voice note',context:'Chat changed — recording canceled',release:'Hold microphone to record',duration:'Up to 60 seconds',cancelButton:'Cancel',message:'Voice message',speed:'Playback speed',unavailable:'Voice message unavailable',play:'Play voice note',deleteForAll:'Delete for everyone'}
         };
         const vvVoiceT=(name)=>{
             let lang='ru';try{lang=localStorage.getItem('voicevibe.uiLanguage')||'ru';}catch(_){ }

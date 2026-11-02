@@ -641,3 +641,49 @@ header, #appHeader, .app-header {isolation:isolate}
  #socialChatsPanel.chat-open #messageForm{padding:7px 8px 9px!important;gap:6px!important}
  #socialChatsPanel.chat-open #sendMessageBtn{flex-basis:42px!important;width:42px!important;min-width:42px!important;height:42px!important}
 }
+
+/* VoiceVibe: frameless stickers, while preserving timestamps, menus and reactions */
+.vv-sticker-row{margin:5px 0 13px!important}
+.vv-sticker-bubble,.vv-message-mine .vv-sticker-bubble{
+  min-width:0!important;max-width:min(235px,83vw)!important;
+  padding:3px 5px 9px!important;background:transparent!important;
+  border:0!important;box-shadow:none!important;color:#f1f5f9!important;
+}
+.vv-sticker-art{display:block;width:auto;max-width:158px;max-height:164px;object-fit:contain;
+  border:0!important;border-radius:0!important;box-shadow:none!important;
+  filter:drop-shadow(0 7px 11px rgba(5,4,20,.20));user-select:none;-webkit-user-drag:none;
+}
+.vv-sticker-bubble .vv-message-author{margin:1px 0 4px;font-size:10px;padding-left:2px;color:#dfd1ff}
+.vv-sticker-bubble .vv-message-footer{justify-content:flex-start;gap:5px;margin-top:0;font-size:10px}
+.vv-sticker-bubble .vv-message-footer time{padding:3px 6px;border-radius:8px;background:rgba(15,23,42,.65);color:#cbd5e1}
+.vv-sticker-bubble .vv-reaction-open{width:28px;min-width:28px;height:28px;min-height:28px;border-radius:50%;background:rgba(27,24,52,.72);font-size:18px}
+.vv-sticker-bubble .vv-reaction-counts{margin-top:3px}
+.vv-sticker-bubble .vv-reaction-counts>button{background:rgba(37,28,65,.89);border-color:rgba(196,181,253,.35);box-shadow:0 3px 12px #09091b66}
+.vv-sticker-bubble .vv-reaction-picker:not([hidden]){box-shadow:0 8px 24px rgba(0,0,0,.26);background:#17142d}
+/* Long-press deletion menu: only the sender sees this control. */
+.vv-message-bubble.vv-message-menu-active{outline:1px solid rgba(196,181,253,.45);outline-offset:3px}
+.vv-sticker-bubble.vv-message-menu-active{outline:0}
+.vv-message-delete-menu:not([hidden]){display:flex;justify-content:flex-end;margin-top:7px;animation:vvDeleteMenuAppear .18s ease both}
+.vv-message-delete-menu[hidden]{display:none!important}
+.vv-delete-action{display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  min-height:40px;padding:8px 14px;border-radius:13px;border:1px solid rgba(251,113,133,.24);
+  background:linear-gradient(135deg,#402337,#2f1d39);color:#fecdd3;font-size:12px;font-weight:700;
+  box-shadow:0 9px 21px rgba(0,0,0,.20)}
+.vv-delete-action:focus-visible{outline:2px solid #fda4af;outline-offset:3px}
+.vv-message-delete-pending{opacity:.65;pointer-events:none}
+.vv-message-row.vv-message-removing{
+  animation:vvMessageDissolve .28s cubic-bezier(.2,.7,.25,1) forwards;
+  pointer-events:none;overflow:hidden;
+}
+@keyframes vvDeleteMenuAppear{from{opacity:0;transform:translateY(-4px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes vvMessageDissolve{
+  0%{opacity:1;filter:blur(0);transform:scale(1);height:var(--vv-message-delete-height);margin:8px 0}
+  65%{opacity:0;filter:blur(3px);transform:scale(.94);height:var(--vv-message-delete-height);margin:8px 0}
+  100%{opacity:0;filter:blur(7px);transform:scale(.88);height:0;margin:0;padding:0}
+}
+@media(prefers-reduced-motion:reduce){.vv-message-row.vv-message-removing{animation:none;height:0;opacity:0;margin:0}.vv-message-delete-menu:not([hidden]){animation:none}}
+
+/* Sticker chooser: clean tiles without hard outlines */
+#stickersGrid [data-send-sticker]{border:0!important;background:transparent!important;border-radius:14px;padding:5px!important;transition:transform .16s ease,background .16s ease}
+#stickersGrid [data-send-sticker]:hover,#stickersGrid [data-send-sticker]:focus-visible{background:rgba(139,92,246,.13)!important;transform:scale(1.06);outline:0}
+#stickersGrid [data-send-sticker] img{border-radius:0!important;filter:drop-shadow(0 3px 6px rgba(0,0,0,.25))}

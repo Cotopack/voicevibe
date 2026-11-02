@@ -1,3 +1,13 @@
+// VoiceVibe — полный набор правил Cloud Firestore.
+// Установка: Firebase Console → Firestore Database → Rules → Publish.
+// Правила работают на сервере и не активируются простой загрузкой на GitHub.
+// Для запросов групп используется where('members', 'array-contains', auth.uid).
+// Для личных бесед используется where('participants', 'array-contains', auth.uid).
+// Если документ не содержит нужного UID в соответствующем массиве,
+// запрос запрещается независимо от интерфейса сайта.
+// Для проверки доступа важно использовать тот же Firebase-проект,
+// который настроен в опубликованном приложении.
+// Версия: подробная, с комментариями; разрешения не расширены.
 
 rules_version = '2';
 
@@ -23,14 +33,21 @@ service cloud.firestore {
           || after[request.auth.uid] in ['❤️','👍','😂','🔥','😮','😢']);
     }
 
-
-    // Audio metadata only: never store audio bytes in Firestore.
-    // Only Cloudinary URLs for this project are accepted. The asset itself remains public-to-link.
+    // ==============================
+    // ГОЛОСОВЫЕ СООБЩЕНИЯ (Cloudinary)
+    // Только метаданные, аудиофайл хранится в Cloudinary.
+    // ==============================
     function validVoiceNote() {
       let m = request.resource.data;
       return m.type == 'voice'
-        && m.keys().hasOnly(['senderUid','text','type','createdAt','clientMessageId','audioURL','durationSec','waveform'])
-        && m.keys().hasAll(['senderUid','text','type','createdAt','audioURL','durationSec','waveform'])
+        && m.keys().hasOnly([
+          'senderUid', 'text', 'type', 'createdAt',
+          'clientMessageId', 'audioURL', 'durationSec', 'waveform'
+        ])
+        && m.keys().hasAll([
+          'senderUid', 'text', 'type', 'createdAt',
+          'audioURL', 'durationSec', 'waveform'
+        ])
         && m.text == ''
         && m.createdAt is int
         && m.durationSec is int
@@ -41,7 +58,13 @@ service cloud.firestore {
         && m.audioURL is string
         && m.audioURL.size() <= 2048
         && m.audioURL.matches('https://res[.]cloudinary[.]com/yvoqyrj8/video/upload/.*')
-        && (!m.keys().hasAny(['clientMessageId']) || (m.clientMessageId is string && m.clientMessageId.size() <= 100));
+        && (
+          !m.keys().hasAny(['clientMessageId'])
+          || (
+            m.clientMessageId is string
+            && m.clientMessageId.size() <= 100
+          )
+        );
     }
 
     function isMe(uid) {
@@ -96,12 +119,24 @@ service cloud.firestore {
     // ==============================
 
     match /roles/{userId} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn();
 
+      // ПРАВИЛО ДОСТУПА: create, update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update: if isAdmin()
         && request.resource.data.keys().hasOnly(['role'])
         && request.resource.data.role == 'admin';
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if isAdmin();
     }
 
@@ -110,8 +145,16 @@ service cloud.firestore {
     // ==============================
 
     match /users/{userId} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn();
 
+      // ПРАВИЛО ДОСТУПА: create.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create: if isMe(userId)
         && request.resource.data.keys().hasOnly([
           'displayName',
@@ -131,6 +174,10 @@ service cloud.firestore {
         && request.resource.data.bio.size() <= 160;
 
       // Монеты, Premium и рефералы изменяет сервер
+      // ПРАВИЛО ДОСТУПА: update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow update: if isMe(userId)
         && request.resource.data.keys().hasOnly([
           'displayName',
@@ -179,6 +226,10 @@ service cloud.firestore {
           )
         );
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if false;
 
       // ==============================
@@ -186,8 +237,16 @@ service cloud.firestore {
       // ==============================
 
       match /stickers/{stickerId} {
+        // ПРАВИЛО ДОСТУПА: read.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read: if signedIn();
 
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if isMe(userId)
           && get(
             /databases/$(database)/documents/users/$(userId)
@@ -203,7 +262,15 @@ service cloud.firestore {
           && request.resource.data.name.size() <= 80
           && request.resource.data.createdAt is int;
 
+        // ПРАВИЛО ДОСТУПА: update.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update: if false;
+        // ПРАВИЛО ДОСТУПА: delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow delete: if isMe(userId);
       }
 
@@ -212,8 +279,16 @@ service cloud.firestore {
       // ==============================
 
       match /friendRequests/{fromUid} {
+        // ПРАВИЛО ДОСТУПА: read, delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read, delete: if isMe(userId);
 
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if signedIn()
           && request.auth.uid == fromUid
           && fromUid != userId
@@ -224,6 +299,10 @@ service cloud.firestore {
           && request.resource.data.username is string
           && request.resource.data.photoURL is string;
 
+        // ПРАВИЛО ДОСТУПА: update.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update: if false;
       }
 
@@ -232,6 +311,10 @@ service cloud.firestore {
       // ==============================
 
       match /friends/{friendUid} {
+        // ПРАВИЛО ДОСТУПА: read.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read: if signedIn()
           && (
             request.auth.uid == userId
@@ -240,6 +323,10 @@ service cloud.firestore {
 
         // Both sides of an accepted friendship must have a real pending request.
         // Prevent arbitrary users from creating forged friend relationships.
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if signedIn()
           && userId != friendUid
           && (
@@ -258,6 +345,10 @@ service cloud.firestore {
           )
           && request.resource.data.uid == friendUid;
 
+        // ПРАВИЛО ДОСТУПА: update.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update: if signedIn()
           && (
             request.auth.uid == userId
@@ -265,6 +356,10 @@ service cloud.firestore {
           )
           && request.resource.data.uid == friendUid;
 
+        // ПРАВИЛО ДОСТУПА: delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow delete: if isMe(userId);
       }
 
@@ -273,8 +368,16 @@ service cloud.firestore {
       // ==============================
 
       match /storyReplies/{replyId} {
+        // ПРАВИЛО ДОСТУПА: read.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read: if isMe(userId);
 
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if signedIn()
           && request.resource.data.fromUid == request.auth.uid
           && request.resource.data.fromName is string
@@ -283,6 +386,10 @@ service cloud.firestore {
           && request.resource.data.text.size() <= 300
           && request.resource.data.createdAt is int;
 
+        // ПРАВИЛО ДОСТУПА: update, delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update, delete: if isMe(userId);
       }
 
@@ -293,10 +400,18 @@ service cloud.firestore {
       match /storyMentions/{storyId} {
 
         // Отметку видит только получатель
+        // ПРАВИЛО ДОСТУПА: read.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read: if isMe(userId);
 
         // Создаёт только автор истории,
         // который действительно отметил получателя
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if signedIn()
           && userId != request.auth.uid
           && request.resource.data.keys().hasOnly([
@@ -326,7 +441,15 @@ service cloud.firestore {
           && request.resource.data.expiresAt
             == get(storyPath(storyId)).data.expiresAt;
 
+        // ПРАВИЛО ДОСТУПА: update.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update: if false;
+        // ПРАВИЛО ДОСТУПА: delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow delete: if isMe(userId);
       }
     }
@@ -336,8 +459,16 @@ service cloud.firestore {
     // ==============================
 
     match /usernames/{username} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn();
 
+      // ПРАВИЛО ДОСТУПА: create.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create: if signedIn()
         && !exists(
           /databases/$(database)/documents/usernames/$(username)
@@ -345,11 +476,19 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.username == username;
 
+      // ПРАВИЛО ДОСТУПА: update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow update: if signedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.username == username;
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if signedIn()
         && resource.data.uid == request.auth.uid;
     }
@@ -359,8 +498,16 @@ service cloud.firestore {
     // ==============================
 
     match /peerSessions/{peerId} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn();
 
+      // ПРАВИЛО ДОСТУПА: create, update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update: if signedIn()
         && request.resource.data.peerId == peerId
         && request.resource.data.ownerUid == request.auth.uid
@@ -370,6 +517,10 @@ service cloud.firestore {
           'updatedAt'
         ]);
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if signedIn()
         && resource.data.ownerUid == request.auth.uid;
     }
@@ -379,9 +530,17 @@ service cloud.firestore {
     // ==============================
 
     match /artifacts/{appId}/public/data/{queueName}/{peerId} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn()
         && appId == 'voicevibe-1b8c0';
 
+      // ПРАВИЛО ДОСТУПА: create, update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update: if signedIn()
         && appId == 'voicevibe-1b8c0'
         && request.resource.data.keys().hasAll([
@@ -398,6 +557,10 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.timestamp is int;
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if signedIn()
         && appId == 'voicevibe-1b8c0'
         && resource.data.ownerUid == request.auth.uid;
@@ -410,17 +573,33 @@ service cloud.firestore {
     // Public online count uses no emails, usernames or profile content.
     // Only an authenticated account may publish its own heartbeat.
     match /onlinePublic/{userId} {
+      // ПРАВИЛО ДОСТУПА: get, list.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow get, list: if signedIn();
+      // ПРАВИЛО ДОСТУПА: create, update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update: if isMe(userId)
         && request.resource.data.keys().hasOnly(['uid', 'lastSeen'])
         && request.resource.data.uid == userId
         && request.resource.data.lastSeen is int
         && request.resource.data.lastSeen >= 0
         && request.resource.data.lastSeen <= request.time.toMillis() + 60000;
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if isMe(userId);
     }
 
     match /presence/{userId} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn()
         && (
           request.auth.uid == userId
@@ -429,6 +608,10 @@ service cloud.firestore {
           )
         );
 
+      // ПРАВИЛО ДОСТУПА: create, update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update: if isMe(userId)
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.online is bool
@@ -439,6 +622,10 @@ service cloud.firestore {
           'lastSeen'
         ]);
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if isMe(userId);
     }
 
@@ -447,8 +634,16 @@ service cloud.firestore {
     // ==============================
 
     match /stories/{storyId} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn();
 
+      // ПРАВИЛО ДОСТУПА: create.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
 
@@ -599,6 +794,10 @@ service cloud.firestore {
         && validStoryRepost();
 
       // Лайки, просмотры, ответы
+      // ПРАВИЛО ДОСТУПА: update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow update: if signedIn()
         && request.resource.data.diff(resource.data)
           .affectedKeys().hasOnly([
@@ -614,6 +813,10 @@ service cloud.firestore {
         && request.resource.data.replies.size() <= 500;
 
       // Удалять историю может только автор
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if signedIn()
         && resource.data.uid == request.auth.uid;
     }
@@ -637,6 +840,10 @@ service cloud.firestore {
         );
       }
 
+      // ПРАВИЛО ДОСТУПА: get.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow get: if signedIn()
         && (
           !exists(
@@ -650,19 +857,31 @@ service cloud.firestore {
           )
         );
 
+      // A matching array-contains(uid) query proves this membership condition.
+      // ПРАВИЛО ДОСТУПА: list.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow list: if signedIn()
-        && resource.data.participants is list
         && request.auth.uid in resource.data.participants;
 
+      // ПРАВИЛО ДОСТУПА: create.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create: if signedIn()
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
-        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.hasAny([request.auth.uid])
         && isFriendConversation(request.resource.data);
 
+      // ПРАВИЛО ДОСТУПА: update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow update: if signedIn()
         && resource.data.participants is list
-        && request.auth.uid in resource.data.participants
+        && resource.data.participants.hasAny([request.auth.uid])
         && request.resource.data.participants
           == resource.data.participants
         && request.resource.data.diff(resource.data)
@@ -690,6 +909,10 @@ service cloud.firestore {
           || request.resource.data.wallpaperURL is string
         );
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if false;
 
       // ==============================
@@ -707,8 +930,16 @@ service cloud.firestore {
             ]);
         }
 
+        // ПРАВИЛО ДОСТУПА: read.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read: if participant();
 
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if participant()
           && (!request.resource.data.keys().hasAny(['reactions']) || request.resource.data.reactions == {})
           && request.resource.data.senderUid
@@ -730,8 +961,18 @@ service cloud.firestore {
             ).data.premiumUntil > request.time.toMillis()
           );
 
+        // ПРАВИЛО ДОСТУПА: update.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update: if participant() && validReactionUpdate();
-        allow delete: if false;
+        // ПРАВИЛО ДОСТУПА: delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
+        // Автор может удалить только своё сообщение; остальные участники — нет.
+        allow delete: if participant()
+          && resource.data.senderUid == request.auth.uid;
       }
     }
 
@@ -744,15 +985,26 @@ service cloud.firestore {
       // Запрос клиента: where('members', 'array-contains', request.auth.uid).
       function isGroupMember() {
         return signedIn()
-          && resource.data.members is list
           && request.auth.uid in resource.data.members;
       }
 
+      // ПРАВИЛО ДОСТУПА: get, list.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow get, list: if isGroupMember();
 
       // Создание групп через сервер
+      // ПРАВИЛО ДОСТУПА: create.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create: if false;
 
+      // ПРАВИЛО ДОСТУПА: update.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow update: if signedIn()
         && resource.data.members is list
         && resource.data.members.hasAny([
@@ -785,6 +1037,10 @@ service cloud.firestore {
           || request.resource.data.wallpaperURL is string
         );
 
+      // ПРАВИЛО ДОСТУПА: delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow delete: if signedIn()
         && resource.data.createdBy == request.auth.uid;
 
@@ -803,8 +1059,16 @@ service cloud.firestore {
             ]);
         }
 
+        // ПРАВИЛО ДОСТУПА: read.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow read: if groupMember();
 
+        // ПРАВИЛО ДОСТУПА: create.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow create: if groupMember()
           && (!request.resource.data.keys().hasAny(['reactions']) || request.resource.data.reactions == {})
           && request.resource.data.senderUid
@@ -825,8 +1089,18 @@ service cloud.firestore {
             ).data.premiumUntil > request.time.toMillis()
           );
 
+        // ПРАВИЛО ДОСТУПА: update.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
         allow update: if groupMember() && validReactionUpdate();
-        allow delete: if false;
+        // ПРАВИЛО ДОСТУПА: delete.
+        // Проверка выполняется сервером Firestore для каждого запроса.
+        // Условия ниже определяют, кому разрешена эта операция.
+        // Отказ в доступе не обходится изменением интерфейса сайта.
+        // Автор может удалить своё сообщение даже в группе.
+        allow delete: if groupMember()
+          && resource.data.senderUid == request.auth.uid;
       }
     }
 
@@ -835,9 +1109,17 @@ service cloud.firestore {
     // ==============================
 
     match /referralCodes/{code} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if signedIn();
 
       // Только сервер
+      // ПРАВИЛО ДОСТУПА: create, update, delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update, delete: if false;
     }
 
@@ -846,9 +1128,17 @@ service cloud.firestore {
     // ==============================
 
     match /referralClaims/{uid} {
+      // ПРАВИЛО ДОСТУПА: read.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read: if isMe(uid);
 
       // Только сервер
+      // ПРАВИЛО ДОСТУПА: create, update, delete.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow create, update, delete: if false;
     }
 
@@ -857,6 +1147,10 @@ service cloud.firestore {
     // ==============================
 
     match /{document=**} {
+      // ПРАВИЛО ДОСТУПА: read, write.
+      // Проверка выполняется сервером Firestore для каждого запроса.
+      // Условия ниже определяют, кому разрешена эта операция.
+      // Отказ в доступе не обходится изменением интерфейса сайта.
       allow read, write: if false;
     }
   }
