@@ -1,0 +1,297 @@
+/* VoiceVibe • cohesive responsive design layer • 2026-11-03
+   Applied after the existing app styles. No Firebase logic or permissions changed. */
+:root {
+  --vv-page:#090d19;
+  --vv-ink:#f5f3ff;
+  --vv-subtle:#aab4cc;
+  --vv-line:rgba(178,191,229,.16);
+  --vv-line-strong:rgba(167,139,250,.34);
+  --vv-panel:#151c31;
+  --vv-panel-raised:#1c2540;
+  --vv-plum:#8b5cf6;
+  --vv-plum-bright:#b9a0ff;
+  --vv-pink:#d946ef;
+  --vv-r-lg:18px;
+  --vv-r-xl:24px;
+  --vv-elevation:0 20px 64px rgba(2,5,17,.30),0 1px 0 rgba(255,255,255,.03) inset;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body.vv-app{background:radial-gradient(ellipse 760px 620px at 93% -16%,rgba(109,40,217,.14),transparent 78%),radial-gradient(ellipse 620px 580px at -12% 72%,rgba(29,78,216,.09),transparent 75%),var(--vv-page)!important;color:var(--vv-ink)}
+body.vv-app :is(button,input,textarea,select){font:inherit}
+body.vv-app :is(input,textarea,select){min-width:0}
+body.vv-app :is(h1,h2,h3,h4){letter-spacing:-.02em}
+body.vv-app button:not(:disabled){-webkit-tap-highlight-color:transparent}
+body.vv-app :is(button,a,input,textarea,select,[role="button"]):focus-visible{outline:2px solid #c4b5fd!important;outline-offset:3px}
+body.vv-app :is(input,textarea,select)::placeholder{color:#8290ad}
+body.vv-app :is(input,textarea,select):disabled{opacity:.55}
+body.vv-app :is(button, input, select, textarea){touch-action:manipulation}
+body.vv-app .hidden{display:none!important}
+body.vv-app button[disabled]{cursor:not-allowed}
+body.vv-app ::selection{background:rgba(139,92,246,.45);color:#fff}
+body.vv-app :is(#socialScreen,#messagesList,#chatFriendsList,.vv-support-messages,.vv-friends-drawer){scrollbar-width:thin;scrollbar-color:#5e537f transparent}
+
+/* Top-level chrome + bottom navigation */
+body.vv-app>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 clamp(12px,2.5vw,26px);height:64px;min-height:64px;border-bottom:1px solid var(--vv-line)!important;background:rgba(11,16,30,.91)!important;box-shadow:0 1px 0 rgba(255,255,255,.02);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+body.vv-app>header :is(button,a){border-radius:11px}
+body.vv-app #bottomNav{position:fixed;bottom:0;left:0;right:0;z-index:30;padding:8px 5px max(8px,env(safe-area-inset-bottom));border-top:1px solid var(--vv-line)!important;background:rgba(12,17,32,.97)!important;box-shadow:0 -12px 45px rgba(3,5,18,.20);backdrop-filter:blur(16px)}
+#bottomNav>.mx-auto{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));max-width:680px!important;column-gap:5px;margin:0 auto}
+#bottomNav .nav-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;color:#a5b3d0;background:transparent;border:0;min-height:47px;border-radius:14px!important;transition:background-color .16s ease,color .16s ease}
+#bottomNav .nav-tab[aria-current="page"],#bottomNav .nav-tab.text-violet-300{background:rgba(139,92,246,.15)!important;color:#ddd6fe!important}
+#bottomNav .nav-tab i{font-size:19px}#bottomNav .nav-tab span{font-size:10px;line-height:1.25;white-space:nowrap}#storiesNavBtn{border:0;background:transparent;color:#cbd5e1;border-radius:13px;padding:4px 2px}#storiesNavBtn>span:first-child{background:linear-gradient(135deg,#7c3aed,#a855f7)!important;color:#fff;box-shadow:0 5px 14px rgba(94,42,154,.25)}
+#bottomNav .vv-online-counter{font-size:10px;opacity:.92;padding-top:2px}
+body.vv-app>footer{color:#8190ab!important;border-color:var(--vv-line)!important;background:rgba(8,12,22,.85)!important}
+
+/* Page widths and rhythm */
+#socialScreen{padding:clamp(14px,2.5vw,28px) clamp(12px,3vw,28px) max(100px,calc(86px + env(safe-area-inset-bottom)))!important}
+#socialProfilePanel{max-width:780px!important}
+#socialChatsPanel{max-width:1200px!important}
+#socialSearchPanel{max-width:760px!important}
+#socialProfilePanel,#socialChatsPanel,#socialSearchPanel{min-width:0}
+#socialProfilePanel>div:first-child,#socialSearchPanel>div:first-child,#socialChatsPanel>.chat-shell,
+#authOverlay>div,#profileModal>div{border:1px solid var(--vv-line)!important;background:linear-gradient(150deg,rgba(25,33,56,.97),rgba(16,22,40,.99))!important;border-radius:var(--vv-r-xl)!important;box-shadow:var(--vv-elevation)}
+#socialSearchPanel>div:first-child{padding:clamp(18px,3vw,28px)!important}
+#socialSearchPanel h2{font-size:clamp(21px,3vw,27px);font-weight:800}
+#socialSearchInput{min-height:46px;border-radius:13px!important;background:#0e1427!important;border:1px solid rgba(167,139,250,.25)!important}
+#socialSearchResults>div{border-color:var(--vv-line)!important;border-radius:16px!important}
+
+/* Profile: consistent avatar size, card padding and legible controls */
+#socialProfilePanel>div:first-child{min-height:268px!important;padding-bottom:22px!important}
+#socialProfilePanel .vv-profile-top-actions{top:16px;right:16px;gap:9px}
+#socialProfilePanel .vv-profile-menu-button{border-radius:14px;background:rgba(45,37,74,.86);border-color:var(--vv-line-strong);box-shadow:none;transition:background .17s ease,transform .17s ease}
+#socialProfilePanel .vv-top-coins{background:rgba(31,30,51,.91);border:1px solid rgba(250,204,91,.2);border-radius:14px;box-shadow:none}
+#socialProfilePanel .vv-big-avatar{border:3px solid #151b2e;box-shadow:0 0 0 2px rgba(168,85,247,.46),0 10px 26px rgba(5,8,24,.3)}
+#socialProfilePanel .vv-display-name{font-size:clamp(22px,4vw,34px);line-height:1.17;letter-spacing:-.04em}
+#socialProfilePanel .vv-handle{color:#b3bad0;font-size:13px;line-height:1.5}
+#socialProfilePanel .vv-profile-bio{color:#c7cedf;line-height:1.65}
+#socialProfilePanel .vv-friend-button{min-height:68px!important;border:1px solid var(--vv-line)!important;border-radius:16px!important;background:rgba(65,49,100,.24)!important;transition:border-color .16s ease,background .16s ease}
+#socialProfilePanel .vv-friend-button:hover{border-color:var(--vv-line-strong)!important;background:rgba(83,58,135,.34)!important}
+#socialProfilePanel .vv-friend-button strong{font-weight:800;font-size:20px}
+#socialProfilePanel .vv-edit-pencil{box-shadow:0 6px 18px rgba(2,5,16,.42)!important;border:1px solid rgba(196,181,253,.5)!important}
+#socialProfilePanel #roleManagementToggle{border-radius:13px}
+#socialProfilePanel :is(.vv-count-card,#vvFriendsOpen){color:#f5f3ff}
+
+/* Chat navigation/list: natural width on wide screens, full height on mobile */
+#socialChatsPanel>.chat-shell{display:grid;grid-template-columns:minmax(0,1fr);width:100%;min-width:0;overflow:hidden}
+#socialChatsPanel>.chat-shell>aside{min-width:0;border-color:var(--vv-line)!important;background:rgba(11,17,32,.48)}
+#socialChatsPanel .chat-shell aside h2{letter-spacing:-.03em;font-weight:800;font-size:19px}
+#socialChatsPanel #createGroupBtn{border-radius:12px;min-height:36px;background:linear-gradient(135deg,#7541dd,#9550eb);box-shadow:0 5px 15px rgba(83,32,158,.20)}
+#socialChatsPanel .vv-chat-search{min-height:46px;height:auto;border-radius:14px;background:#0d1426;border:1px solid var(--vv-line)}
+#socialChatsPanel .vv-chat-search:focus-within{border-color:rgba(196,181,253,.65);box-shadow:0 0 0 3px rgba(139,92,246,.13)}
+#socialChatsPanel .vv-chat-filters{padding:11px 0 7px;gap:6px}
+#socialChatsPanel .vv-chat-filter{padding:8px 11px;border-radius:999px;min-height:33px;background:rgba(43,49,75,.56);border:1px solid var(--vv-line);color:#bdc7e0}
+#socialChatsPanel .vv-chat-filter.active{background:#6040aa;border-color:rgba(196,181,253,.47);color:#fff;box-shadow:0 4px 15px rgba(109,40,217,.2)}
+#socialChatsPanel #chatFriendsList{min-height:0}
+#socialChatsPanel #chatFriendsList button{border:1px solid transparent!important;border-radius:15px!important;transition:background .17s ease,border-color .17s ease}
+#socialChatsPanel #chatFriendsList button:hover{background:rgba(139,92,246,.12)!important;border-color:rgba(167,139,250,.24)!important}
+#socialChatsPanel #chatFriendsList button:active{background:rgba(139,92,246,.19)!important}
+#socialChatsPanel #chatFriendsList :is(p,small){overflow-wrap:anywhere}
+#socialChatsPanel #conversationPane{display:flex;flex-direction:column;min-width:0;background:rgba(12,17,32,.55)!important}
+#socialChatsPanel #conversationHeader{border-color:var(--vv-line)!important;background:rgba(22,28,50,.93)!important;min-width:0}
+#conversationHeader>div{min-width:0}
+#conversationFriendProfile{min-width:0;overflow:hidden}
+#conversationFriendProfile .font-semibold{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#conversationHeader #vvChatCallButton{border:1px solid rgba(167,139,250,.28);border-radius:12px;background:rgba(124,58,237,.15);min-width:42px;min-height:40px}
+#conversationHeader #conversationBack{flex:0 0 40px;width:40px;min-height:40px;display:grid;place-items:center;border-radius:12px;border:1px solid var(--vv-line)}
+#socialChatsPanel #messagesList{background-color:rgba(9,15,30,.45);gap:8px!important;scroll-behavior:auto!important}
+#messagesList .vv-message-row{margin:4px 0}
+#messagesList .vv-message-bubble:not(.vv-sticker-bubble){max-width:min(81%,520px);min-width:76px;padding:11px 13px 9px;border:1px solid rgba(179,197,236,.10);border-radius:18px 18px 18px 5px;background:#26324d;color:#f0f3fa;box-shadow:0 3px 10px rgba(2,6,23,.12)}
+#messagesList .vv-message-mine .vv-message-bubble:not(.vv-sticker-bubble){border-radius:18px 18px 5px 18px;background:linear-gradient(135deg,#6335b0,#7242bf);border-color:rgba(215,191,255,.18)}
+#messagesList .vv-sticker-bubble,#messagesList .vv-message-mine .vv-sticker-bubble{border:0!important;background:transparent!important;box-shadow:none!important}
+#messagesList .vv-message-author{font-size:11px;line-height:1.4;color:#d7d9fa}
+#messagesList .vv-message-bubble>p{margin:0;line-height:1.52;word-wrap:break-word}
+#messagesList .vv-message-footer{gap:6px;line-height:1.25;margin-top:3px;color:#d9dcf0;font-variant-numeric:tabular-nums}
+#messagesList .vv-reaction-open{min-width:27px;min-height:27px;font-size:18px;border-radius:10px;display:grid;place-items:center}
+#messagesList .vv-reaction-open:hover{background:rgba(255,255,255,.12)}
+#messagesList .vv-reaction-counts button{min-height:29px;border-radius:999px;padding:3px 7px;background:rgba(25,29,48,.44);border-color:rgba(214,204,250,.2)}
+#messagesList .vv-reaction-picker:not([hidden]){border:1px solid var(--vv-line-strong);box-shadow:0 10px 30px rgba(0,0,0,.26)}
+#messagesList .vv-msg-quote{border-radius:8px 11px 11px 8px;background:rgba(17,12,41,.25)}
+#messagesList .vv-message-bubble.vv-message-menu-active{outline-color:#bda9fb}
+#socialChatsPanel .vv-chat-pinned{background:rgba(79,48,142,.2);border-color:var(--vv-line)}
+#socialChatsPanel .vv-chat-quickbar{min-height:39px;background:rgba(18,24,43,.92);border-color:var(--vv-line)}
+#socialChatsPanel #vvChatFindToggle{min-height:34px;min-width:38px;border-radius:11px;background:rgba(87,63,139,.21);border:1px solid var(--vv-line)}
+#socialChatsPanel .vv-chat-options{border:1px solid var(--vv-line-strong);background:#202540;border-radius:16px;box-shadow:0 20px 44px rgba(0,0,0,.48)}
+#socialChatsPanel .vv-chat-options button:hover{background:rgba(139,92,246,.19)}
+#socialChatsPanel .vv-chat-searchbar{background:rgba(12,18,34,.95);border-color:var(--vv-line)}
+#socialChatsPanel .vv-chat-draft{background:rgba(103,62,180,.2)}
+#socialChatsPanel.chat-open .vv-chat-tools{background:#121a2e;border-color:var(--vv-line)}
+#socialChatsPanel.chat-open .vv-chat-tools summary{font-size:12px;min-height:34px;color:#c6b6ec;letter-spacing:.01em}
+#socialChatsPanel.chat-open .vv-chat-tools-items{max-height:min(155px,25dvh);border-color:var(--vv-line)}
+#socialChatsPanel.chat-open .vv-chat-tools-items>button,#socialChatsPanel.chat-open .vv-chat-tools-items>label{border:1px solid var(--vv-line-strong);border-radius:11px;min-height:37px;padding:8px 11px}
+#socialChatsPanel.chat-open .vv-chat-tools-items>button:hover,#socialChatsPanel.chat-open .vv-chat-tools-items>label:hover{background:rgba(139,92,246,.14)}
+#socialChatsPanel.chat-open #messageForm{display:flex;gap:8px;min-height:60px;background:#151d31!important;border-color:var(--vv-line)!important;align-items:center}
+#socialChatsPanel.chat-open #messageInput{height:44px!important;padding:10px 12px!important;line-height:22px!important;background:#0d1427!important;color:#f6f4ff!important;border:1px solid rgba(156,165,203,.25)!important;border-radius:14px!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.09)}
+#socialChatsPanel.chat-open #messageInput:focus{border-color:rgba(180,153,255,.76)!important;box-shadow:0 0 0 3px rgba(147,85,248,.12)}
+#socialChatsPanel.chat-open #sendMessageBtn{border-radius:14px!important;box-shadow:0 6px 17px rgba(68,25,138,.24)}
+#socialChatsPanel.chat-open #sendMessageBtn.is-send-mode{background:linear-gradient(135deg,#8b5cf6,#a855f7)}
+#socialChatsPanel.chat-open #stickersPanel{border-color:var(--vv-line);background:#141c30}
+.vv-voice-play{background:rgba(124,58,237,.22);border:1px solid rgba(196,181,253,.35)}
+.vv-voice-message{max-width:100%;gap:8px}
+.vv-voice-waveform{min-width:0}
+.vv-voice-speed{border:1px solid var(--vv-line-strong);background:rgba(92,52,155,.2);border-radius:10px;min-height:30px}
+
+/* Profile menu, support chat and dialogs */
+.vv-fullscreen-menu{background:radial-gradient(ellipse at 85% 10%,rgba(128,78,210,.13),transparent 45%),#0b0e1c!important}
+.vv-fullscreen-menu-inner{max-width:780px}
+.vv-fullscreen-menu-header{padding-bottom:15px;background:linear-gradient(#0b0e1c 75%,transparent)}
+.vv-menu-home{gap:10px}
+.vv-menu-entry{min-height:78px;gap:14px;padding:15px 17px;border-radius:18px;background:linear-gradient(130deg,#212542,#191d35);border-color:var(--vv-line);box-shadow:0 6px 20px rgba(0,0,0,.08)}
+.vv-menu-entry:hover{transform:none;border-color:var(--vv-line-strong);background:linear-gradient(125deg,#292848,#1e2240)}
+.vv-menu-entry-icon{width:46px;height:46px;flex-basis:46px;border-radius:14px;font-size:20px}
+.vv-menu-entry-copy strong{font-size:16px}
+.vv-menu-entry-copy small{font-size:12px;color:#aebad1}
+.vv-menu-settings-card{background:linear-gradient(140deg,#1a2139,#151b2e);border-color:var(--vv-line);border-radius:20px}
+.vv-menu-language-select{border-color:var(--vv-line-strong);background:#101729;border-radius:13px}
+.vv-menu-back{border-color:var(--vv-line);border-radius:12px}
+.vv-support-overlay{background:rgba(4,7,18,.83)}
+.vv-support-shell{background:#10172a;border:1px solid var(--vv-line-strong);border-radius:22px;box-shadow:0 28px 84px rgba(2,3,14,.5)}
+.vv-support-header{padding:14px 19px;background:#17203a;border-color:var(--vv-line)}
+.vv-support-sidebar{border-color:var(--vv-line);background:#10182d}
+.vv-support-chat-title{font-size:13px;padding:12px 16px;color:#ded0ff;border-color:var(--vv-line)}
+.vv-support-messages{padding:clamp(12px,2vw,24px)}
+.vv-support-bubble{border-radius:16px 16px 16px 5px;background:#27314c;border:1px solid rgba(190,202,236,.11);padding:11px 14px;max-width:min(86%,480px)}
+.vv-support-bubble.mine{border-radius:16px 16px 5px 16px;background:linear-gradient(130deg,#6240ad,#7849c2)}
+.vv-support-form{background:#151e34;border-color:var(--vv-line);padding:12px}
+.vv-support-form input{min-height:44px;background:#0d1528;border-color:var(--vv-line);border-radius:13px}
+.vv-support-form button{min-width:44px;border-radius:13px;background:linear-gradient(135deg,#8053ec,#a855f7)}
+.vv-chat-modal-card{border-radius:22px;background:#172039;border-color:var(--vv-line-strong)}
+#authOverlay>div,#profileModal>div{width:min(100%,520px);max-height:calc(100dvh - 24px);overflow-y:auto}
+#profileModal :is(input,textarea,select),#authOverlay :is(input,textarea,select){background:#11192e;color:#f5f3ff;border:1px solid var(--vv-line-strong);border-radius:12px;min-height:42px}
+#profileModal label,#authOverlay label{color:#d9def2}
+#vvGroupSettings>div,#createGroupModal>div,#gamesModal>div{border-radius:22px;border:1px solid var(--vv-line);background:linear-gradient(145deg,#1b2440,#111a30);box-shadow:var(--vv-elevation)}
+#vvFriendsDrawer,.vv-friends-drawer{background:linear-gradient(160deg,#10172b,#0b1020);color:var(--vv-ink)}
+#stickersGrid [data-send-sticker]{border:0!important}
+
+/* Stories and music catalog: keep the existing editor/touch gestures intact */
+#storiesModal .story-upload-card,#storiesModal .vv-catalog,#storiesModal .story-music-trim{border-radius:18px!important}
+#storiesModal :is(.vv-file-picker,.vv-catalog-search,input[type="search"]){border-radius:14px!important}
+#storiesModal :is(button,input,select,textarea){font-family:Inter,system-ui,sans-serif}
+#storyViewer img,#storyViewer video{object-position:center}
+
+/* App mobile landscape, portrait and tablet */
+@media(min-width:768px){
+ #socialChatsPanel>.chat-shell{display:grid;grid-template-columns:clamp(255px,26vw,315px) minmax(0,1fr);height:min(76dvh,820px);min-height:520px}
+ #socialChatsPanel>.chat-shell>aside{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+ #socialChatsPanel #chatFriendsList{flex:1 1 auto;min-height:0;overflow-y:auto}
+ #socialChatsPanel #conversationPane:not(.hidden){height:100%;min-height:0}
+ #socialChatsPanel.chat-open #messagesList{padding:18px 22px!important}
+ #socialChatsPanel.chat-open #messageForm{padding:10px 18px 13px!important}
+}
+@media(max-width:767px){
+ #socialScreen{padding:14px 12px max(96px,calc(78px + env(safe-area-inset-bottom)))!important}
+ #socialScreen.chat-tab-active{inset:0 0 calc(90px + env(safe-area-inset-bottom))!important;padding:7px 8px 7px!important;overflow:hidden!important}
+ #socialChatsPanel>.chat-shell{height:100%;min-height:0!important;border-radius:19px!important}
+ #socialChatsPanel.chat-open #conversationPane{min-height:0!important}
+ #socialChatsPanel #chatFriendsList{overflow-y:auto}
+ #socialChatsPanel.chat-open #messagesList{padding:11px 12px 13px!important}
+ #socialChatsPanel.chat-open #messageForm{padding:9px 11px calc(9px + env(safe-area-inset-bottom,0px)*.1)!important}
+ #socialChatsPanel.chat-open #messageInput{font-size:16px!important}
+ #socialProfilePanel>div:first-child{border-radius:21px!important}
+ #socialSearchPanel>div:first-child{border-radius:21px!important}
+ .vv-menu-entry{min-height:74px}
+ .vv-support-overlay{padding:0}
+ .vv-support-shell{height:100dvh;border-radius:0;border:0}
+ .vv-support-sidebar{width:100%;border-color:var(--vv-line)}
+}
+@media(max-width:420px){
+ #socialScreen{padding-left:9px!important;padding-right:9px!important}
+ #socialProfilePanel>div:first-child{padding-left:14px!important;padding-right:14px!important}
+ #socialProfilePanel .vv-profile-top-actions{top:12px;right:12px}
+ #socialProfilePanel .vv-top-coins{padding:7px 9px;min-height:39px}
+ #socialProfilePanel .vv-profile-menu-button{width:39px;height:39px}
+ #socialProfilePanel .vv-friend-button{min-height:58px!important}
+ #socialChatsPanel #conversationHeader{min-height:54px!important;padding:8px 10px!important}
+ #socialChatsPanel.chat-open #messagesList{padding:9px 9px 12px!important}
+ #messagesList .vv-message-bubble:not(.vv-sticker-bubble){max-width:88%;padding:9px 11px 8px}
+ #socialChatsPanel.chat-open #messageForm{padding:8px!important;gap:7px!important}
+ #socialChatsPanel.chat-open #sendMessageBtn{min-width:43px!important;width:43px!important;flex-basis:43px!important;height:44px!important}
+ #bottomNav .nav-tab{padding:7px 3px!important}
+ .vv-menu-entry{padding:13px 12px;gap:11px}
+ .vv-menu-entry-icon{width:42px;height:42px;flex-basis:42px}
+ .vv-menu-entry-copy strong{font-size:15px}
+ .vv-menu-entry-copy small{font-size:11px}
+}
+@media(max-width:360px){
+ #socialChatsPanel.chat-open #messageForm{gap:5px!important}
+ #socialChatsPanel.chat-open #sendMessageBtn{min-width:40px!important;width:40px!important;flex-basis:40px!important}
+ #conversationFriendProfile .font-semibold{font-size:12px!important}
+ #bottomNav .nav-tab i{font-size:17px}
+ #bottomNav .nav-tab span{font-size:9px!important}
+}
+@media(prefers-reduced-motion:reduce){
+ body.vv-app *,body.vv-app *::before,body.vv-app *::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* Desktop chats remain in a balanced two-column workspace instead of obscuring the whole application. */
+@media(min-width:768px){
+ #socialChatsPanel.chat-open{position:relative!important;inset:auto!important;width:100%!important;height:min(77dvh,810px)!important;min-height:480px!important;max-width:1200px!important;margin:0 auto!important;padding:0!important;overflow:visible!important;z-index:auto!important;background:transparent!important}
+ #socialChatsPanel.chat-open>.chat-shell{display:grid!important;grid-template-columns:clamp(255px,26vw,315px) minmax(0,1fr)!important;min-height:0!important;height:100%!important;border:1px solid var(--vv-line)!important;border-radius:24px!important;overflow:hidden!important}
+ #socialChatsPanel.chat-open>.chat-shell>aside{display:flex!important;flex-direction:column!important;min-width:0!important;min-height:0!important;overflow:hidden!important}
+ #socialChatsPanel.chat-open #chatFriendsList{flex:1 1 auto;min-height:0;overflow-y:auto}
+ #socialChatsPanel.chat-open #conversationPane{display:flex!important;flex-direction:column!important;flex:1 1 auto!important;height:100%!important;min-height:0!important;max-height:100%!important;overflow:hidden!important}
+ #socialChatsPanel.chat-open #conversationBack{display:none!important}
+}
+
+/* Landing page: editorial hero, clear CTAs, grid rhythm */
+body.vv-landing{margin:0;min-height:100vh;background:radial-gradient(ellipse 930px 570px at 85% -10%,rgba(100,57,190,.20),transparent 74%),radial-gradient(ellipse 700px 660px at -14% 47%,rgba(27,83,163,.12),transparent 70%),#090d19;color:#f7f5ff;font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+.vv-landing *{box-sizing:border-box}
+.vv-landing :is(a,button):focus-visible{outline:2px solid #c4b5fd;outline-offset:4px}
+.vv-landing a{text-decoration:none;color:inherit}
+.vv-landing-header{border-bottom:1px solid var(--vv-line);background:rgba(11,15,29,.88);backdrop-filter:blur(14px);position:relative;z-index:4}
+.vv-landing-nav{max-width:1160px;padding:16px 24px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap}
+.vv-landing-logo{display:inline-flex;align-items:center;gap:10px;font-size:22px;font-weight:850;letter-spacing:-.045em;white-space:nowrap}
+.vv-landing-logo img{width:34px;height:34px;object-fit:cover;border-radius:11px}
+.vv-landing-links{display:flex;align-items:center;gap:23px;flex-wrap:wrap;color:#c0c7d9;font-size:13px;font-weight:600}
+.vv-landing-links a:hover{color:#fff}
+.vv-landing-button{display:inline-flex;justify-content:center;align-items:center;gap:10px;padding:13px 20px;background:linear-gradient(110deg,#8957ed,#ab5bee);border:1px solid rgba(221,202,255,.33);color:#fff!important;border-radius:14px;box-shadow:0 10px 28px rgba(84,31,157,.22);font-weight:750;font-size:14px;line-height:1.25;transition:transform .16s ease,filter .16s ease}
+.vv-landing-button:hover{filter:brightness(1.09);transform:translateY(-2px)}
+.vv-landing-button.secondary{background:rgba(51,58,91,.35);border:1px solid rgba(186,196,232,.22);box-shadow:none}
+.vv-landing-main{max-width:1160px;padding:0 24px 74px;margin:0 auto}
+.vv-landing-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.86fr);gap:clamp(32px,5vw,76px);align-items:center;padding:clamp(70px,8vw,125px) 0 84px}
+.vv-landing-eyebrow{display:inline-flex;gap:9px;align-items:center;padding:7px 12px;border:1px solid rgba(168,85,247,.33);border-radius:999px;background:rgba(124,58,237,.13);color:#cdbbff;font-size:12px;font-weight:740;letter-spacing:.025em}
+.vv-landing-hero h1{font-size:clamp(40px,5.2vw,69px);line-height:1.06;letter-spacing:-.057em;margin:22px 0 21px;font-weight:850;max-width:720px}
+.vv-landing-gradient-text{background:linear-gradient(110deg,#d8c1ff,#b697fa 50%,#efc5ff);background-clip:text;-webkit-background-clip:text;color:transparent}
+.vv-landing-hero p{margin:0;max-width:560px;color:#bac4d7;line-height:1.7;font-size:clamp(15px,1.6vw,18px)}
+.vv-landing-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:30px}
+.vv-landing-caption{font-size:12px!important;color:#91a0b9!important;margin-top:18px!important}
+.vv-landing-scene{position:relative;min-height:415px;border-radius:28px;background:radial-gradient(ellipse at 75% 0%,rgba(189,100,238,.19),transparent 60%),linear-gradient(145deg,#242547,#11172b 68%);border:1px solid rgba(190,168,255,.24);box-shadow:0 32px 90px rgba(4,6,23,.47);overflow:hidden;isolation:isolate;padding:26px}
+.vv-landing-scene::after{content:"";position:absolute;right:-70px;bottom:-115px;width:310px;height:310px;border:1px solid rgba(177,141,246,.17);border-radius:50%;box-shadow:0 0 0 46px rgba(149,95,224,.05),0 0 0 100px rgba(149,95,224,.035);pointer-events:none}
+.vv-scene-top{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#dde2f7;font-size:14px;font-weight:750}
+.vv-scene-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#50cbaa;box-shadow:0 0 0 5px rgba(50,198,154,.12);margin-right:7px}
+.vv-scene-card{position:relative;z-index:1;display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;border:1px solid rgba(198,201,238,.14);background:rgba(12,18,36,.72);box-shadow:0 12px 35px rgba(1,3,16,.17);margin-top:14px}
+.vv-scene-card.primary{margin-top:40px;border-color:rgba(172,141,246,.36);background:rgba(64,45,112,.57)}
+.vv-scene-icon{flex:0 0 47px;width:47px;height:47px;display:grid;place-items:center;border-radius:14px;background:rgba(124,58,237,.26);color:#e2d4ff;font-size:23px}
+.vv-scene-card h3{margin:0;font-size:15px;font-weight:750;color:#f7f3ff}
+.vv-scene-card p{margin:3px 0 0!important;font-size:12px!important;line-height:1.5!important;color:#aebcd4!important}
+.vv-scene-wave{margin-left:auto;display:flex;gap:4px;align-items:center;height:32px}
+.vv-scene-wave span{width:3px;border-radius:5px;background:#c5a5ff}
+.vv-scene-wave span:nth-child(3n+1){height:17px}.vv-scene-wave span:nth-child(3n+2){height:29px}.vv-scene-wave span:nth-child(3n){height:10px}
+.vv-landing-section{padding:35px 0 45px}
+.vv-landing-section-title{max-width:650px;margin:0 0 30px}
+.vv-landing-kicker{font-size:12px;font-weight:760;letter-spacing:.13em;color:#ac93e8;text-transform:uppercase}
+.vv-landing-section-title h2{margin:10px 0 12px;font-size:clamp(27px,3vw,39px);line-height:1.2;letter-spacing:-.04em}
+.vv-landing-section-title p{margin:0;color:#aebcd4;max-width:580px;font-size:15px;line-height:1.7}
+.vv-landing-features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+.vv-landing-feature{min-width:0;padding:24px;border-radius:21px;background:linear-gradient(150deg,rgba(31,39,64,.89),rgba(19,25,45,.95));border:1px solid var(--vv-line);min-height:205px}
+.vv-landing-feature>span{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:rgba(123,79,205,.21);color:#e0ceff;font-size:22px;margin-bottom:21px}
+.vv-landing-feature h3{margin:0 0 8px;font-size:17px;font-weight:750;letter-spacing:-.024em}
+.vv-landing-feature p{margin:0;color:#aebcd4;line-height:1.65;font-size:13px}
+.vv-landing-wide{margin-top:45px;padding:clamp(24px,4vw,39px);border:1px solid rgba(182,160,246,.27);border-radius:24px;background:radial-gradient(ellipse at 100% 100%,rgba(168,85,247,.18),transparent 50%),linear-gradient(135deg,#211b3c,#171e32);display:flex;align-items:center;justify-content:space-between;gap:30px}
+.vv-landing-wide h2{font-size:clamp(23px,3vw,32px);line-height:1.3;letter-spacing:-.035em;margin:0 0 7px}
+.vv-landing-wide p{margin:0;color:#b8c1d7;font-size:14px;line-height:1.6;max-width:640px}
+.vv-landing-wide .vv-landing-button{white-space:nowrap}
+.vv-landing-secondary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding-top:28px}
+.vv-landing-info{padding:24px;border:1px solid var(--vv-line);border-radius:18px;background:rgba(24,32,56,.48)}
+.vv-landing-info h3{margin:0 0 8px;font-size:17px;font-weight:750}
+.vv-landing-info p{margin:0;color:#adbad1;font-size:14px;line-height:1.7}
+.vv-landing-info a{color:#d3bdff;text-decoration:underline;text-underline-offset:3px}
+.vv-landing-footer{border-top:1px solid var(--vv-line);background:#0d1220}
+.vv-landing-footer-inner{max-width:1160px;margin:auto;padding:30px 24px 38px;display:flex;justify-content:space-between;gap:22px;align-items:center;flex-wrap:wrap}
+.vv-landing-footer p{margin:0;color:#8594ad;font-size:12px}
+.vv-landing-footer-links{display:flex;flex-wrap:wrap;gap:12px 24px}
+.vv-landing-footer-links a{color:#b7c1d4;font-size:12px}
+.vv-landing-footer-links a:hover{color:white}
+@media(max-width:900px){.vv-landing-hero{gap:25px}.vv-landing-scene{padding:21px;min-height:380px}.vv-landing-features{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.vv-landing-hero{grid-template-columns:1fr;gap:32px;padding:54px 0 40px}.vv-landing-scene{min-height:355px;max-width:540px;width:100%;justify-self:center}.vv-landing-links{gap:15px}.vv-landing-nav{padding:14px 18px}.vv-landing-main{padding:0 17px 45px}.vv-landing-wide{align-items:flex-start;flex-direction:column;gap:20px}.vv-landing-secondary{grid-template-columns:1fr}}
+@media(max-width:460px){.vv-landing-nav{gap:9px}.vv-landing-logo{font-size:20px}.vv-landing-logo img{height:30px;width:30px}.vv-landing-links{width:100%;justify-content:space-between;gap:9px;font-size:12px}.vv-landing-links a:nth-child(2){display:none}.vv-landing-hero h1{font-size:clamp(34px,9vw,43px)}.vv-landing-hero p{font-size:15px}.vv-landing-actions{gap:9px}.vv-landing-button{padding:12px 15px}.vv-landing-scene{min-height:343px;padding:17px}.vv-landing-features{grid-template-columns:1fr;gap:10px}.vv-landing-feature{min-height:0;padding:21px}.vv-landing-feature>span{margin-bottom:13px}.vv-scene-card.primary{margin-top:32px}}
+@media(prefers-reduced-motion:reduce){.vv-landing-button{transition:none}}
