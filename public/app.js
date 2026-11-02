@@ -1081,7 +1081,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             let friendReconnectTimer = null;
             peer.on('open',()=>{friendReconnectAttempts=0;clearTimeout(friendReconnectTimer);});
             const scheduleFriendReconnect = () => {
-                if (friendReconnectTimer || peer.destroyed || vvFriendPeer !== peer) return;
+                if (friendReconnectTimer || peer.destroyed || vvFriendPeer !== peer || friendReconnectAttempts >= 3) return;
                 const delay = Math.min(30000, 2000 * Math.pow(2, Math.min(friendReconnectAttempts++, 4)));
                 friendReconnectTimer = setTimeout(() => {
                     friendReconnectTimer = null;
@@ -1091,6 +1091,28 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             };
             peer.on('disconnected',scheduleFriendReconnect);
             peer.on('error',err=>{if(['network','socket-error','socket-closed'].includes(err?.type)) scheduleFriendReconnect();});
+            // A failed PeerJS WebSocket can cause an endless log storm.
+            // Stop after a few tries; reconnect on return to the tab instead.
+            let friendNetworkFailed = false;
+            const stopAfterRepeatedFailures = () => {
+                if (friendReconnectAttempts < 3 || friendNetworkFailed) return;
+                friendNetworkFailed = true;
+                clearTimeout(friendReconnectTimer);
+                friendReconnectTimer = null;
+                console.warn('VoiceVibe: PeerJS WebSocket unavailable; friend calls temporarily offline.');
+                try { peer.destroy(); } catch (_) {}
+            };
+            peer.on('error',err => {
+                if (['network','socket-error','socket-closed'].includes(err?.type)) stopAfterRepeatedFailures();
+            });
+            const onFriendVisibility = () => {
+                if (document.visibilityState === 'visible' && friendNetworkFailed && state.user?.uid === uid) {
+                    document.removeEventListener('visibilitychange', onFriendVisibility);
+                    if (vvFriendPeer === peer) { vvFriendPeer = null; vvFriendPeerUid = null; initializeFriendCalls(uid); }
+                }
+            };
+            document.addEventListener('visibilitychange', onFriendVisibility);
+            peer.on('close', () => { clearTimeout(friendReconnectTimer); if (!friendNetworkFailed) document.removeEventListener('visibilitychange', onFriendVisibility); });
         }
         async function startFriendCall(friendUid){
             if(!state.user || !friendsCache.some(f=>(f.uid||f.id)===friendUid)){alert('Звонить можно только друзьям.');return;}
@@ -2244,7 +2266,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     // The server uses verified Firebase credentials and can recover groups
                     // even if the local Firestore query is denied by older published rules.
                     vvMergeGroups(serverGroups, uid);
-                    vvGroupLoadStatus(serverGroups.length ? '' : 'Сервер не нашёл групп, в которых твой аккаунт указан участником. Если тебя добавляли раньше, попроси создателя проверить список участников.', !serverGroups.length);
+                    vvGroupLoadStatus('', false);
                 } catch(err) {
                     console.warn('Server groups refresh (deploy updated worker.js):',err);
                     vvGroupLoadStatus('Ошибка загрузки групп: '+(err?.message||'проверь Cloudflare Worker и Firestore'), true);
@@ -2259,7 +2281,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 vvMergeGroups(snap.docs.map(d => ({ id:d.id, ...d.data() })), uid);
             } catch (err) {
                 console.warn('Groups refresh:', err);
-                await refreshGroupsFromServer(uid);
+                if (err?.code === 'permission-denied') vvGroupLoadStatus('Нет разрешения читать группы. Проверь Firestore Rules.', true);
+                else await refreshGroupsFromServer(uid);
             }
         }
         function startSocialListeners() {
@@ -2268,7 +2291,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const uid = state.user.uid;
             const generation = socialGeneration;
             try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
-            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') console.warn('Проверь опубликованные Firestore Rules: запрос уже использует array-contains для members.'); refreshGroupsOnce(uid); });
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') { console.warn('VoiceVibe: Firestore rules deny group membership list. Publish the supplied firestore.rules in Firebase Console.'); vvGroupLoadStatus('Нет доступа к группам: обнови Firestore Rules в Firebase Console.',true); } else refreshGroupsOnce(uid); });
             refreshGroupsOnce(uid);
             refreshGroupsFromServer(uid, true);
             // Real-time conversation order: newest message (sent or received) appears first.
@@ -2279,7 +2302,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     (data.participants||[]).filter(id=>id!==uid).forEach(id=>recentChatTimes.set(id, Math.max(recentChatTimes.get(id)||0, Number(data.updatedAt?.toMillis?.() || data.updatedAt || 0))));
                 });
                 renderChatFriends();
-            }, err => { console.warn('Conversation order listener:',err); renderChatFriends(); }));
+            }, err => { console.warn('Conversation order listener:',err); if(err?.code==='permission-denied') console.warn('Publish firestore.rules: conversations require a participants array containing the current uid.'); renderChatFriends(); }));
             refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
             // Approximate online users, measured by a heartbeat no older than 90 seconds.
@@ -3004,12 +3027,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
                 node.querySelector('.vv-reaction-open')?.addEventListener('click',()=>{const p=node.querySelector('.vv-reaction-picker');p.hidden=!p.hidden;});
                 node.querySelectorAll('[data-reaction]').forEach(b=>b.addEventListener('click',()=>{
-                    // A single tap on an existing reaction never removes it.
-                    // The picker can select/change an emoji, but only a double tap
-                    // on the message itself toggles the heart off.
-                    if(!b.closest('.vv-reaction-picker'))return;
-                    node.querySelector('.vv-reaction-picker').hidden=true;
-                    vvSetMessageReaction(node,b.dataset.reaction,false);
+                    // Reactions are toggles: tap your emoji again to remove it.
+                    // This works for both the reaction badge and emoji picker.
+                    const picker=b.closest('.vv-reaction-picker');
+                    if(picker)picker.hidden=true;
+                    vvSetMessageReaction(node,b.dataset.reaction,true);
                 }));
             });
         }
