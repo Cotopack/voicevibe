@@ -562,3 +562,34 @@ header, #appHeader, .app-header {isolation:isolate}
   #screenChat > div:last-child {padding: 10px !important;}
   #screenChat #btnStartSearch, #screenChat #btnSkip, #screenChat #btnPause {padding: 10px 8px !important; font-size: 12px !important;}
 }
+
+
+/* VoiceVibe fullscreen profile menu: three primary sections */
+.vv-menu-home{display:flex;flex-direction:column;gap:12px;padding:6px 0 24px}
+.vv-menu-subtitle{color:#b9b2ce;font-size:13px;margin:0 2px 8px}
+.vv-menu-entry{width:100%;display:flex;align-items:center;gap:15px;padding:18px 16px;border-radius:22px;border:1px solid rgba(196,181,253,.22);background:linear-gradient(125deg,rgba(62,40,102,.66),rgba(26,24,51,.92));color:#fff;text-align:left;min-height:90px;transition:border-color .18s ease,background .18s ease,transform .18s ease}
+.vv-menu-entry:hover,.vv-menu-entry:focus-visible{border-color:#a78bfa;background:linear-gradient(120deg,rgba(87,53,146,.85),rgba(36,30,67,.98));outline:none}
+.vv-menu-entry-icon{display:flex;align-items:center;justify-content:center;flex:0 0 51px;width:51px;height:51px;border-radius:16px;font-size:23px;background:#35225a;color:#d8b4fe}
+.vv-menu-gift{background:rgba(124,58,237,.28);color:#c4b5fd}
+.vv-menu-crown{background:rgba(217,119,6,.22);color:#fcd34d}
+.vv-menu-gear{background:rgba(6,182,212,.18);color:#67e8f9}
+.vv-menu-entry-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.vv-menu-entry-copy strong{font-size:17px;line-height:1.2;font-weight:760}
+.vv-menu-entry-copy small{font-size:12px;line-height:1.35;color:#bcb4d4;overflow-wrap:anywhere}
+.vv-menu-arrow{color:#afa2c8;font-size:14px}
+.vv-menu-pane{margin-top:2px}
+.vv-menu-back{display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(196,181,253,.25);border-radius:13px;background:rgba(88,63,130,.26);color:#f2e8ff;font-size:14px;font-weight:700;padding:11px 15px;margin-bottom:17px}
+.vv-menu-back:hover{background:rgba(88,63,130,.55)}
+.vv-menu-settings-card{border-radius:25px;border:1px solid rgba(196,181,253,.24);background:linear-gradient(135deg,#21183e,#11162e);padding:22px 18px}
+.vv-menu-settings-heading{display:flex;gap:14px;align-items:center;padding-bottom:20px;border-bottom:1px solid rgba(196,181,253,.13)}
+.vv-menu-settings-heading h3{font-size:19px;font-weight:800;color:#fff}
+.vv-menu-settings-heading p{font-size:13px;color:#aaa4be;margin-top:3px}
+.vv-menu-language-label{display:block;margin:24px 0 11px;color:#ede9fe;font-size:14px;font-weight:750}
+.vv-menu-language-select{width:100%;min-height:50px;appearance:auto;border:1px solid #7157a5;border-radius:15px;padding:12px 15px;background:#1d1934;color:#f8f6ff;font-size:16px;outline:none}
+.vv-menu-language-select:focus{border-color:#c4b5fd;box-shadow:0 0 0 3px rgba(139,92,246,.2)}
+.vv-menu-language-note{color:#a8a2c0;font-size:12px;margin-top:10px;line-height:1.5}
+.vv-menu-settings-link{display:flex;gap:14px;align-items:center;width:100%;padding:17px 1px 2px;margin-top:22px;border-top:1px solid rgba(196,181,253,.17);text-align:left;color:#ede9fe;font-weight:650;font-size:14px}
+.vv-menu-settings-link>span{flex:1}
+.vv-menu-settings-link>i:last-child{font-size:12px;color:#a78bfa}
+@media(max-width:380px){.vv-menu-entry{padding:13px 12px;min-height:80px;gap:11px}.vv-menu-entry-icon{width:43px;height:43px;flex-basis:43px;font-size:19px}.vv-menu-entry-copy strong{font-size:16px}}
+.vv-menu-home.hidden{display:none!important}
