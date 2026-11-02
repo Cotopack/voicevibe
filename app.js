@@ -2190,7 +2190,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsFromServer(state.user.uid,true);const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();vvComposerSyncActions();state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -2402,7 +2402,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             pane?.classList.add('hidden');
             const list = document.getElementById('messagesList'); if (list) list.innerHTML = '';
             const input = document.getElementById('messageInput'); if (input) { input.value = ''; input.disabled = true; }
-            const send = document.getElementById('sendMessageBtn'); if (send) send.disabled = true;
+            const send = document.getElementById('sendMessageBtn'); if (send) send.disabled = true; vvComposerSyncActions();
             const game = document.getElementById('snakeChallengeBtn'); if (game) game.disabled = true;
             vvVoiceSyncAvailability();
             renderChatFriends();
@@ -2840,6 +2840,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (input) input.disabled = true;
             if (send) send.disabled = true;
             if (game) game.disabled = true;
+            vvComposerSyncActions();
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
 
             try {
@@ -2896,6 +2897,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (input) input.disabled = false;
                 if (send) send.disabled = false;
                 if (game) game.disabled = false;
+                vvComposerSyncActions();
                 vvVoiceSyncAvailability();
                 renderChatFriends();
                 showTab('chats');
@@ -2982,7 +2984,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const stamp=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
                 const levels=Array.isArray(m.waveform)?m.waveform.slice(0,28):[];
                 const bars=Array.from({length:28},(_,i)=>`<span style="height:${Math.min(100,Math.max(12,Math.round(Number(levels[i])||18)))}%"></span>`).join('');
-                body=safeUrl?`<div class="vv-voice-message"><div class="vv-voice-icon"><i class="fa-solid fa-microphone"></i></div><div class="vv-voice-player"><div class="vv-voice-waveform" aria-hidden="true">${bars}</div><audio controls preload="none" playsinline src="${escapeHTML(safeUrl)}" aria-label="${escapeHTML(vvVoiceT('message'))}"></audio><span class="vv-voice-length">${stamp}</span></div><button type="button" class="vv-voice-speed" aria-label="${escapeHTML(vvVoiceT('speed'))}" title="${escapeHTML(vvVoiceT('speed'))}">1×</button></div>`:`<p class="text-rose-300">${escapeHTML(vvVoiceT('unavailable'))}</p>`;
+                body=safeUrl?`<div class="vv-voice-message"><button type="button" class="vv-voice-play" aria-label="${escapeHTML(vvVoiceT('play'))}" title="${escapeHTML(vvVoiceT('play'))}"><i class="fa-solid fa-play"></i></button><div class="vv-voice-player"><div class="vv-voice-waveform" aria-hidden="true">${bars}</div><div class="vv-voice-meta"><span class="vv-voice-length">${stamp}</span></div><audio class="vv-voice-audio" preload="none" playsinline src="${escapeHTML(safeUrl)}" aria-label="${escapeHTML(vvVoiceT('message'))}"></audio></div><button type="button" class="vv-voice-speed" aria-label="${escapeHTML(vvVoiceT('speed'))}" title="${escapeHTML(vvVoiceT('speed'))}">1×</button></div>`:`<p class="text-rose-300">${escapeHTML(vvVoiceT('unavailable'))}</p>`;
             }
             if(m.type==='snake-challenge')body+=`<button data-playchallenge="${escapeHTML(m.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2">🎮 Играть</button>`;
             return `<div class="vv-message-row ${mine?'vv-message-mine':''}"><div class="vv-message-bubble" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionCounts(reactions).map(([e,n])=>`<button type="button" data-reaction="${e}" class="${reactions[state.user.uid]===e?'selected':''}"><span>${e}</span><span class="vv-reaction-avatars">${Object.entries(reactions).filter(([,emoji])=>emoji===e).map(([uid])=>vvReactionAvatarMarkup(uid)).join('')}</span>${n>1?`<span class="vv-reaction-total">${n}</span>`:''}</button>`).join('')}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div></div></div>`;
@@ -3031,11 +3033,49 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const next=player.playbackRate>=1.9?1:player.playbackRate>=1.4?2:1.5;
                 player.playbackRate=next;button.textContent=`${next}×`;
             }));
-            host.querySelectorAll('.vv-voice-message audio').forEach(player=>{
-                const waveform=player.closest('.vv-voice-message')?.querySelector('.vv-voice-waveform');
-                const paint=()=>{if(waveform)waveform.style.setProperty('--vv-voice-progress',`${Math.min(100,Math.max(0,(player.currentTime/(player.duration||1))*100))}%`);};
-                player.addEventListener('timeupdate',paint);player.addEventListener('ended',paint);
+            const pauseOtherVoicePlayers=current=>{
+                document.querySelectorAll('.vv-voice-message audio').forEach(player=>{
+                    if(player!==current){
+                        player.pause();
+                        const btn=player.closest('.vv-voice-message')?.querySelector('.vv-voice-play i');
+                        if(btn)btn.className='fa-solid fa-play';
+                    }
+                });
+            };
+            host.querySelectorAll('.vv-voice-message').forEach(message=>{
+                const player=message.querySelector('audio');
+                const waveform=message.querySelector('.vv-voice-waveform');
+                const trigger=message.querySelector('.vv-voice-play');
+                const icon=trigger?.querySelector('i');
+                const lengthNode=message.querySelector('.vv-voice-length');
+                if(!player||!trigger)return;
+                const totalLabel=()=>{
+                    const total=Math.max(1,Math.round(Number(player.duration)||0)||Math.round(Number(player.dataset.duration)||0));
+                    return `${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`;
+                };
+                const paint=()=>{
+                    if(waveform)waveform.style.setProperty('--vv-voice-progress',`${Math.min(100,Math.max(0,(player.currentTime/(player.duration||1))*100))}%`);
+                    if(icon)icon.className=`fa-solid ${player.paused?'fa-play':'fa-pause'}`;
+                    if(lengthNode){
+                        const current=Math.max(0,Math.floor(player.currentTime||0));
+                        const currentLabel=`${Math.floor(current/60)}:${String(current%60).padStart(2,'0')}`;
+                        if(player.ended || (player.paused && current===0)) lengthNode.textContent=totalLabel();
+                        else lengthNode.textContent=currentLabel;
+                    }
+                };
+                trigger.addEventListener('click',async ()=>{
+                    try{
+                        if(player.paused){pauseOtherVoicePlayers(player);await player.play();}
+                        else player.pause();
+                    }catch(err){console.warn('Voice playback failed:',err);}
+                    paint();
+                });
+                player.addEventListener('timeupdate',paint);
                 player.addEventListener('loadedmetadata',paint);
+                player.addEventListener('pause',paint);
+                player.addEventListener('play',paint);
+                player.addEventListener('ended',()=>{player.currentTime=0;paint();});
+                paint();
             });
             host.querySelectorAll('[data-message-id]').forEach(node=>{
                 let lastTap=0,touchStart=null,lastHeart=0;
@@ -3062,21 +3102,47 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Voice notes: MediaRecorder -> Cloudinary (video resource type) -> Firestore metadata.
         // Cloudinary unsigned URLs are public-to-link; do not treat this as private media storage.
-        const vvVoiceButton=document.getElementById('vvVoiceHoldBtn');
+        const vvVoiceButton=document.getElementById('sendMessageBtn');
+        const vvVoiceHiddenButton=document.getElementById('vvVoiceHoldBtn');
+        const vvMessageInput=document.getElementById('messageInput');
+        const vvMessageForm=document.getElementById('messageForm');
         const vvVoicePanel=document.getElementById('vvVoicePanel');
         const vvVoiceStatus=document.getElementById('vvVoiceStatus');
         const vvVoiceCancelButton=document.getElementById('vvVoiceCancel');
         const vvVoice={phase:'idle',recorder:null,stream:null,chunks:[],startTime:0,timer:null,pointerId:null,pointerActive:false,
             target:null,userUid:null,cancelRequested:false,abortController:null,session:0,audioContext:null,analyser:null,peaks:[]};
         const vvVoiceWords={
-            ru:{hold:'Удерживай для записи',recording:'Запись',uploading:'Отправка голосового…',preparing:'Подключаем микрофон…',cancel:'Запись отменена',tooShort:'Слишком короткая запись',noMic:'Разреши доступ к микрофону в браузере.',tooLarge:'Голосовое слишком большое (максимум 5 МБ).',noSupport:'Этот браузер не поддерживает запись голосовых.',fail:'Не удалось отправить голосовое',context:'Чат изменился — запись отменена',release:'Удерживай микрофон для записи',duration:'До 60 секунд',cancelButton:'Отмена',message:'Голосовое сообщение',speed:'Скорость воспроизведения',unavailable:'Голосовое сообщение недоступно'},
-            uk:{hold:'Утримуй для запису',recording:'Запис',uploading:'Надсилання голосового…',preparing:'Підключаємо мікрофон…',cancel:'Запис скасовано',tooShort:'Запис надто короткий',noMic:'Дозволь доступ до мікрофона у браузері.',tooLarge:'Голосове завелике (максимум 5 МБ).',noSupport:'Цей браузер не підтримує запис голосових.',fail:'Не вдалося надіслати голосове',context:'Чат змінився — запис скасовано',release:'Утримуй мікрофон для запису',duration:'До 60 секунд',cancelButton:'Скасувати',message:'Голосове повідомлення',speed:'Швидкість відтворення',unavailable:'Голосове повідомлення недоступне'},
-            en:{hold:'Hold to record',recording:'Recording',uploading:'Sending voice note…',preparing:'Requesting microphone…',cancel:'Recording canceled',tooShort:'Recording too short',noMic:'Allow microphone access in your browser.',tooLarge:'Voice note is too large (5 MB max).',noSupport:'Voice recording is not supported in this browser.',fail:'Could not send voice note',context:'Chat changed — recording canceled',release:'Hold microphone to record',duration:'Up to 60 seconds',cancelButton:'Cancel',message:'Voice message',speed:'Playback speed',unavailable:'Voice message unavailable'}
+            ru:{hold:'Удерживай для записи',recording:'Запись',uploading:'Отправка голосового…',preparing:'Подключаем микрофон…',cancel:'Запись отменена',tooShort:'Слишком короткая запись',noMic:'Разреши доступ к микрофону в браузере.',tooLarge:'Голосовое слишком большое (максимум 5 МБ).',noSupport:'Этот браузер не поддерживает запись голосовых.',fail:'Не удалось отправить голосовое',context:'Чат изменился — запись отменена',release:'Удерживай микрофон для записи',duration:'До 60 секунд',cancelButton:'Отмена',message:'Голосовое сообщение',speed:'Скорость воспроизведения',unavailable:'Голосовое сообщение недоступно',play:'Слушать голосовое'},
+            uk:{hold:'Утримуй для запису',recording:'Запис',uploading:'Надсилання голосового…',preparing:'Підключаємо мікрофон…',cancel:'Запис скасовано',tooShort:'Запис надто короткий',noMic:'Дозволь доступ до мікрофона у браузері.',tooLarge:'Голосове завелике (максимум 5 МБ).',noSupport:'Цей браузер не підтримує запис голосових.',fail:'Не вдалося надіслати голосове',context:'Чат змінився — запис скасовано',release:'Утримуй мікрофон для запису',duration:'До 60 секунд',cancelButton:'Скасувати',message:'Голосове повідомлення',speed:'Швидкість відтворення',unavailable:'Голосове повідомлення недоступне',play:'Слухати голосове'},
+            en:{hold:'Hold to record',recording:'Recording',uploading:'Sending voice note…',preparing:'Requesting microphone…',cancel:'Recording canceled',tooShort:'Recording too short',noMic:'Allow microphone access in your browser.',tooLarge:'Voice note is too large (5 MB max).',noSupport:'Voice recording is not supported in this browser.',fail:'Could not send voice note',context:'Chat changed — recording canceled',release:'Hold microphone to record',duration:'Up to 60 seconds',cancelButton:'Cancel',message:'Voice message',speed:'Playback speed',unavailable:'Voice message unavailable',play:'Play voice note'}
         };
         const vvVoiceT=(name)=>{
             let lang='ru';try{lang=localStorage.getItem('voicevibe.uiLanguage')||'ru';}catch(_){ }
             return (vvVoiceWords[lang]||vvVoiceWords.ru)[name];
         };
+
+        function vvComposerHasText(){
+            return !!vvMessageInput?.value?.trim();
+        }
+        function vvComposerSetButton(mode,disabled=false){
+            if(vvVoiceHiddenButton){vvVoiceHiddenButton.disabled=true;vvVoiceHiddenButton.classList.add('hidden');}
+            if(!vvVoiceButton)return;
+            vvVoiceButton.dataset.mode=mode;
+            vvVoiceButton.disabled=!!disabled;
+            vvVoiceButton.classList.toggle('is-send-mode',mode==='send');
+            vvVoiceButton.classList.toggle('is-voice-mode',mode!=='send');
+            const icon=vvVoiceButton.querySelector('i');
+            if(icon)icon.className=`fa-solid ${mode==='send'?'fa-paper-plane':'fa-microphone'}`;
+            vvVoiceButton.setAttribute('aria-label',mode==='send'?'Отправить':'Записать голосовое');
+            vvVoiceButton.title=mode==='send'?'Отправить':'Записать голосовое';
+        }
+        function vvComposerSyncActions(){
+            const hasTarget=!!vvVoiceTarget();
+            const mode=(vvVoice.phase==='recording'||vvVoice.phase==='requesting'||vvVoice.phase==='uploading'||vvVoice.phase==='finishing')?'voice':(vvComposerHasText()?'send':'voice');
+            const disabled=!hasTarget||(mode==='voice'&&vvVoice.phase==='uploading');
+            vvComposerSetButton(mode,disabled);
+        }
+
         function vvVoiceSafeURL(value){
             if(typeof value!=='string'||value.length>2048)return '';
             try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='res.cloudinary.com'&&u.port===''&&u.pathname.startsWith(`/${CLOUDINARY_CLOUD_NAME}/video/upload/`)?u.href:'';}catch(_){return '';}
@@ -3089,16 +3155,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         const vvVoiceSameTarget=(a,b)=>!!a&&!!b&&a.scope===b.scope&&a.id===b.id&&a.user===b.user&&a.friend===b.friend;
         function vvVoiceSyncAvailability(){
-            if(!vvVoiceButton)return;
-            vvVoiceButton.disabled=!vvVoiceTarget()||vvVoice.phase!=='idle';
-            if(vvVoice.phase==='idle'){
-                vvVoiceButton.title=vvVoiceT('hold');vvVoiceButton.setAttribute('aria-label',vvVoiceT('hold'));
-            }
+            vvComposerSyncActions();
         }
         function vvVoiceUI(message='',active=false){
             if(vvVoicePanel)vvVoicePanel.classList.toggle('hidden',!message);
             if(vvVoiceStatus)vvVoiceStatus.textContent=message;
             vvVoiceButton?.classList.toggle('vv-voice-recording',active);
+            vvVoiceButton?.classList.toggle('is-recording',active);
             if(vvVoiceCancelButton){vvVoiceCancelButton.classList.toggle('hidden',!active);vvVoiceCancelButton.textContent=vvVoiceT('cancelButton');}
         }
         function vvVoiceWaveform(){
@@ -3196,7 +3259,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         async function vvVoiceStart(e){
             if(e.button!==undefined&&e.button!==0)return;
-            if(vvVoice.phase!=='idle')return;
+            if(vvVoice.phase!=='idle'||vvComposerHasText())return;
             const target=vvVoiceTarget();if(!target)return;
             e.preventDefault();
             if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){
@@ -3275,6 +3338,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             e.preventDefault();if(vvVoice.pointerId===-1)vvVoiceStop(false);
         });
         vvVoiceButton?.addEventListener('contextmenu',e=>e.preventDefault());
+
+        vvMessageInput?.addEventListener('input',()=>vvComposerSyncActions());
+        vvVoiceButton?.addEventListener('click',e=>{
+            const mode=vvVoiceButton.dataset.mode||'voice';
+            if(mode==='send'){
+                e.preventDefault();
+                vvMessageForm?.requestSubmit();
+                return;
+            }
+            e.preventDefault();
+        });
+
         vvVoiceCancelButton?.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();vvVoiceStop(true);});
         window.addEventListener('blur',()=>{if(vvVoice.phase==='recording'||vvVoice.phase==='requesting')vvVoiceAbort();});
         document.addEventListener('visibilitychange',()=>{if(document.hidden&&(vvVoice.phase==='recording'||vvVoice.phase==='requesting'))vvVoiceAbort();});
@@ -3290,7 +3365,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!text || !state.user) return;
             if (activeGroupId) {
                 const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
-                try { const groupId=activeGroupId; const batch=writeBatch(db); batch.set(doc(collection(db,'groups',groupId,'messages')), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now()}); batch.update(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); await batch.commit(); clearSentInput(); } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false;} return;
+                try { const groupId=activeGroupId; const batch=writeBatch(db); batch.set(doc(collection(db,'groups',groupId,'messages')), {senderUid:state.user.uid,text:text.slice(0,1000),type:'text',createdAt:Date.now()}); batch.update(doc(db,'groups',groupId),{updatedAt:Date.now(),lastMessage:text.slice(0,100)}); await batch.commit(); clearSentInput(); vvComposerSyncActions(); } catch(err) { console.error('Group message failed',err); alert('Не удалось отправить сообщение в группу. Проверь Firestore Rules.'); } finally {sendBtn.disabled=false; vvComposerSyncActions();} return;
             }
             if (!activeConversationId || !activeFriend) return;
             const sendBtn = document.getElementById('sendMessageBtn'); if (sendBtn.disabled) return; sendBtn.disabled = true;
@@ -3304,7 +3379,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 await batch.commit();
                 bumpRecentChat(sendingFriend);
                 clearSentInput();
-            } catch (err) { console.error('Message send failed',err); alert('Сообщение не отправлено. Проверь Firestore Rules.'); } finally { sendBtn.disabled = false; }
+                vvComposerSyncActions();
+            } catch (err) { console.error('Message send failed',err); alert('Сообщение не отправлено. Проверь Firestore Rules.'); } finally { sendBtn.disabled = false; vvComposerSyncActions(); }
         });
         document.getElementById('snakeChallengeBtn')?.addEventListener('click', () => {
             if (!activeConversationId || !activeFriend || !state.user) return;
