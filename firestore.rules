@@ -23,6 +23,27 @@ service cloud.firestore {
           || after[request.auth.uid] in ['❤️','👍','😂','🔥','😮','😢']);
     }
 
+
+    // Audio metadata only: never store audio bytes in Firestore.
+    // Only Cloudinary URLs for this project are accepted. The asset itself remains public-to-link.
+    function validVoiceNote() {
+      let m = request.resource.data;
+      return m.type == 'voice'
+        && m.keys().hasOnly(['senderUid','text','type','createdAt','clientMessageId','audioURL','durationSec','waveform'])
+        && m.keys().hasAll(['senderUid','text','type','createdAt','audioURL','durationSec','waveform'])
+        && m.text == ''
+        && m.createdAt is int
+        && m.durationSec is int
+        && m.durationSec >= 1
+        && m.durationSec <= 60
+        && m.waveform is list
+        && m.waveform.size() == 28
+        && m.audioURL is string
+        && m.audioURL.size() <= 2048
+        && m.audioURL.matches('https://res[.]cloudinary[.]com/yvoqyrj8/video/upload/.*')
+        && (!m.keys().hasAny(['clientMessageId']) || (m.clientMessageId is string && m.clientMessageId.size() <= 100));
+    }
+
     function isMe(uid) {
       return signedIn() && request.auth.uid == uid;
     }
@@ -698,8 +719,10 @@ service cloud.firestore {
             'text',
             'snake-challenge',
             'snake-result',
-            'sticker'
+            'sticker',
+            'voice'
           ]
+          && (request.resource.data.type != 'voice' || validVoiceNote())
           && (
             request.resource.data.type != 'sticker'
             || get(
@@ -790,9 +813,11 @@ service cloud.firestore {
           && request.resource.data.text.size() <= 2000
           && request.resource.data.type in [
             'text',
-            'sticker'
+            'sticker',
+            'voice'
           ]
           && request.resource.data.createdAt is int
+          && (request.resource.data.type != 'voice' || validVoiceNote())
           && (
             request.resource.data.type != 'sticker'
             || get(

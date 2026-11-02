@@ -2190,7 +2190,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsFromServer(state.user.uid,true);const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
-        async function openGroupConversation(groupId){if(!state.user)return;const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
+        async function openGroupConversation(groupId){if(!state.user)return;vvVoiceAbort();const group=groupsCache.find(g=>g.id===groupId);if(!group||!(group.members||[]).includes(state.user.uid))return;activeGroupId=groupId;bumpRecentChat('group:'+groupId);activeFriend=null;activeConversationId=null;if(state.messageUnsub){state.messageUnsub();state.messageUnsub=null;}const pane=document.getElementById('conversationPane');pane?.classList.remove('hidden','conversation-empty');socialChatsPanel.classList.add('chat-open');const header=document.getElementById('conversationHeader');if(header)header.innerHTML=`<button id="conversationBack" class="mr-2 rounded-lg px-2 py-1" aria-label="Назад">‹</button><i class="fa-solid fa-users mr-2 text-violet-300"></i>${escapeHTML(group.name||'Группа')} <span class="ml-2 text-xs text-slate-500">${(group.members||[]).length} участников</span><button id="vvGroupSettingsBtn" class="ml-auto rounded-xl border border-violet-400/40 px-3 py-2">⚙ Участники</button>`;document.getElementById('vvGroupSettingsBtn')?.addEventListener('click',()=>showGroupSettings(groupId));document.getElementById('conversationBack')?.addEventListener('click',()=>socialChatsPanel.classList.remove('chat-open'));const host=document.getElementById('messagesList');host.style.backgroundImage=group.wallpaperURL?`linear-gradient(rgba(15,23,42,.72),rgba(15,23,42,.72)),url("${group.wallpaperURL}")`:'';host.style.backgroundSize='cover';host.innerHTML='<p class="text-sm text-slate-400">Открываем группу…</p>';document.getElementById('messageInput').disabled=false;document.getElementById('sendMessageBtn').disabled=false;document.getElementById('snakeChallengeBtn').disabled=true;vvVoiceSyncAvailability();state.messageUnsub=onSnapshot(query(collection(db,'groups',groupId,'messages'),orderBy('createdAt','asc'),limitToLast(200)),snap=>{if(activeGroupId!==groupId)return;const stickToBottom=host.scrollHeight-host.scrollTop-host.clientHeight<96||host.dataset.loadedChat!=='group:'+groupId;const previousScroll=host.scrollTop;host.dataset.loadedChat='group:'+groupId;host.innerHTML=snap.empty?'<p class="text-sm text-slate-500">Группа создана. Напишите первое сообщение 👋</p>':snap.docs.map(d=>vvRenderChatMessage({id:d.id,...d.data()},'groups',groupId)).join('');vvBindMessageActions(host);host.scrollTop=stickToBottom?host.scrollHeight:previousScroll;},err=>{console.error(err);host.innerHTML='<p class="text-sm text-rose-300">Не удалось загрузить сообщения группы. Проверь Firestore Rules.</p>';});showTab('chats');renderChatFriends();}
 
         // Premium custom sticker library. Existing stickers remain visible after Premium expires.
         document.getElementById('uploadStickerBtn')?.addEventListener('click',()=>{if(Number(state.userProfile?.premiumUntil||0)<=Date.now())return alert('Загрузка собственных стикеров доступна только Premium. Сами сохранённые стикеры останутся видны.');document.getElementById('stickerFileInput')?.click();});
@@ -2395,6 +2395,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function closeConversation() {
             if (state.messageUnsub) { state.messageUnsub(); state.messageUnsub = null; }
+            vvVoiceAbort();
             activeFriend = null; activeConversationId = null; activeGroupId = null;
             socialChatsPanel.classList.remove('chat-open');
             const pane = document.getElementById('conversationPane');
@@ -2403,6 +2404,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const input = document.getElementById('messageInput'); if (input) { input.value = ''; input.disabled = true; }
             const send = document.getElementById('sendMessageBtn'); if (send) send.disabled = true;
             const game = document.getElementById('snakeChallengeBtn'); if (game) game.disabled = true;
+            vvVoiceSyncAvailability();
             renderChatFriends();
         }
         async function openAnyUserProfile(uid) {
@@ -2807,6 +2809,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             await deleteDoc(doc(db,'users',state.user.uid,'friendRequests',fromUid));
         }
         async function openConversation(friendUid) {
+            vvVoiceAbort();
             if (!state.user || !friendUid || friendUid === state.user.uid) return;
             const uid = String(friendUid);
             const friendDoc = friendsCache.find(f => String(f.uid || f.id) === uid)||vvMentionPeers().find(p=>p.uid===uid);
@@ -2893,6 +2896,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 if (input) input.disabled = false;
                 if (send) send.disabled = false;
                 if (game) game.disabled = false;
+                vvVoiceSyncAvailability();
                 renderChatFriends();
                 showTab('chats');
             } catch (e) {
@@ -2972,6 +2976,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const name=sender?.displayName||(mine?'Вы':'Участник');
             const reactions=m.reactions||{};
             let body=m.type==='sticker'?`<img src="${escapeHTML(m.text||'')}" alt="Стикер" class="max-h-36 max-w-36 rounded-xl object-contain">`:`<p class="whitespace-pre-wrap break-words">${escapeHTML(m.text||'')}</p>`;
+            if(m.type==='voice'){
+                const safeUrl=vvVoiceSafeURL(m.audioURL);
+                const seconds=Math.max(1,Math.min(60,Number(m.durationSec)||1));
+                const stamp=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
+                const levels=Array.isArray(m.waveform)?m.waveform.slice(0,28):[];
+                const bars=Array.from({length:28},(_,i)=>`<span style="height:${Math.min(100,Math.max(12,Math.round(Number(levels[i])||18)))}%"></span>`).join('');
+                body=safeUrl?`<div class="vv-voice-message"><div class="vv-voice-icon"><i class="fa-solid fa-microphone"></i></div><div class="vv-voice-player"><div class="vv-voice-waveform" aria-hidden="true">${bars}</div><audio controls preload="none" playsinline src="${escapeHTML(safeUrl)}" aria-label="${escapeHTML(vvVoiceT('message'))}"></audio><span class="vv-voice-length">${stamp}</span></div><button type="button" class="vv-voice-speed" aria-label="${escapeHTML(vvVoiceT('speed'))}" title="${escapeHTML(vvVoiceT('speed'))}">1×</button></div>`:`<p class="text-rose-300">${escapeHTML(vvVoiceT('unavailable'))}</p>`;
+            }
             if(m.type==='snake-challenge')body+=`<button data-playchallenge="${escapeHTML(m.id)}" class="mt-2 rounded-lg bg-emerald-600 px-3 py-2">🎮 Играть</button>`;
             return `<div class="vv-message-row ${mine?'vv-message-mine':''}"><div class="vv-message-bubble" data-message-id="${escapeHTML(m.id)}" data-message-scope="${scope}" data-message-chat="${escapeHTML(chatId)}"><div class="vv-message-author ${Number(sender?.premiumUntil||0)>Date.now()?'vv-premium-name':''}">${escapeHTML(name)} ${roleBadgeMarkup(m.senderUid)}</div>${body}<div class="vv-message-footer"><time>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</time><button type="button" class="vv-reaction-open" aria-label="Выбрать реакцию" title="Реакция">☺</button></div><div class="vv-reaction-counts">${vvReactionCounts(reactions).map(([e,n])=>`<button type="button" data-reaction="${e}" class="${reactions[state.user.uid]===e?'selected':''}"><span>${e}</span><span class="vv-reaction-avatars">${Object.entries(reactions).filter(([,emoji])=>emoji===e).map(([uid])=>vvReactionAvatarMarkup(uid)).join('')}</span>${n>1?`<span class="vv-reaction-total">${n}</span>`:''}</button>`).join('')}</div><div class="vv-reaction-picker" hidden>${vvReactionEmojis.map(e=>`<button type="button" data-reaction="${e}" aria-label="Реакция ${e}">${e}</button>`).join('')}</div></div></div>`;
         }
@@ -3013,6 +3025,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             host.querySelectorAll('[data-chat-story]').forEach(b=>b.addEventListener('click',()=>vvOpenMentionStory(b.dataset.chatStory)));
             host.querySelectorAll('[data-chat-repost]').forEach(b=>b.addEventListener('click',()=>vvRepostMention(b.dataset.chatRepost)));
             host.querySelectorAll('[data-playchallenge]').forEach(b=>b.addEventListener('click',()=>startSnake(b.dataset.playchallenge)));
+            host.querySelectorAll('.vv-voice-speed').forEach(button=>button.addEventListener('click',()=>{
+                const player=button.closest('.vv-voice-message')?.querySelector('audio');
+                if(!player)return;
+                const next=player.playbackRate>=1.9?1:player.playbackRate>=1.4?2:1.5;
+                player.playbackRate=next;button.textContent=`${next}×`;
+            }));
+            host.querySelectorAll('.vv-voice-message audio').forEach(player=>{
+                const waveform=player.closest('.vv-voice-message')?.querySelector('.vv-voice-waveform');
+                const paint=()=>{if(waveform)waveform.style.setProperty('--vv-voice-progress',`${Math.min(100,Math.max(0,(player.currentTime/(player.duration||1))*100))}%`);};
+                player.addEventListener('timeupdate',paint);player.addEventListener('ended',paint);
+                player.addEventListener('loadedmetadata',paint);
+            });
             host.querySelectorAll('[data-message-id]').forEach(node=>{
                 let lastTap=0,touchStart=null,lastHeart=0;
                 const heart=()=>{const now=Date.now();if(now-lastHeart<600)return;lastHeart=now;vvSetMessageReaction(node,'❤️',true);};
@@ -3035,6 +3059,227 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 }));
             });
         }
+
+        // Voice notes: MediaRecorder -> Cloudinary (video resource type) -> Firestore metadata.
+        // Cloudinary unsigned URLs are public-to-link; do not treat this as private media storage.
+        const vvVoiceButton=document.getElementById('vvVoiceHoldBtn');
+        const vvVoicePanel=document.getElementById('vvVoicePanel');
+        const vvVoiceStatus=document.getElementById('vvVoiceStatus');
+        const vvVoiceCancelButton=document.getElementById('vvVoiceCancel');
+        const vvVoice={phase:'idle',recorder:null,stream:null,chunks:[],startTime:0,timer:null,pointerId:null,pointerActive:false,
+            target:null,userUid:null,cancelRequested:false,abortController:null,session:0,audioContext:null,analyser:null,peaks:[]};
+        const vvVoiceWords={
+            ru:{hold:'Удерживай для записи',recording:'Запись',uploading:'Отправка голосового…',preparing:'Подключаем микрофон…',cancel:'Запись отменена',tooShort:'Слишком короткая запись',noMic:'Разреши доступ к микрофону в браузере.',tooLarge:'Голосовое слишком большое (максимум 5 МБ).',noSupport:'Этот браузер не поддерживает запись голосовых.',fail:'Не удалось отправить голосовое',context:'Чат изменился — запись отменена',release:'Удерживай микрофон для записи',duration:'До 60 секунд',cancelButton:'Отмена',message:'Голосовое сообщение',speed:'Скорость воспроизведения',unavailable:'Голосовое сообщение недоступно'},
+            uk:{hold:'Утримуй для запису',recording:'Запис',uploading:'Надсилання голосового…',preparing:'Підключаємо мікрофон…',cancel:'Запис скасовано',tooShort:'Запис надто короткий',noMic:'Дозволь доступ до мікрофона у браузері.',tooLarge:'Голосове завелике (максимум 5 МБ).',noSupport:'Цей браузер не підтримує запис голосових.',fail:'Не вдалося надіслати голосове',context:'Чат змінився — запис скасовано',release:'Утримуй мікрофон для запису',duration:'До 60 секунд',cancelButton:'Скасувати',message:'Голосове повідомлення',speed:'Швидкість відтворення',unavailable:'Голосове повідомлення недоступне'},
+            en:{hold:'Hold to record',recording:'Recording',uploading:'Sending voice note…',preparing:'Requesting microphone…',cancel:'Recording canceled',tooShort:'Recording too short',noMic:'Allow microphone access in your browser.',tooLarge:'Voice note is too large (5 MB max).',noSupport:'Voice recording is not supported in this browser.',fail:'Could not send voice note',context:'Chat changed — recording canceled',release:'Hold microphone to record',duration:'Up to 60 seconds',cancelButton:'Cancel',message:'Voice message',speed:'Playback speed',unavailable:'Voice message unavailable'}
+        };
+        const vvVoiceT=(name)=>{
+            let lang='ru';try{lang=localStorage.getItem('voicevibe.uiLanguage')||'ru';}catch(_){ }
+            return (vvVoiceWords[lang]||vvVoiceWords.ru)[name];
+        };
+        function vvVoiceSafeURL(value){
+            if(typeof value!=='string'||value.length>2048)return '';
+            try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='res.cloudinary.com'&&u.port===''&&u.pathname.startsWith(`/${CLOUDINARY_CLOUD_NAME}/video/upload/`)?u.href:'';}catch(_){return '';}
+        }
+        function vvVoiceTarget(){
+            if(!state.user)return null;
+            if(activeGroupId)return {scope:'groups',id:activeGroupId,user:state.user.uid};
+            if(activeConversationId&&activeFriend)return {scope:'conversations',id:activeConversationId,user:state.user.uid,friend:activeFriend};
+            return null;
+        }
+        const vvVoiceSameTarget=(a,b)=>!!a&&!!b&&a.scope===b.scope&&a.id===b.id&&a.user===b.user&&a.friend===b.friend;
+        function vvVoiceSyncAvailability(){
+            if(!vvVoiceButton)return;
+            vvVoiceButton.disabled=!vvVoiceTarget()||vvVoice.phase!=='idle';
+            if(vvVoice.phase==='idle'){
+                vvVoiceButton.title=vvVoiceT('hold');vvVoiceButton.setAttribute('aria-label',vvVoiceT('hold'));
+            }
+        }
+        function vvVoiceUI(message='',active=false){
+            if(vvVoicePanel)vvVoicePanel.classList.toggle('hidden',!message);
+            if(vvVoiceStatus)vvVoiceStatus.textContent=message;
+            vvVoiceButton?.classList.toggle('vv-voice-recording',active);
+            if(vvVoiceCancelButton){vvVoiceCancelButton.classList.toggle('hidden',!active);vvVoiceCancelButton.textContent=vvVoiceT('cancelButton');}
+        }
+        function vvVoiceWaveform(){
+            const samples=vvVoice.peaks;
+            if(!samples.length)return Array.from({length:28},()=>18);
+            const largest=Math.max(0.04,...samples);
+            return Array.from({length:28},(_,i)=>{
+                const start=Math.floor(i*samples.length/28),end=Math.max(start+1,Math.ceil((i+1)*samples.length/28));
+                let sum=0,count=0;
+                for(let j=start;j<end&&j<samples.length;j++){sum+=samples[j];count++;}
+                return Math.round(Math.min(100,Math.max(12,((count?sum/count:0)/largest)*100)));
+            });
+        }
+        function vvVoiceSamplePeak(){
+            if(!vvVoice.analyser)return;
+            const data=new Uint8Array(vvVoice.analyser.fftSize);
+            vvVoice.analyser.getByteTimeDomainData(data);
+            let total=0;for(const val of data){const v=(val-128)/128;total+=v*v;}
+            vvVoice.peaks.push(Math.sqrt(total/data.length));
+        }
+        function vvVoiceClearStream(){
+            if(vvVoice.timer){clearInterval(vvVoice.timer);vvVoice.timer=null;}
+            vvVoice.stream?.getTracks().forEach(t=>t.stop());vvVoice.stream=null;
+            if(vvVoice.audioContext){void vvVoice.audioContext.close().catch(()=>{});vvVoice.audioContext=null;}
+            vvVoice.analyser=null;
+        }
+        function vvVoiceReset(message=''){
+            vvVoiceClearStream();vvVoice.recorder=null;vvVoice.chunks=[];vvVoice.phase='idle';
+            vvVoice.target=null;vvVoice.userUid=null;vvVoice.pointerId=null;vvVoice.pointerActive=false;
+            vvVoice.abortController=null;vvVoice.cancelRequested=false;vvVoice.peaks=[];
+            vvVoiceUI(message,false);vvVoiceSyncAvailability();
+        }
+        function vvVoiceAbort(){
+            if(vvVoice.phase==='idle')return;
+            vvVoice.cancelRequested=true;vvVoice.pointerActive=false;vvVoice.session++;
+            vvVoice.abortController?.abort();
+            if(vvVoice.recorder?.state==='recording'){
+                try{vvVoice.recorder.stop();}catch(_){ }
+            }
+            vvVoiceReset();
+        }
+        function vvVoiceChooseMime(){
+            for(const format of ['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg;codecs=opus']){
+                if(MediaRecorder.isTypeSupported?.(format))return format;
+            }
+            return '';
+        }
+        async function vvVoiceUpload(blob,signal){
+            if(blob.size>5*1024*1024)throw new Error(vvVoiceT('tooLarge'));
+            const type=blob.type.split(';')[0]||'audio/webm';
+            const ext=type.includes('mp4')?'m4a':type.includes('ogg')?'ogg':'webm';
+            const data=new FormData();
+            data.append('file',new File([blob],`voicevibe-${Date.now()}.${ext}`,{type}));
+            data.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+            data.append('folder','voicevibe-voice');
+            const response=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`,{method:'POST',body:data,signal});
+            const result=await response.json().catch(()=>({}));
+            if(!response.ok)throw new Error(result.error?.message||`Cloudinary: ${response.status}. Проверь настройки voicevibe_upload для аудио.`);
+            const url=vvVoiceSafeURL(result.secure_url);
+            if(!url)throw new Error('Cloudinary вернул неподдерживаемую ссылку на аудио.');
+            return url;
+        }
+        async function vvVoiceSend(blob,durationSec,waveform,target){
+            if(!vvVoiceSameTarget(target,vvVoiceTarget()))throw new Error(vvVoiceT('context'));
+            const controller=new AbortController();vvVoice.abortController=controller;
+            const audioURL=await vvVoiceUpload(blob,controller.signal);
+            if(!vvVoiceSameTarget(target,vvVoiceTarget())||controller.signal.aborted)throw new Error(vvVoiceT('context'));
+            const stamp=Date.now(),payload={senderUid:target.user,text:'',type:'voice',audioURL,durationSec,waveform,createdAt:stamp};
+            const chatRef=doc(db,target.scope,target.id);
+            const batch=writeBatch(db);
+            if(target.scope==='groups'){
+                batch.set(doc(collection(chatRef,'messages')),payload);
+                batch.update(chatRef,{updatedAt:stamp,lastMessage:'🎤 Голосовое сообщение'});
+            }else{
+                payload.clientMessageId=globalThis.crypto?.randomUUID?.()||`${stamp}-${Math.random().toString(36).slice(2)}`;
+                batch.set(doc(collection(chatRef,'messages')),payload);
+                batch.set(chatRef,{participants:[target.user,target.friend].sort(),updatedAt:stamp,lastMessage:'🎤 Голосовое сообщение'},{merge:true});
+            }
+            await batch.commit();
+            if(target.scope==='conversations')bumpRecentChat(target.friend);
+        }
+        async function vvVoiceFinalize(session){
+            if(session!==vvVoice.session)return;
+            const target=vvVoice.target;
+            const elapsed=performance.now()-vvVoice.startTime;
+            const durationSec=Math.max(1,Math.min(60,Math.ceil(elapsed/1000)));
+            const bytes=new Blob(vvVoice.chunks,{type:vvVoice.recorder?.mimeType||vvVoice.chunks[0]?.type||'audio/webm'});
+            const waveform=vvVoiceWaveform();
+            vvVoiceClearStream();
+            if(vvVoice.cancelRequested){vvVoiceReset();return;}
+            if(elapsed<650||bytes.size<150){vvVoiceReset(vvVoiceT('tooShort'));return;}
+            vvVoice.phase='uploading';vvVoiceUI(vvVoiceT('uploading'));
+            try{await vvVoiceSend(bytes,durationSec,waveform,target);if(session===vvVoice.session)vvVoiceReset();}
+            catch(error){console.error('Voice message failed:',error);if(session===vvVoice.session)vvVoiceReset(`${vvVoiceT('fail')}: ${error.message||'Ошибка сети'}`);}
+        }
+        async function vvVoiceStart(e){
+            if(e.button!==undefined&&e.button!==0)return;
+            if(vvVoice.phase!=='idle')return;
+            const target=vvVoiceTarget();if(!target)return;
+            e.preventDefault();
+            if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){
+                vvVoiceUI(vvVoiceT('noSupport'));return;
+            }
+            const session=++vvVoice.session;
+            vvVoice.phase='requesting';vvVoice.pointerId=e.pointerId;vvVoice.pointerActive=true;
+            vvVoice.target=target;vvVoice.userUid=state.user?.uid;vvVoice.cancelRequested=false;
+            vvVoiceUI(vvVoiceT('preparing'),true);
+            // Keep pointerup events even when the finger leaves the button.
+            try{vvVoiceButton.setPointerCapture(e.pointerId);}catch(_){ }
+            try{
+                const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
+                if(session!==vvVoice.session||vvVoice.phase!=='requesting'||!vvVoice.pointerActive||!vvVoiceSameTarget(target,vvVoiceTarget())){
+                    stream.getTracks().forEach(track=>track.stop());
+                    if(session===vvVoice.session&&vvVoice.phase==='requesting')vvVoiceReset(vvVoiceT('release'));
+                    return;
+                }
+                vvVoice.stream=stream;vvVoice.peaks=[];
+                try{
+                    const AudioEngine=window.AudioContext||window.webkitAudioContext;
+                    if(AudioEngine){
+                        vvVoice.audioContext=new AudioEngine();
+                        const source=vvVoice.audioContext.createMediaStreamSource(stream);
+                        vvVoice.analyser=vvVoice.audioContext.createAnalyser();
+                        vvVoice.analyser.fftSize=256;
+                        source.connect(vvVoice.analyser);
+                        if(vvVoice.audioContext.state==='suspended')void vvVoice.audioContext.resume().catch(()=>{});
+                    }
+                }catch(err){console.warn('Waveform visualization unavailable:',err);}
+                const mime=vvVoiceChooseMime();
+                const recorder=mime?new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:64000}):new MediaRecorder(stream);
+                vvVoice.recorder=recorder;vvVoice.chunks=[];
+                recorder.ondataavailable=event=>{if(event.data?.size)vvVoice.chunks.push(event.data);};
+                recorder.onerror=error=>{console.error('Voice recorder error:',error);if(session===vvVoice.session){vvVoiceAbort();vvVoiceUI(vvVoiceT('fail'));}};
+                recorder.onstop=()=>{if(session===vvVoice.session&&vvVoice.recorder===recorder)void vvVoiceFinalize(session);};
+                recorder.start(250);vvVoice.phase='recording';vvVoice.startTime=performance.now();
+                vvVoiceUI(`${vvVoiceT('recording')} 0:00 · ${vvVoiceT('duration')}`,true);
+                vvVoice.timer=setInterval(()=>{
+                    if(vvVoice.phase!=='recording')return;
+                    vvVoiceSamplePeak();
+                    const secs=Math.floor((performance.now()-vvVoice.startTime)/1000);
+                    vvVoiceUI(`${vvVoiceT('recording')} ${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')} / 1:00`,true);
+                    if(secs>=60)vvVoiceStop(false);
+                },150);
+            }catch(err){console.error('Voice microphone:',err);if(session===vvVoice.session)vvVoiceReset(vvVoiceT('noMic'));}
+        }
+        function vvVoiceStop(cancel=false){
+            if(vvVoice.phase==='requesting'){
+                vvVoice.pointerActive=false;
+                if(cancel)vvVoice.cancelRequested=true;
+                return;
+            }
+            if(vvVoice.phase!=='recording')return;
+            vvVoice.pointerActive=false;vvVoice.cancelRequested=cancel;
+            if(vvVoice.timer){clearInterval(vvVoice.timer);vvVoice.timer=null;}
+            vvVoice.phase='finishing';vvVoiceUI(cancel?vvVoiceT('cancel'):vvVoiceT('uploading'));
+            try{vvVoice.recorder.stop();}catch(err){console.warn('Stop recording:',err);vvVoiceReset();}
+        }
+        vvVoiceButton?.addEventListener('pointerdown',vvVoiceStart);
+        vvVoiceButton?.addEventListener('pointerup',e=>{
+            if(vvVoice.pointerId!==e.pointerId)return;
+            const rect=vvVoiceButton.getBoundingClientRect();
+            const outside=e.clientX<rect.left-40||e.clientX>rect.right+40||e.clientY<rect.top-50||e.clientY>rect.bottom+50;
+            vvVoiceStop(outside);
+        });
+        vvVoiceButton?.addEventListener('pointercancel',()=>vvVoiceStop(true));
+        // Keyboard users can hold Space or Enter, then release to send.
+        vvVoiceButton?.addEventListener('keydown',e=>{
+            if((e.key!==' '&&e.key!=='Enter')||e.repeat)return;
+            e.preventDefault();
+            void vvVoiceStart({button:0,pointerId:-1,preventDefault:()=>{}});
+        });
+        vvVoiceButton?.addEventListener('keyup',e=>{
+            if(e.key!==' '&&e.key!=='Enter')return;
+            e.preventDefault();if(vvVoice.pointerId===-1)vvVoiceStop(false);
+        });
+        vvVoiceButton?.addEventListener('contextmenu',e=>e.preventDefault());
+        vvVoiceCancelButton?.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();vvVoiceStop(true);});
+        window.addEventListener('blur',()=>{if(vvVoice.phase==='recording'||vvVoice.phase==='requesting')vvVoiceAbort();});
+        document.addEventListener('visibilitychange',()=>{if(document.hidden&&(vvVoice.phase==='recording'||vvVoice.phase==='requesting'))vvVoiceAbort();});
+        vvVoiceSyncAvailability();
+
         document.getElementById('messageForm')?.addEventListener('submit', async e => {
             e.preventDefault();
             const messageField = document.getElementById('messageInput');

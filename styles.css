@@ -593,3 +593,26 @@ header, #appHeader, .app-header {isolation:isolate}
 .vv-menu-settings-link>i:last-child{font-size:12px;color:#a78bfa}
 @media(max-width:380px){.vv-menu-entry{padding:13px 12px;min-height:80px;gap:11px}.vv-menu-entry-icon{width:43px;height:43px;flex-basis:43px;font-size:19px}.vv-menu-entry-copy strong{font-size:16px}}
 .vv-menu-home.hidden{display:none!important}
+
+/* VoiceVibe voice notes — scoped to the existing chat UI */
+#vvVoiceHoldBtn{display:inline-flex;align-items:center;justify-content:center;align-self:stretch;flex:0 0 44px;border:1px solid rgba(167,139,250,.5);border-radius:13px;background:rgba(109,40,217,.14);color:#d8b4fe;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:background .15s,transform .15s,border-color .15s}
+#vvVoiceHoldBtn:not(:disabled):active,#vvVoiceHoldBtn.vv-voice-recording{background:rgba(225,29,72,.24);border-color:#fb7185;color:#fda4af;transform:scale(1.04)}
+#vvVoiceHoldBtn:disabled{cursor:not-allowed;opacity:.45}
+.vv-voice-status{display:flex;gap:10px;align-items:center;padding:9px 16px;color:#e9d5ff;background:rgba(59,7,100,.27);border-top:1px solid rgba(167,139,250,.22);font-size:.85rem;min-height:40px}
+.vv-voice-status.hidden{display:none!important}
+.vv-voice-status-dot{height:9px;width:9px;flex-shrink:0;border-radius:50%;background:#fb7185;box-shadow:0 0 10px rgba(244,63,94,.7);animation:vvVoicePulse 1s ease-in-out infinite}
+.vv-voice-status:has(.vv-voice-cancel.hidden) .vv-voice-status-dot{background:#a78bfa;animation:none;box-shadow:none}
+.vv-voice-cancel{margin-left:auto;border:1px solid #fda4af;border-radius:10px;color:#fecdd3;padding:5px 11px;font-size:.76rem}
+.vv-voice-cancel.hidden{display:none!important}
+@keyframes vvVoicePulse{50%{opacity:.4;transform:scale(.8)}}
+.vv-voice-message{display:flex;align-items:center;gap:8px;width:min(100%,325px);min-width:0;padding:6px 0}
+.vv-voice-icon{flex:0 0 29px;width:29px;height:29px;border:1px solid rgba(167,139,250,.42);border-radius:50%;display:grid;place-items:center;color:#c4b5fd}
+.vv-voice-player{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.vv-voice-player audio{display:block;width:100%;min-width:0;max-width:230px;height:38px;accent-color:#a78bfa}
+.vv-voice-length{font-size:11px;color:#a5b4fc;padding-left:5px}
+.vv-voice-speed{flex:0 0 auto;border:1px solid rgba(167,139,250,.38);border-radius:10px;padding:5px;font-size:11px;color:#ddd6fe;background:rgba(76,29,149,.20)}
+@media(max-width:400px){.vv-voice-message{max-width:245px}.vv-voice-player audio{max-width:150px}.vv-voice-icon{display:none}#messageForm{gap:6px!important;padding:8px!important}}
+
+/* Real recorded audio amplitude preview (28 sampled bars). */
+.vv-voice-waveform{--vv-voice-progress:0%;display:flex;align-items:center;gap:2px;height:22px;width:100%;max-width:220px;overflow:hidden;padding:1px 4px;background:linear-gradient(to right,rgba(167,139,250,.35) var(--vv-voice-progress),transparent var(--vv-voice-progress));border-radius:8px}
+.vv-voice-waveform>span{flex:1;min-width:1px;max-width:6px;border-radius:9px;background:#c4b5fd;opacity:.9}
