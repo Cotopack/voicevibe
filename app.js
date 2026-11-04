@@ -151,6 +151,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 friendsCache = []; groupsCache = []; friendRequestsCache = []; recentChatTimes.clear();
                 state.presenceCache.clear(); state.friendProfiles.clear();
                 closeConversation(); closeStoryViewer(); activeStoryItems = []; activeStoryIndex = 0;
+                document.getElementById('vvCreateStorySheet')?.classList.add('hidden');
+                document.getElementById('vvChatActivityCount')?.classList.add('hidden');
+                document.getElementById('vvChatStoryList')?.replaceChildren();
                 document.getElementById('storiesList')?.replaceChildren();
                 document.getElementById('vvStoryMentionInbox')?.replaceChildren();
                 renderFriends(); renderChatFriends();
@@ -1233,7 +1236,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 b.classList.toggle('bg-violet-500/10', selected);
             });
             if (tab === 'profile') renderSocialProfile();
-            if (chatsTab) renderChatFriends();
+            if (chatsTab) { renderChatFriends(); renderVvChatStories(); }
         }
         document.querySelectorAll('.nav-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
@@ -1428,10 +1431,38 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const viewer = {uid:state.user.uid,displayName:state.userProfile?.displayName||state.user.displayName||'Пользователь',username:state.userProfile?.username||''};
             try { await updateDoc(doc(db,'stories',st.id), { views: arrayUnion(viewer) }); st.views = [...(st.views||[]),viewer]; refreshAvatarStoryRings(); } catch(e) { console.warn('Could not record story view:',e); }
         }
+        function renderVvChatStories() {
+            const list = document.getElementById('vvChatStoryList');
+            if (!list) return;
+            const me = state.user?.uid;
+            const own = state.userProfile || {};
+            const ownPhoto = String(own.photoURL || own.avatarURL || state.user?.photoURL || '');
+            const selfAvatar = ownPhoto
+                ? `<img src="${storyEscape(ownPhoto)}" alt="" loading="lazy">`
+                : `<span>${storyEscape((own.displayName || 'Я')[0])}</span>`;
+            // Create button always first; actual stories come from the existing Firestore loader.
+            const create = `<button class="vv-chat-story vv-chat-story-own" type="button" data-vv-create-story="true" aria-label="Создать историю"><span class="vv-chat-story-ring vv-chat-story-create-ring">${selfAvatar}</span><span class="vv-chat-story-label">Создать +</span></button>`;
+            const byUser = new Map();
+            activeStoryItems.forEach(st => {
+                if (Number(st.expiresAt) <= Date.now() || !st.uid || st.uid === me) return;
+                if (!byUser.has(st.uid)) byUser.set(st.uid, []);
+                byUser.get(st.uid).push(st);
+            });
+            const members = [...byUser.entries()].map(([uid, items]) => ({
+                uid, item: items[0], viewed: items.every(st => (st.views || []).some(v => (typeof v === 'string' ? v : v?.uid) === me))
+            })).sort((a,b) => Number(a.viewed)-Number(b.viewed));
+            list.innerHTML = create + members.map(({uid,item,viewed}) => {
+                const picture = item.photoURL
+                    ? `<img src="${storyEscape(item.photoURL)}" alt="" loading="lazy">`
+                    : `<span>${storyEscape((item.displayName || 'П')[0])}</span>`;
+                return `<button type="button" class="vv-chat-story ${viewed?'viewed':''}" data-vv-story-uid="${storyEscape(uid)}" aria-label="История ${storyEscape(item.displayName || 'друга')}"><span class="vv-chat-story-ring">${picture}</span><span class="vv-chat-story-label">${storyEscape(item.displayName || 'Друг')}</span></button>`;
+            }).join('');
+        }
         function renderActiveStoryList() {
             const now = Date.now();
             if (!state.user) return;
                 refreshAvatarStoryRings();
+                renderVvChatStories();
                 if (!activeStoryItems.length) { storiesList.innerHTML = '<p class="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">Пока нет историй. Нажми «+» и опубликуй первую.</p>'; return; }
                 const groups = new Map(); activeStoryItems.forEach(st => { if(!groups.has(st.uid)) groups.set(st.uid,[]); groups.get(st.uid).push(st); });
                 const storyUserGroups=[...groups.entries()].map(([uid,items])=>({uid,items,seen:items.every(item=>(item.views||[]).some(v=>(typeof v==='string'?v:v?.uid)===state.user.uid))})); const unseenUsers=storyUserGroups.filter(g=>!g.seen); const seenUsers=storyUserGroups.filter(g=>g.seen); const renderStoryUsers=list=>list.map(({uid,items,seen})=>{const st=items[0];return `<button data-open-story-user="${storyEscape(uid)}" class="flex w-16 shrink-0 flex-col items-center gap-1 text-center text-xs">${storyAvatar(st,seen?'story-viewed':'story-unviewed')}<span class="w-16 truncate">${uid===state.user.uid?'Ваша история':storyEscape(st.displayName||'Пользователь')}</span></button>`;}).join(''); storiesList.innerHTML = `${unseenUsers.length?`<div class="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">Новые истории</div><div class="mb-4 flex gap-4 overflow-x-auto pb-3">${renderStoryUsers(unseenUsers)}</div>`:''}${seenUsers.length?`<div class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Просмотренные</div><div class="mb-3 flex gap-4 overflow-x-auto pb-3">${renderStoryUsers(seenUsers)}</div>`:''}<div class="mt-4 space-y-2">${activeStoryItems.filter(st=>st.uid===state.user.uid).map(st=>`<div class="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs"><span>Моя история · ${Math.max(1,Math.ceil((Number(st.expiresAt)-now)/3600000))} ч. осталось</span><button data-delete-story="${storyEscape(st.id)}" class="rounded-lg px-3 py-2 text-rose-300 hover:bg-rose-500/10">Удалить</button></div>`).join('')}</div>`;
@@ -1474,7 +1505,33 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         }
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
         function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
-        document.getElementById('storiesNavBtn')?.addEventListener('click', async () => { if (!state.user) return; storiesModal?.classList.remove('hidden'); storyCreateForm?.classList.add('hidden'); closeStoryViewer(); await refreshStories(); });
+        const vvCreateStorySheet = document.getElementById('vvCreateStorySheet');
+        const vvOpenStorySheet = () => { if (state.user) vvCreateStorySheet?.classList.remove('hidden'); };
+        const vvCloseStorySheet = () => vvCreateStorySheet?.classList.add('hidden');
+        document.getElementById('storiesNavBtn')?.addEventListener('click', vvOpenStorySheet);
+        document.getElementById('vvCloseStorySheet')?.addEventListener('click', vvCloseStorySheet);
+        vvCreateStorySheet?.addEventListener('click', e => { if (e.target === vvCreateStorySheet) vvCloseStorySheet(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') vvCloseStorySheet(); });
+        document.getElementById('vvConfirmCreateStory')?.addEventListener('click', () => {
+            if (!state.user) return;
+            vvCloseStorySheet();
+            closeStoryViewer();
+            storiesModal?.classList.remove('hidden');
+            document.getElementById('storyCreateToggle')?.click();
+        });
+        document.getElementById('vvChatStoryList')?.addEventListener('click', e => {
+            if (e.target.closest('[data-vv-create-story]')) { vvOpenStorySheet(); return; }
+            const button = e.target.closest('[data-vv-story-uid]');
+            if (!button || !state.user) return;
+            storiesModal?.classList.remove('hidden');
+            openStoryByUser(button.dataset.vvStoryUid);
+        });
+        document.getElementById('vvChatActivity')?.addEventListener('click', () => {
+            if (!state.user) return;
+            closeConversation();
+            showTab('profile');
+            document.getElementById('vvFriendsOpen')?.click();
+        });
         document.addEventListener('click', async event => { const avatar=event.target.closest('[data-story-avatar]'); if(!avatar || !state.user) return; const uid=avatar.dataset.storyAvatar; const hasStory=activeStoryItems.some(st=>st.uid===uid && Number(st.expiresAt)>Date.now()); if(hasStory){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.();document.getElementById('friendProfileModal')?.remove();storiesModal?.classList.remove('hidden');storyCreateForm?.classList.add('hidden');storiesList?.classList.remove('hidden');openStoryByUser(uid);} else { event.preventDefault();event.stopPropagation();event.stopImmediatePropagation?.(); if(uid===state.user.uid) document.getElementById('profileBtn')?.click(); else openAnyUserProfile(uid); } }, true);
         document.addEventListener('keydown', event => { if((event.key==='Enter'||event.key===' ') && event.target.matches('[data-story-avatar]')) { event.preventDefault(); event.target.click(); } });
         document.getElementById('storiesClose')?.addEventListener('click', () => { closeStoryViewer(); document.getElementById('storyMusicPreview')?.pause(); vvResetStoryDraftText(); storiesModal?.classList.add('hidden'); });
@@ -2387,6 +2444,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friendRequests'), snap => {
                 friendRequestsCache = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(r => r.status === 'pending');
                 document.getElementById('vvRequestDot')?.classList.toggle('hidden', !friendRequestsCache.length);
+                const activityCount = document.getElementById('vvChatActivityCount');
+                if (activityCount) {
+                    activityCount.textContent = String(Math.min(99,friendRequestsCache.length)) + (friendRequestsCache.length > 99 ? '+' : '');
+                    activityCount.classList.toggle('hidden', friendRequestsCache.length === 0);
+                }
                 renderFriendRequests();
             }, err => console.warn('Friend request listener:', err)));
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
