@@ -34,7 +34,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         async function workerPost(path, payload = {}) {
             if (WORKER_BASE_URL.includes('YOUR-SUBDOMAIN')) throw new Error('Укажи свой адрес Cloudflare Worker в WORKER_BASE_URL.');
             if (!state.user) throw new Error('Сначала войди в аккаунт.');
-            const idToken = await state.user.getIdToken(true);
+            const idToken = await state.user.getIdToken(); // Firebase refreshes expired tokens automatically; avoid forcing a refresh per request.
             const res = await fetch(`${WORKER_BASE_URL}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.error || 'Ошибка сервера VoiceVibe.');
@@ -132,15 +132,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                         createdAt: Date.now()
                     };
                     if (!profileSnap.exists()) await setDoc(doc(db, 'users', user.uid), state.userProfile);
-                    try {
-                        const walletResult = await ensureReferralAccount();
-                        state.userProfile = { ...(state.userProfile || {}), ...(walletResult.data || {}) };
-                        const referralToClaim = pendingReferralCode.trim();
-                        if (referralToClaim && referralToClaim.toUpperCase() !== String(walletResult.data?.referralCode || '').toUpperCase() && !walletResult.data?.referredBy) {
-                            try { const claimResult = await claimReferralCall({ code: referralToClaim }); state.userProfile = { ...(state.userProfile || {}), vibecoinBalance: claimResult.data?.vibecoinBalance ?? state.userProfile?.vibecoinBalance, referredBy: true }; localStorage.removeItem('vv_pending_referral'); }
-                            catch (claimErr) { console.warn('Automatic referral claim:', claimErr); }
-                        }
-                    } catch (walletErr) { console.warn('Vibecoin backend is not deployed/configured yet:', walletErr); }
                     if (state.user?.uid !== user.uid) return;
                     applyProfileToUI();
                     document.getElementById('authOverlay')?.classList.add('hidden');
@@ -148,6 +139,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     document.getElementById('bottomNav')?.classList.remove('hidden');
                     startSocialListeners();
                     renderSocialProfile();
+                    // Wallet/Worker outages must never prevent the chat UI from opening.
+                    void hydrateWalletAfterLogin(user.uid);
                 } catch (err) {
                     console.error('Profile load failed:', err);
                     document.getElementById('authOverlay')?.classList.remove('hidden');
@@ -168,6 +161,24 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             }
             resolveAuthReady(user);
         });
+
+        async function hydrateWalletAfterLogin(uid) {
+            try {
+                const walletResult = await ensureReferralAccount();
+                if (state.user?.uid !== uid) return;
+                state.userProfile = { ...(state.userProfile || {}), ...(walletResult.data || {}) };
+                const referralToClaim = pendingReferralCode.trim();
+                if (referralToClaim && referralToClaim.toUpperCase() !== String(walletResult.data?.referralCode || '').toUpperCase() && !walletResult.data?.referredBy) {
+                    try {
+                        const claimResult = await claimReferralCall({ code: referralToClaim });
+                        if (state.user?.uid !== uid) return;
+                        state.userProfile = { ...(state.userProfile || {}), vibecoinBalance: claimResult.data?.vibecoinBalance ?? state.userProfile?.vibecoinBalance, referredBy: true };
+                        localStorage.removeItem('vv_pending_referral');
+                    } catch (claimErr) { console.warn('Automatic referral claim:', claimErr); }
+                }
+                if (state.user?.uid === uid) renderSocialProfile();
+            } catch (walletErr) { console.warn('Wallet service unavailable; chats remain accessible:', walletErr); }
+        }
 
         function showAuthMessage(message) {
             const el = document.getElementById('authMessage');
@@ -878,22 +889,26 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         let activeGroupId = null;
         // Roles are read from a protected Firestore collection, never from editable user profiles.
         const roleCache = new Map();
+        const roleRequests = new Map();
         let premiumExpiryTimer = null;
         async function loadRole(uid) {
             uid = String(uid || '');
             if (!uid) return 'user';
             if (uid === DEVELOPER_UID) { roleCache.set(uid, 'developer'); return 'developer'; }
             if (roleCache.has(uid)) return roleCache.get(uid);
-            let role = 'user';
-            try {
-                const snap = await getDoc(doc(db, 'roles', uid));
-                const value = snap.exists() ? snap.data().role : '';
-                if (value === 'developer' || value === 'admin') role = value;
-            } catch (error) {
-                console.warn('Role lookup failed:', error);
-            }
-            roleCache.set(uid, role);
-            return role;
+            if (roleRequests.has(uid)) return roleRequests.get(uid);
+            const task = (async () => {
+                let role = 'user';
+                try {
+                    const snap = await getDoc(doc(db, 'roles', uid));
+                    const value = snap.exists() ? snap.data().role : '';
+                    if (value === 'developer' || value === 'admin') role = value;
+                } catch (error) { console.warn('Role lookup failed:', error); }
+                roleCache.set(uid, role);
+                return role;
+            })();
+            roleRequests.set(uid, task);
+            try { return await task; } finally { roleRequests.delete(uid); }
         }
         function roleBadgeMarkup(uid) {
             const role = roleCache.get(String(uid || '')) || 'user';
@@ -1433,19 +1448,29 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             else if (current) activeStoryIndex = live.findIndex(st => st.id === current.id);
             renderActiveStoryList();
         }
-        setInterval(expireStories, 1000);
+        setInterval(expireStories, 15000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) expireStories(); });
+        let vvStoriesLoadSerial = 0;
         async function refreshStories() {
+            const serial = ++vvStoriesLoadSerial;
+            const ownerUid = state.user?.uid;
             if (!storiesList) return;
             if (!state.user) { storiesList.innerHTML = '<p class="text-sm text-slate-400">Войди в аккаунт, чтобы смотреть истории.</p>'; return; }
             storiesList.innerHTML = '<div class="vv-loading-state rounded-2xl border border-slate-800 p-4 text-sm text-slate-300"><span class="vv-spinner" aria-hidden="true"></span> Загружаем истории…</div>'; 
             try {
-                const snap = await getDocs(collection(db, 'stories'));
-                const visibleStoryUids = new Set([state.user.uid, ...friendsCache.map(f => String(f.uid || f.id || ''))]);
+                // Read only friends' and own stories, not the entire global collection.
+                // A single-field 'in' query needs no custom composite index.
+                const visibleStoryUids = [...new Set([ownerUid, ...friendsCache.map(f => String(f.uid || f.id || ''))].filter(Boolean))];
+                const chunks = [];
+                for (let i = 0; i < visibleStoryUids.length; i += 10) chunks.push(visibleStoryUids.slice(i, i + 10));
+                const snapshots = await Promise.all(chunks.map(uids => getDocs(query(collection(db,'stories'), where('uid','in',uids)))));
+                if (serial !== vvStoriesLoadSerial || state.user?.uid !== ownerUid) return;
                 const now = Date.now();
-                activeStoryItems = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(st => Number(st.expiresAt) > now && visibleStoryUids.has(String(st.uid))).sort((a,b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+                activeStoryItems = snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })))
+                    .filter(st => Number(st.expiresAt) > now)
+                    .sort((a,b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
                 renderActiveStoryList();
-            } catch (err) { console.error('Load stories failed:', err); storiesList.innerHTML = '<p class="rounded-2xl border border-rose-500/30 p-4 text-sm text-rose-200">Не удалось загрузить истории. Проверь Firestore Rules.</p>'; }
+            } catch (err) { if(serial !== vvStoriesLoadSerial || state.user?.uid !== ownerUid) return; console.error('Load stories failed:', err); storiesList.innerHTML = '<p class="rounded-2xl border border-rose-500/30 p-4 text-sm text-rose-200">Не удалось загрузить истории. Проверь Firestore Rules.</p>'; }
         }
         function openStory(id) { activeStoryIndex=activeStoryItems.findIndex(s=>s.id===id); if(activeStoryIndex<0)return; renderStoryViewer(); markStoryViewed(activeStoryItems[activeStoryIndex]); }
         function openStoryByUser(uid) { const idx=activeStoryItems.findIndex(s=>s.uid===uid); if(idx>=0) openStory(activeStoryItems[idx].id); }
@@ -1878,7 +1903,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 alert('Репост опубликован!');storiesModal?.classList.remove('hidden');await refreshStories();
             }catch(e){console.error(e);alert('Не удалось сделать репост. Проверь Firestore Rules.');}
         }
-        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);setTimeout(()=>{refreshGroupsOnce(user.uid);refreshGroupsFromServer(user.uid,true);},1200);});
+        onAuthStateChanged(auth,user=>{if(!user){vvMentionUnsub?.();vvChatMentions=[];vvDirectDocs=[];vvReactionProfiles.clear();return;}setTimeout(vvWatchMentionInbox,1500);});
         // Cloudinary catalog: music URLs are stored directly, no re-upload required.
         let vvCatalogTracks = [];
         let vvSelectedTrack = null;
@@ -2186,7 +2211,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 
         // Groups are available only for people already in the user's friend list.
         const groupModal=document.getElementById('createGroupModal');
-        setInterval(() => { if (state.user && currentTab === 'chats') refreshGroupsFromServer(); }, 20000);
+        // Server fallback only when realtime Firestore group subscriptions are unavailable.
+        setInterval(() => { if (state.user && !document.hidden && currentTab === 'chats' && !vvGroupListenerHealthy) refreshGroupsFromServer(); }, 120000);
         document.getElementById('createGroupBtn')?.addEventListener('click',()=>{const host=document.getElementById('groupFriendsChoices');if(!friendsCache.length){host.innerHTML='<p class="text-sm text-slate-400">Сначала добавь друзей.</p>';}else host.innerHTML=friendsCache.map(f=>`<label class="flex items-center gap-3 rounded-xl border border-slate-700 p-3"><input type="checkbox" class="group-friend-check accent-violet-500" value="${escapeHTML(f.uid||f.id)}"><span class="min-w-0"><b class="block text-sm">${escapeHTML(f.displayName||'Друг')}</b><span class="text-xs text-slate-500">@${escapeHTML(f.username||'')}</span></span></label>`).join('');document.getElementById('createGroupStatus').textContent='';groupModal?.classList.remove('hidden');});
         document.getElementById('closeCreateGroup')?.addEventListener('click',()=>groupModal?.classList.add('hidden'));
         document.getElementById('confirmCreateGroup')?.addEventListener('click',async()=>{const name=(document.getElementById('groupNameInput')?.value||'').trim().slice(0,40);const members=[...document.querySelectorAll('.group-friend-check:checked')].map(e=>e.value);const status=document.getElementById('createGroupStatus');if(!name){status.textContent='Введи название группы.';return;}if(!members.length){status.textContent='Выбери хотя бы одного друга.';return;}const btn=document.getElementById('confirmCreateGroup');btn.disabled=true;try{const res=await createGroupCall({name,members});const groupId=res.data.id;groupModal.classList.add('hidden');document.getElementById('groupNameInput').value='';await refreshGroupsFromServer(state.user.uid,true);const snap=await getDoc(doc(db,'groups',groupId));if(snap.exists())groupsCache=[{id:groupId,...snap.data()},...groupsCache.filter(g=>g.id!==groupId)];renderChatFriends();openGroupConversation(groupId);}catch(e){console.error(e);status.textContent=e?.message||'Не удалось создать группу. Проверь Firestore Rules.';}finally{btn.disabled=false;}});
@@ -2218,8 +2244,22 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         document.getElementById('socialEditProfile')?.addEventListener('click', () => document.getElementById('profileBtn')?.click());
 
         let socialGeneration = 0, friendGeneration = 0;
+        let vvGroupListenerHealthy = false;
+        let vvSocialRenderTimer = 0;
+        function vvScheduleSocialRender() {
+            if (vvSocialRenderTimer) return;
+            vvSocialRenderTimer = setTimeout(() => {
+                vvSocialRenderTimer = 0;
+                if (!state.user) return;
+                void renderFriends();
+                void renderChatFriends();
+            }, 120);
+        }
         function stopSocialListeners() {
             socialGeneration++; friendGeneration++;
+            vvGroupListenerHealthy = false;
+            if(vvSocialRenderTimer) clearTimeout(vvSocialRenderTimer);
+            vvSocialRenderTimer = 0;
             state.socialUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
             state.socialUnsubs = [];
             state.unreadUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
@@ -2241,7 +2281,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 merged.set(g.id, {...(merged.get(g.id) || {}), ...g});
             }
             groupsCache = [...merged.values()].sort((a,b) => Number(b.updatedAt?.toMillis?.() || b.updatedAt || 0) - Number(a.updatedAt?.toMillis?.() || a.updatedAt || 0));
-            renderChatFriends();
+            vvScheduleSocialRender();
         }
         function vvGroupLoadStatus(message = '', error = false) {
             const node = document.getElementById('vvGroupLoadStatus');
@@ -2290,8 +2330,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             if (!state.user) return;
             const uid = state.user.uid;
             const generation = socialGeneration;
+            let lastStoryFriendKeys = null;
             try { for (const [key,time] of JSON.parse(localStorage.getItem('vv_recent_'+uid)||'[]')) if (typeof key==='string' && Number.isFinite(time)) recentChatTimes.set(key,time); } catch (_) {}
-            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { console.warn('Groups listener:',err); if(err.code==='permission-denied') { console.warn('VoiceVibe: Firestore rules deny group membership list. Publish the supplied firestore.rules in Firebase Console.'); vvGroupLoadStatus('Нет доступа к группам: обнови Firestore Rules в Firebase Console.',true); } else refreshGroupsOnce(uid); });
+            state.groupUnsub = onSnapshot(query(collection(db,'groups'), where('members','array-contains',uid)), snap => { vvGroupListenerHealthy = true; vvMergeGroups(snap.docs.map(d=>({id:d.id,...d.data()})),uid); }, err => { vvGroupListenerHealthy = false; console.warn('Groups listener:',err); if(err.code==='permission-denied') { console.warn('VoiceVibe: Firestore rules deny group membership list. Publish the supplied firestore.rules in Firebase Console.'); vvGroupLoadStatus('Нет доступа к группам: обнови Firestore Rules в Firebase Console.',true); } else refreshGroupsOnce(uid); });
             refreshGroupsOnce(uid);
             refreshGroupsFromServer(uid, true);
             // Real-time conversation order: newest message (sent or received) appears first.
@@ -2303,7 +2344,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 });
                 renderChatFriends();
             }, err => { console.warn('Conversation order listener:',err); if(err?.code==='permission-denied') console.warn('Publish firestore.rules: conversations require a participants array containing the current uid.'); renderChatFriends(); }));
-            refreshStories().catch(err => console.warn('Initial stories refresh:', err));
             state.socialUnsubs.push(onSnapshot(doc(db,'users',uid), snap => { if(snap.exists()){ state.userProfile={...(state.userProfile||{}),...snap.data()}; renderSocialProfile(); } }, err => console.warn('Own profile listener:',err)));
             // Approximate online users, measured by a heartbeat no older than 90 seconds.
             const publicPresenceRef = doc(db, 'onlinePublic', uid);
@@ -2321,14 +2361,16 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const publishPublicPresence = async () => {
                 try { await setDoc(publicPresenceRef, { uid, lastSeen: document.hidden ? 0 : Date.now() }); }
                 catch (error) { console.warn('Online heartbeat:', error); }
-                await onlineCounterRefresh();
             };
             publishPublicPresence();
+            void onlineCounterRefresh();
             const publicPresenceTimer = setInterval(publishPublicPresence, 30000);
-            const publicPresenceVisibility = () => publishPublicPresence();
+            const onlineCounterTimer = setInterval(() => { if (!document.hidden) void onlineCounterRefresh(); }, 90000);
+            const publicPresenceVisibility = () => { publishPublicPresence(); if (!document.hidden) void onlineCounterRefresh(); };
             document.addEventListener('visibilitychange', publicPresenceVisibility);
             state.socialUnsubs.push(() => {
                 clearInterval(publicPresenceTimer);
+                clearInterval(onlineCounterTimer);
                 document.removeEventListener('visibilitychange', publicPresenceVisibility);
                 setDoc(publicPresenceRef, { uid, lastSeen: 0 }).catch(() => {});
                 if (onlineCounterNode) onlineCounterNode.textContent = '—';
@@ -2350,25 +2392,46 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             state.socialUnsubs.push(onSnapshot(collection(db, 'users', uid, 'friends'), async snap => {
                 const friendsVersion = ++friendGeneration;
                 friendsCache = snap.docs.map(d => ({ id:d.id, ...d.data(), uid:d.id }));
+                // The first friend snapshot may arrive after login. Refresh the feed
+                // when membership changes so new friends' stories are not missing.
+                const friendKeys = friendsCache.map(f => f.uid).sort().join('|');
+                if (lastStoryFriendKeys !== friendKeys) {
+                    lastStoryFriendKeys = friendKeys;
+                    void refreshStories();
+                }
                 refreshUnreadListeners();
                 renderFriends(); renderChatFriends(); renderSocialProfile();
                 state.presenceUnsubs.forEach(unsub => { try { unsub(); } catch (_) {} });
                 state.presenceUnsubs = [];
-                for (const friend of friendsCache) {
-                    try {
-                        const ps = await getDoc(doc(db,'users',friend.uid));
-                        if (ps.exists()) Object.assign(friend, ps.data());
-                    } catch (err) { console.warn('Friend profile:', err); }
-                    if (generation !== socialGeneration || friendsVersion !== friendGeneration || state.user?.uid !== uid) return;
+                // Set up presence for everyone immediately; a slow profile fetch must not
+                // delay notifications for all friends listed after that person.
+                const watchedFriends = [...friendsCache];
+                for (const friend of watchedFriends) {
                     const unsub = onSnapshot(doc(db,'presence',friend.uid), presenceSnap => {
+                        if (generation !== socialGeneration || friendsVersion !== friendGeneration || state.user?.uid !== uid) return;
                         state.presenceCache.set(friend.uid, presenceSnap.exists() ? presenceSnap.data() : { online:false });
-                        renderFriends(); renderChatFriends();
+                        vvScheduleSocialRender();
                         if (activeFriend === friend.uid) updateConversationPresence(friend.uid);
                     }, () => {});
                     state.presenceUnsubs.push(unsub);
                 }
-                renderFriends(); renderChatFriends();
-            }, err => console.warn('Friends listener:', err)));
+                // Limit concurrent reads on slower mobile connections.
+                const queue = [...watchedFriends];
+                const profileWorker = async () => {
+                    while (queue.length) {
+                        const friend = queue.shift();
+                        if (generation !== socialGeneration || friendsVersion !== friendGeneration || state.user?.uid !== uid) return;
+                        try {
+                            const ps = await getDoc(doc(db,'users',friend.uid));
+                            if (generation !== socialGeneration || friendsVersion !== friendGeneration || state.user?.uid !== uid) return;
+                            if (ps.exists()) Object.assign(friend, ps.data());
+                            vvScheduleSocialRender();
+                        } catch (err) { console.warn('Friend profile:', err); }
+                    }
+                };
+                void Promise.all(Array.from({length:Math.min(6,queue.length)}, profileWorker));
+                vvScheduleSocialRender();
+            }, err => { console.warn('Friends listener:', err); void refreshStories(); }));
         }
         async function renderFriendRequests() {
             const host = document.getElementById('friendRequestsList');
@@ -2469,7 +2532,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                 const uid = String(f.uid || f.id || ''); if (!uid || uid === state.user.uid) continue;
                 const chatId = [state.user.uid, uid].sort().join('_');
                 const messagesRef = collection(db, 'conversations', chatId, 'messages');
-                const unsub = onSnapshot(query(messagesRef, orderBy('createdAt','desc'), limit(200)), snap => {
+                const unsub = onSnapshot(query(messagesRef, orderBy('createdAt','desc'), limit(40)), snap => {
                     const lastRead = getLastReadAt(uid);
                     let count = 0;
                     if (activeFriend !== uid || currentTab !== 'chats') {
@@ -2477,7 +2540,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
                     } else {
                         localStorage.setItem(unreadStorageKey(uid), String(Date.now()));
                     }
-                    state.unreadCounts.set(uid, count); updateUnreadBadge(); renderChatFriends();
+                    state.unreadCounts.set(uid, count); updateUnreadBadge(); vvScheduleSocialRender();
                 }, err => { if (err?.code !== 'permission-denied') console.warn('Unread count listener:', err); });
                 state.unreadUnsubs.push(unsub);
             }
@@ -2496,7 +2559,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const friendsHtml = sortedFriends.map(f => {
                 const uid=f.uid || f.id; const unread=Number(state.unreadCounts.get(uid)||0)+vvMentionUnread(uid);
                 const isPremium = Number(f.premiumUntil || 0) > Date.now();
-                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${chatAvatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
+                return `<button data-unread="${unread}" data-openchat="${escapeHTML(uid)}" class="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-slate-800 ${activeFriend === uid && !activeGroupId ? 'bg-slate-800' : ''}">${chatAvatarMarkup(f,'h-10 w-10')}<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold ${isPremium?'vv-premium-name':''}">${escapeHTML(f.displayName || 'Друг')}${isPremium?' 👑':''} ${roleBadgeMarkup(uid)}</span>${f.mentionOnly?'<span class="block text-xs text-violet-300">Отметка в истории</span>':presenceLabel(uid)}</span><span ${f.mentionOnly?'hidden':''} data-callfriend="${escapeHTML(uid)}" role="button" tabindex="0" aria-label="Позвонить другу" title="Позвонить" class="vv-friend-call-button"><i class="fa-solid fa-phone"></i></span>${unread ? `<span class="min-w-6 h-6 px-1 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-xs font-extrabold inline-flex items-center justify-center">${unread>99?'99+':Number(state.unreadCounts.get(uid)||0)>=40?'40+':unread}</span>` : ''}<span class="text-xs text-slate-500">›</span></button>`;
             }).join('<!--vv-chat-split-->');
             const groupsHtml = groupsCache.map(g => `<button data-opengroup="${escapeHTML(g.id)}" class="flex w-full items-center gap-3 rounded-xl border border-violet-400/10 p-3 text-left transition hover:bg-violet-500/10 ${activeGroupId===g.id?'bg-violet-500/10':''}"><span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"><i class="fa-solid fa-users"></i></span><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">${escapeHTML(g.name||'Группа')}</span><span class="block text-xs text-slate-500">${(g.members||[]).length} участников</span></span><span class="text-xs text-violet-300">Группа</span></button>`).join('<!--vv-chat-split-->');
             // One chronological list: groups must not remain pinned above recent private chats.
