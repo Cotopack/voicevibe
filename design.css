@@ -295,3 +295,96 @@ body.vv-landing{margin:0;min-height:100vh;background:radial-gradient(ellipse 930
 @media(max-width:700px){.vv-landing-hero{grid-template-columns:1fr;gap:32px;padding:54px 0 40px}.vv-landing-scene{min-height:355px;max-width:540px;width:100%;justify-self:center}.vv-landing-links{gap:15px}.vv-landing-nav{padding:14px 18px}.vv-landing-main{padding:0 17px 45px}.vv-landing-wide{align-items:flex-start;flex-direction:column;gap:20px}.vv-landing-secondary{grid-template-columns:1fr}}
 @media(max-width:460px){.vv-landing-nav{gap:9px}.vv-landing-logo{font-size:20px}.vv-landing-logo img{height:30px;width:30px}.vv-landing-links{width:100%;justify-content:space-between;gap:9px;font-size:12px}.vv-landing-links a:nth-child(2){display:none}.vv-landing-hero h1{font-size:clamp(34px,9vw,43px)}.vv-landing-hero p{font-size:15px}.vv-landing-actions{gap:9px}.vv-landing-button{padding:12px 15px}.vv-landing-scene{min-height:343px;padding:17px}.vv-landing-features{grid-template-columns:1fr;gap:10px}.vv-landing-feature{min-height:0;padding:21px}.vv-landing-feature>span{margin-bottom:13px}.vv-scene-card.primary{margin-top:32px}}
 @media(prefers-reduced-motion:reduce){.vv-landing-button{transition:none}}
+
+
+/* Telegram-inspired message composer: all existing send/voice IDs are preserved. */
+#socialChatsPanel.chat-open #messageForm.vv-composer{
+  display:flex!important;align-items:center!important;gap:9px!important;
+  padding:9px 12px 11px!important;margin:0!important;
+  min-height:72px!important;flex:0 0 auto!important;
+  background:rgba(12,13,22,.98)!important;
+  border:0!important;border-top:1px solid rgba(170,164,193,.11)!important;
+  overflow:visible!important;
+}
+#socialChatsPanel.chat-open .vv-composer-round{
+  display:grid!important;place-items:center!important;
+  width:52px!important;height:52px!important;min-width:52px!important;
+  flex:0 0 52px!important;padding:0!important;
+  border:1px solid rgba(197,194,212,.17)!important;border-radius:50%!important;
+  color:#f9f8ff!important;background:linear-gradient(145deg,#282830,#16161b)!important;
+  box-shadow:inset 0 1px 2px rgba(255,255,255,.06),0 2px 8px rgba(0,0,0,.23)!important;
+  -webkit-tap-highlight-color:transparent;
+}
+#socialChatsPanel.chat-open .vv-composer-round i{font-size:25px;line-height:1}
+#socialChatsPanel.chat-open .vv-composer-attach i{transform:rotate(-18deg)}
+#socialChatsPanel.chat-open .vv-composer-field{
+  position:relative;display:flex;align-items:center;flex:1 1 0;
+  min-width:0;height:54px;padding:0 7px 0 15px;
+  border-radius:999px;border:1px solid rgba(188,184,207,.20);
+  background:linear-gradient(145deg,#2a2933,#1f1f26);
+  box-shadow:inset 0 2px 3px rgba(0,0,0,.24),0 1px 5px rgba(0,0,0,.17);
+}
+#socialChatsPanel.chat-open #messageForm .vv-composer-field #messageInput{
+  display:block;flex:1 1 0%!important;min-width:0!important;width:100%!important;
+  height:100%!important;border:0!important;outline:0!important;
+  border-radius:999px!important;background:transparent!important;
+  padding:0 6px 0 0!important;box-shadow:none!important;
+  font-size:16px!important;font-weight:400;line-height:1.3!important;
+  color:#fff!important;appearance:none;
+}
+#socialChatsPanel.chat-open #messageForm .vv-composer-field #messageInput::placeholder{color:#aaa9b3!important;opacity:1}
+#socialChatsPanel.chat-open .vv-composer-field:focus-within{border-color:rgba(172,145,255,.65);box-shadow:0 0 0 2px rgba(140,95,244,.12)}
+#socialChatsPanel.chat-open #messageForm .vv-composer-emoji{
+  display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;
+  border:0;border-radius:50%;padding:0;color:#b0aeb7;background:transparent;
+}
+#socialChatsPanel.chat-open .vv-composer-emoji i{font-size:24px;line-height:1}
+#socialChatsPanel.chat-open .vv-composer-emoji:hover,#socialChatsPanel.chat-open .vv-composer-emoji[aria-expanded="true"]{color:#e6d8ff;background:rgba(163,143,215,.12)}
+#socialChatsPanel.chat-open #sendMessageBtn.vv-composer-round.is-send-mode{
+  background:linear-gradient(140deg,#8351e5,#a159f2)!important;
+  border-color:rgba(218,188,255,.31)!important;
+}
+#socialChatsPanel.chat-open #sendMessageBtn.vv-voice-recording{background:#ae3151!important}
+#socialChatsPanel.chat-open .vv-composer-round:disabled,#socialChatsPanel.chat-open .vv-composer-emoji:disabled{opacity:.48;cursor:not-allowed}
+#socialChatsPanel.chat-open .vv-composer-emoji-panel{
+  position:absolute;right:0;bottom:calc(100% + 13px);z-index:65;
+  width:min(318px,calc(100vw - 35px));max-height:min(360px,55dvh);overflow:auto;
+  padding:12px;border:1px solid rgba(186,175,221,.23);border-radius:20px;
+  background:#24232e;box-shadow:0 16px 42px rgba(0,0,0,.47);
+}
+#socialChatsPanel.chat-open .vv-composer-emoji-panel.hidden{display:none!important}
+#socialChatsPanel.chat-open .vv-composer-emoji-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}
+#socialChatsPanel.chat-open .vv-composer-emoji-grid button{display:grid;place-items:center;min-height:43px;border-radius:12px;font-size:25px}
+#socialChatsPanel.chat-open .vv-composer-emoji-grid button:hover{background:rgba(189,168,240,.16)}
+#socialChatsPanel.chat-open .vv-composer-stickers-link{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;min-height:40px;margin-top:8px;border-radius:12px;background:rgba(143,107,220,.15);color:#e8d8ff;font-size:13px}
+#socialChatsPanel.chat-open .vv-composer-round:focus-visible,#socialChatsPanel.chat-open .vv-composer-emoji:focus-visible,#socialChatsPanel.chat-open .vv-composer-emoji-grid button:focus-visible{outline:2px solid #bfabff;outline-offset:2px}
+@media(max-width:767px){
+ #socialChatsPanel.chat-open #messageForm.vv-composer{gap:7px!important;padding:8px 9px 9px!important;min-height:65px!important}
+ #socialChatsPanel.chat-open .vv-composer-round{width:46px!important;height:46px!important;min-width:46px!important;flex-basis:46px!important}
+ #socialChatsPanel.chat-open .vv-composer-field{height:48px;padding-left:12px;padding-right:4px}
+ #socialChatsPanel.chat-open .vv-composer-emoji{width:39px;flex-basis:39px;height:39px}
+ #socialChatsPanel.chat-open .vv-composer-round i{font-size:23px}
+}
+@media(max-width:360px){
+ #socialChatsPanel.chat-open #messageForm.vv-composer{gap:5px!important;padding:7px 6px 8px!important}
+ #socialChatsPanel.chat-open .vv-composer-round{width:42px!important;height:42px!important;min-width:42px!important;flex-basis:42px!important}
+ #socialChatsPanel.chat-open .vv-composer-field{height:44px;padding-left:10px}
+ #socialChatsPanel.chat-open .vv-composer-emoji{width:35px;flex-basis:35px;height:35px}
+ #socialChatsPanel.chat-open .vv-composer-emoji i{font-size:21px}
+}
+
+/* Override older ID-specific action-button sizing without affecting its JS behavior. */
+#socialChatsPanel.chat-open #messageForm #sendMessageBtn.vv-composer-round{
+  width:52px!important;height:52px!important;min-width:52px!important;
+  flex:0 0 52px!important;border-radius:50%!important;
+}
+@media(max-width:767px){
+ #socialChatsPanel.chat-open #messageForm #sendMessageBtn.vv-composer-round{
+   width:46px!important;height:46px!important;min-width:46px!important;flex:0 0 46px!important;
+ }
+}
+@media(max-width:360px){
+ #socialChatsPanel.chat-open #messageForm #sendMessageBtn.vv-composer-round{
+   width:42px!important;height:42px!important;min-width:42px!important;flex:0 0 42px!important;
+ }
+}

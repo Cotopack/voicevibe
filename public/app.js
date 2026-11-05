@@ -3758,6 +3758,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
             const mode=(vvVoice.phase==='recording'||vvVoice.phase==='requesting'||vvVoice.phase==='uploading'||vvVoice.phase==='finishing')?'voice':(vvComposerHasText()?'send':'voice');
             const disabled=!hasTarget||(mode==='voice'&&vvVoice.phase==='uploading')||(vvExtra.scope==='conversations'&&vvExtra.blocked);
             vvComposerSetButton(mode,disabled);
+            vvComposerExtrasAvailability();
         }
 
         function vvVoiceSafeURL(value){
@@ -3957,6 +3958,60 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
         vvVoiceButton?.addEventListener('contextmenu',e=>e.preventDefault());
 
         vvMessageInput?.addEventListener('input',()=>vvComposerSyncActions());
+
+        // Composer accessory controls: tools, emoji picker and existing sticker drawer.
+        const vvAttachControl=document.getElementById('vvComposerAttach');
+        const vvEmojiControl=document.getElementById('vvComposerEmojiBtn');
+        const vvEmojiPanel=document.getElementById('vvComposerEmojiPanel');
+        const vvComposerTools=document.getElementById('vvChatTools');
+        function vvCloseComposerEmoji(){
+            vvEmojiPanel?.classList.add('hidden');
+            vvEmojiControl?.setAttribute('aria-expanded','false');
+        }
+        function vvComposerExtrasAvailability(){
+            const unavailable=!vvVoiceTarget()||(vvExtra.scope==='conversations'&&vvExtra.blocked);
+            if(vvAttachControl)vvAttachControl.disabled=unavailable;
+            if(vvEmojiControl)vvEmojiControl.disabled=unavailable;
+            if(unavailable)vvCloseComposerEmoji();
+        }
+        vvAttachControl?.addEventListener('click',()=>{
+            if(vvAttachControl.disabled||!vvComposerTools)return;
+            vvCloseComposerEmoji();
+            vvComposerTools.open=!vvComposerTools.open;
+            vvAttachControl.setAttribute('aria-expanded',String(vvComposerTools.open));
+        });
+        vvComposerTools?.addEventListener('toggle',()=>{
+            vvAttachControl?.setAttribute('aria-expanded',String(vvComposerTools.open));
+        });
+        vvEmojiControl?.addEventListener('click',()=>{
+            if(vvEmojiControl.disabled||!vvEmojiPanel)return;
+            const opening=vvEmojiPanel.classList.contains('hidden');
+            vvEmojiPanel.classList.toggle('hidden',!opening);
+            vvEmojiControl.setAttribute('aria-expanded',String(opening));
+        });
+        vvEmojiPanel?.addEventListener('click',event=>{
+            const emojiButton=event.target.closest('[data-vv-emoji]');
+            if(emojiButton&&!vvMessageInput?.disabled){
+                const emoji=emojiButton.dataset.vvEmoji;
+                const before=vvMessageInput.selectionStart??vvMessageInput.value.length;
+                const after=vvMessageInput.selectionEnd??before;
+                const value=vvMessageInput.value;
+                if(value.length+emoji.length-(after-before)>Number(vvMessageInput.maxLength))return;
+                vvMessageInput.value=value.slice(0,before)+emoji+value.slice(after);
+                vvMessageInput.focus();
+                vvMessageInput.setSelectionRange(before+emoji.length,before+emoji.length);
+                vvMessageInput.dispatchEvent(new Event('input',{bubbles:true}));
+            }
+        });
+        document.getElementById('vvComposerStickers')?.addEventListener('click',()=>{
+            vvCloseComposerEmoji();
+            document.getElementById('openStickersBtn')?.click();
+        });
+        document.addEventListener('pointerdown',event=>{
+            if(vvEmojiPanel&&!vvEmojiPanel.classList.contains('hidden')&&!vvEmojiControl?.contains(event.target)&&!vvEmojiPanel.contains(event.target))vvCloseComposerEmoji();
+        });
+        document.addEventListener('keydown',event=>{if(event.key==='Escape')vvCloseComposerEmoji();});
+
         vvVoiceButton?.addEventListener('click',e=>{
             const mode=vvVoiceButton.dataset.mode||'voice';
             if(mode==='send'){
